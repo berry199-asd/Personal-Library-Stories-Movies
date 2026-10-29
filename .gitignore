@@ -1,0 +1,116 @@
+# ==============================
+# IDEs and Editors
+# ==============================
+
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+.nbproject/private/
+nbproject/private/
+
+# ==============================
+# Java
+# ==============================
+
+*.class
+*.jar
+*.war
+*.ear
+target/
+build/
+out/
+bin/
+.gradle/
+gradle-app.setting
+
+# ==============================
+# Java Logs and Runtime Files
+# ==============================
+
+*.log
+hs_err_pid*
+replay_pid*
+
+# ==============================
+# Node.js and JavaScript
+# ==============================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.npm/
+.eslintcache
+.parcel-cache/
+dist/
+coverage/
+
+# ==============================
+# Environment Variables
+# ==============================
+
+.env
+.env.*
+!.env.example
+
+# ==============================
+# Database and Local Data
+# ==============================
+
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+*.backup
+
+# ==============================
+# XAMPP and Local Server
+# ==============================
+
+xampp/
+htdocs/
+mysql/data/
+apache/logs/
+php_error_log
+
+# ==============================
+# Uploaded Files and Temporary Data
+# ==============================
+
+uploads/*
+!uploads/.gitkeep
+
+temp/
+tmp/
+cache/
+
+# ==============================
+# Operating System Files
+# ==============================
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ==============================
+# Temporary Files
+# ==============================
+
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ==============================
+# Local Configuration and Secrets
+# ==============================
+
+application-local.properties
+application-local.yml
+config.local.js
+secrets/
