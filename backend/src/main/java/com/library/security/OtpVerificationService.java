@@ -1,7 +1,9 @@
 package com.library.security;
 
 import com.library.exception.BadRequestException;
+import com.library.service.EmailService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -11,12 +13,14 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OtpVerificationService {
 
     private static final long OTP_TTL_SECONDS = 300; // 5 phút
     private static final int MAX_ATTEMPTS = 5;
 
     private final Aes256CryptoUtil cryptoUtil;
+    private final EmailService emailService;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Map<String, OtpRecord> otpStore = new ConcurrentHashMap<>();
 
@@ -28,7 +32,14 @@ public class OtpVerificationService {
         Instant expiresAt = Instant.now().plusSeconds(OTP_TTL_SECONDS);
 
         otpStore.put(normalizedKey, new OtpRecord(otpHash, expiresAt, 0, false));
-        return new OtpDispatchResult(email.trim().toLowerCase(), purpose, OTP_TTL_SECONDS, expiresAt.toString(), otpCode);
+
+        // Tiến hành gửi email thật qua SMTP
+        EmailService.EmailSendResult sendResult = emailService.sendOtpEmail(email.trim(), otpCode, purpose);
+        if (!sendResult.success()) {
+            log.info("ℹ️ [OTP Info] Email chưa được gửi qua SMTP: {}. Mã OTP cho tài khoản {}: {}", sendResult.message(), email, otpCode);
+        }
+
+        return new OtpDispatchResult(email.trim().toLowerCase(), purpose, OTP_TTL_SECONDS, expiresAt.toString(), sendResult.success(), sendResult.message());
     }
 
     public boolean verifyOtp(String email, String purpose, String otpCode) {
@@ -67,6 +78,7 @@ public class OtpVerificationService {
             String purpose,
             long expiresInSeconds,
             String expiresAt,
-            String otpPreviewForDev
+            boolean sentViaSmtp,
+            String smtpMessage
     ) {}
 }

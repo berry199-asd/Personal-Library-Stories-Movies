@@ -47,6 +47,12 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- 4.1. Spring Boot Starter Mail (Gửi email thật qua SMTP / Gmail) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- 5. Spring WebSocket (Nhắn tin 1-1, nhắn tin nhóm & thông báo thời gian thực) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

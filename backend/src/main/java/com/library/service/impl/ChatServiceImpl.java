@@ -71,7 +71,7 @@ public class ChatServiceImpl implements ChatService {
         ConversationMember ownerMember = ConversationMember.builder()
                 .conversation(saved)
                 .user(creator)
-                .memberRole(MemberRole.OWNER)
+                .memberRole(MemberRole.LEADER)
                 .build();
         saved.getMembers().add(memberRepository.save(ownerMember));
 

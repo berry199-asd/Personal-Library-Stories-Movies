@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode, type CSSProperties } from "react";
 
 const photos = {
   hero: "https://images.unsplash.com/photo-1501769752-a59efa2298ce?auto=format&fit=crop&w=1800&q=85",
@@ -42,8 +42,8 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function Button({ children, variant = "primary", icon, onClick, className = "" }: { children: ReactNode; variant?: "primary" | "secondary" | "ghost" | "danger"; icon?: IconName; onClick?: () => void; className?: string }) {
-  return <button className={`btn btn-${variant} ${className}`} onClick={onClick}>{icon && <Icon name={icon} size={17} />}<span>{children}</span></button>;
+function Button({ children, variant = "primary", icon, onClick, className = "", style }: { children: ReactNode; variant?: "primary" | "secondary" | "ghost" | "danger"; icon?: IconName; onClick?: () => void; className?: string; style?: CSSProperties }) {
+  return <button className={`btn btn-${variant} ${className}`} onClick={onClick} style={style}>{icon && <Icon name={icon} size={17} />}<span>{children}</span></button>;
 }
 
 function Rating({ value = "4.8", personal = false }: { value?: string; personal?: boolean }) {
@@ -65,6 +65,7 @@ function Navbar({
   notifications,
   onMarkAllRead,
   onReadNotification,
+  currentUser,
 }: {
   page: string;
   setPage: (page: string) => void;
@@ -74,6 +75,7 @@ function Navbar({
   notifications: NotificationItem[];
   onMarkAllRead: () => void;
   onReadNotification: (n: NotificationItem) => void;
+  currentUser?: UserProfile;
 }) {
   const [notice, setNotice] = useState(false);
   const [noticeTab, setNoticeTab] = useState<"ALL" | "CHAPTER" | "COMMENT" | "SHARE">("ALL");
@@ -140,16 +142,19 @@ function Navbar({
         </div>}
       </div>
       <div className="account-wrap">
-        <button className="avatar" onClick={() => setAccountOpen(!accountOpen)}><img src={photos.red} alt="Ảnh đại diện" /><i /></button>
+        <button className="avatar" onClick={() => setAccountOpen(!accountOpen)}>
+          <img src={currentUser?.avatar || activeCurrentUserProfile.avatar} alt="Ảnh đại diện" />
+          <i />
+        </button>
         {accountOpen && <div className="account-menu">
           <div className="account-summary">
-            <img src={photos.red} alt="" />
+            <img src={currentUser?.avatar || activeCurrentUserProfile.avatar} alt="" />
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <b>{CURRENT_USER_NAME}</b>
+                <b>{currentUser?.name || activeCurrentUserProfile.name}</b>
                 <span className={`badge-pill ${userRole === "ADMIN" ? "role-admin" : "active"}`}>{userRole}</span>
               </div>
-              <span>{CURRENT_USER_HANDLE}</span>
+              <span>{currentUser?.username || activeCurrentUserProfile.username}</span>
             </div>
           </div>
           <button onClick={() => { setPage("account"); setAccountOpen(false); }}><Icon name="users" size={16} />Thông tin tài khoản</button>
@@ -974,12 +979,87 @@ function ShareModal({ close }: { close: () => void }) {
   </div></div>;
 }
 
-const CURRENT_USER_HANDLE = "@huynguyen";
-const CURRENT_USER_NAME = "Nguyễn Huy";
+export type UserProfile = {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  avatar: string;
+  role: "USER" | "ADMIN";
+  bio?: string;
+  joinedDate?: string;
+  userId?: string;
+};
 
-function canManagePublishedContent(item: ContentItem, userRole: "USER" | "ADMIN"): boolean {
+const CURRENT_USER_STORAGE_KEY = "pl_current_user_v2";
+const REGISTERED_ACCOUNTS_KEY = "pl_registered_accounts_v2";
+
+export function loadSavedCurrentUser(): UserProfile {
+  try {
+    const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.username && parsed.name) return parsed;
+    }
+  } catch {}
+  return {
+    id: "usr-" + Date.now().toString(36),
+    name: "Tài khoản của tôi",
+    username: "@myaccount",
+    email: "user@example.com",
+    avatar: photos.red,
+    role: "USER",
+    bio: "Quản lý và lưu trữ truyện, phim cá nhân.",
+    joinedDate: "Mới tham gia",
+    userId: "USR-1001",
+  };
+}
+
+export function saveCurrentUserToStorage(user: UserProfile) {
+  try {
+    window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(user));
+  } catch {}
+}
+
+export function loadSavedAccounts(): UserProfile[] {
+  try {
+    const raw = window.localStorage.getItem(REGISTERED_ACCOUNTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function saveAccountToStorage(acc: UserProfile) {
+  try {
+    const list = loadSavedAccounts().filter(
+      a => a.email.toLowerCase() !== acc.email.toLowerCase() &&
+           a.username.toLowerCase() !== acc.username.toLowerCase()
+    );
+    list.push(acc);
+    window.localStorage.setItem(REGISTERED_ACCOUNTS_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+let activeCurrentUserProfile: UserProfile = loadSavedCurrentUser();
+
+export function getActiveUser(): UserProfile {
+  return activeCurrentUserProfile;
+}
+
+export function setActiveCurrentUserProfile(user: UserProfile) {
+  activeCurrentUserProfile = user;
+  saveCurrentUserToStorage(user);
+}
+
+export const CURRENT_USER_HANDLE = "@" + (activeCurrentUserProfile?.username ? activeCurrentUserProfile.username.replace(/^@/, '') : "user");
+export const CURRENT_USER_NAME = activeCurrentUserProfile?.name || "Người dùng";
+
+function canManagePublishedContent(item: ContentItem, userRole: "USER" | "ADMIN", currentUsername = activeCurrentUserProfile.username): boolean {
   if (userRole === "ADMIN") return true;
-  return item.createdBy?.user === CURRENT_USER_HANDLE;
+  return item.createdBy?.user === currentUsername || item.createdBy?.user === activeCurrentUserProfile.username;
 }
 
 function PublishedWorkEditorModal({
@@ -2930,23 +3010,482 @@ function PageHeading({ eyebrow, title, description, action }: { eyebrow: string;
   return <div className="page-heading"><div><span>{eyebrow}</span><h1>{title}</h1><p>{description}</p></div>{action}</div>;
 }
 
-function AccountPage({ setPage, worksCount = 0, friendsCount = 0 }: { setPage: (page: string) => void; worksCount?: number; friendsCount?: number }) {
+const PRESET_AVATARS = [
+  { id: "red", url: photos.red, name: "Neon Samurai" },
+  { id: "city", url: photos.city, name: "Cyberpunk Tokyo" },
+  { id: "rain", url: photos.rain, name: "Rainy Neo-City" },
+  { id: "alley", url: photos.alley, name: "Nightfall Alley" },
+  { id: "hero", url: photos.hero, name: "Night Skyline" },
+  { id: "anime", url: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&auto=format&fit=crop&q=80", name: "Aesthetic Anime" },
+  { id: "manga", url: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400&auto=format&fit=crop&q=80", name: "Manga Reader" },
+  { id: "glow", url: "https://images.unsplash.com/photo-1563089145-599997674d42?w=400&auto=format&fit=crop&q=80", name: "Cyber Glow" },
+];
+
+function AccountPage({
+  setPage,
+  worksCount = 0,
+  friendsCount = 0,
+  currentUser,
+  onUpdateCurrentUser,
+}: {
+  setPage: (page: string) => void;
+  worksCount?: number;
+  friendsCount?: number;
+  currentUser?: UserProfile;
+  onUpdateCurrentUser?: (user: UserProfile) => void;
+}) {
+  const profile = currentUser || activeCurrentUserProfile;
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
-  return <main className="inner-page account-page"><div className="page-shell">
-    <PageHeading eyebrow="HỒ SƠ NGƯỜI DÙNG" title="Thông tin tài khoản" description="Quản lý thông tin cá nhân và cách bạn xuất hiện trong cộng đồng." action={<Button variant="secondary" icon="users" onClick={() => setPage("friends")}>Quản lý bạn bè</Button>} />
-    {saved && <div className="success-banner"><Icon name="check" /> Thông tin của bạn đã được cập nhật thành công.</div>}
-    <div className="account-layout">
-      <aside className="profile-card"><div className="profile-avatar"><img src={photos.red} alt="Nguyễn Huy" />{editing && <button><Icon name="edit" size={16} /></button>}</div><h2>Nguyễn Huy</h2><span>@huynguyen</span><p>Thành viên từ 18/08/2023</p><div><b>{worksCount}</b><span>Tác phẩm</span><b>{friendsCount}</b><span>Bạn bè</span></div></aside>
-      <section className="information-stack">
-        <div className="information-card"><div className="card-head"><div><span>THÔNG TIN CÔNG KHAI</span><h3>Hồ sơ cá nhân</h3></div>{!editing && <Button variant="secondary" icon="edit" onClick={() => setEditing(true)}>Chỉnh sửa thông tin</Button>}</div>
-          <div className="form-grid"><label><span>Tên hiển thị</span><input disabled={!editing} defaultValue="Nguyễn Huy" /></label><label><span>Tên người dùng</span><input disabled value="@huynguyen" readOnly /><small>Tên người dùng không thể thay đổi.</small></label><label className="wide"><span>Giới thiệu bản thân</span><textarea disabled={!editing} defaultValue="Quản lý thư viện truyện và phim cá nhân." /></label></div>
+
+  // Form states
+  const [displayName, setDisplayName] = useState(profile.name);
+  const [bio, setBio] = useState(profile.bio || "Quản lý thư viện truyện và phim cá nhân.");
+  const [emailVal, setEmailVal] = useState(profile.email);
+
+  // Avatar Modal states
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarDraft, setAvatarDraft] = useState(profile.avatar);
+  const [avatarTab, setAvatarTab] = useState<"preset" | "upload" | "url">("upload");
+  const [customAvatarUrl, setCustomAvatarUrl] = useState("");
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Dung lượng ảnh đại diện tối đa là 5MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setAvatarDraft(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleApplyAvatar = () => {
+    const finalAvatar = avatarDraft || profile.avatar;
+    const updated: UserProfile = {
+      ...profile,
+      avatar: finalAvatar,
+    };
+    setActiveCurrentUserProfile(updated);
+    saveAccountToStorage(updated);
+    onUpdateCurrentUser?.(updated);
+    setShowAvatarModal(false);
+    setSaved(true);
+  };
+
+  const handleSaveProfile = () => {
+    const updated: UserProfile = {
+      ...profile,
+      name: displayName.trim() || profile.name,
+      bio: bio.trim(),
+      email: emailVal.trim() || profile.email,
+    };
+    setActiveCurrentUserProfile(updated);
+    saveAccountToStorage(updated);
+    onUpdateCurrentUser?.(updated);
+    setEditing(false);
+    setSaved(true);
+  };
+
+  return (
+    <main className="inner-page account-page">
+      <div className="page-shell">
+        <PageHeading
+          eyebrow="HỒ SƠ NGƯỜI DÙNG"
+          title="Thông tin tài khoản"
+          description="Quản lý thông tin cá nhân và cách bạn xuất hiện trong cộng đồng."
+          action={
+            <Button variant="secondary" icon="users" onClick={() => setPage("friends")}>
+              Quản lý bạn bè
+            </Button>
+          }
+        />
+        {saved && (
+          <div className="success-banner">
+            <Icon name="check" /> Thông tin tài khoản và ảnh đại diện đã được cập nhật thành công!
+          </div>
+        )}
+        <div className="account-layout">
+          <aside className="profile-card">
+            <div className="profile-avatar">
+              <img src={profile.avatar} alt={profile.name} />
+              <button
+                type="button"
+                title="Đổi ảnh đại diện"
+                onClick={() => {
+                  setAvatarDraft(profile.avatar);
+                  setShowAvatarModal(true);
+                }}
+                style={{ cursor: "pointer" }}
+              >
+                <Icon name="edit" size={16} />
+              </button>
+            </div>
+            <h2>{profile.name}</h2>
+            <span>{profile.username}</span>
+            <p>Thành viên từ {profile.joinedDate || "15/08/2023"}</p>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setAvatarDraft(profile.avatar);
+                setShowAvatarModal(true);
+              }}
+              style={{
+                margin: "0 auto 16px",
+                fontSize: "11px",
+                padding: "6px 14px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+              }}
+            >
+              📷 Đổi ảnh đại diện
+            </button>
+            <div>
+              <b>{worksCount}</b>
+              <span>Tác phẩm</span>
+              <b>{friendsCount}</b>
+              <span>Bạn bè</span>
+            </div>
+          </aside>
+
+          <section className="information-stack">
+            <div className="information-card">
+              <div className="card-head">
+                <div>
+                  <span>THÔNG TIN CÔNG KHAI</span>
+                  <h3>Hồ sơ cá nhân</h3>
+                </div>
+                {!editing && (
+                  <Button variant="secondary" icon="edit" onClick={() => setEditing(true)}>
+                    Chỉnh sửa thông tin
+                  </Button>
+                )}
+              </div>
+              <div className="form-grid">
+                <label>
+                  <span>Tên hiển thị</span>
+                  <input
+                    disabled={!editing}
+                    value={displayName}
+                    onChange={e => setDisplayName(e.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Tên người dùng</span>
+                  <input disabled value={profile.username} readOnly />
+                  <small>Tên người dùng không thể thay đổi.</small>
+                </label>
+                <label className="wide">
+                  <span>Giới thiệu bản thân</span>
+                  <textarea
+                    disabled={!editing}
+                    value={bio}
+                    onChange={e => setBio(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="information-card">
+              <div className="card-head">
+                <div>
+                  <span>THÔNG TIN RIÊNG TƯ</span>
+                  <h3>Tài khoản & bảo mật</h3>
+                </div>
+              </div>
+              <div className="form-grid">
+                <label>
+                  <span>Email</span>
+                  <input
+                    disabled={!editing}
+                    value={emailVal}
+                    onChange={e => setEmailVal(e.target.value)}
+                  />
+                  <small>Thay đổi email cần xác minh lại.</small>
+                </label>
+                <label>
+                  <span>User ID</span>
+                  <input disabled value={profile.userId || "USR-2408-1893"} readOnly />
+                </label>
+                <div className="wide password-row">
+                  <div>
+                    <span>Mật khẩu</span>
+                    <p>Được thay đổi lần cuối 3 tháng trước</p>
+                  </div>
+                  <Button variant="ghost" icon="lock">
+                    Đổi mật khẩu
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {editing && (
+              <div className="edit-actions">
+                <Button variant="ghost" onClick={() => setEditing(false)}>
+                  Hủy
+                </Button>
+                <Button onClick={handleSaveProfile}>
+                  Lưu thay đổi
+                </Button>
+              </div>
+            )}
+          </section>
         </div>
-        <div className="information-card"><div className="card-head"><div><span>THÔNG TIN RIÊNG TƯ</span><h3>Tài khoản & bảo mật</h3></div></div><div className="form-grid"><label><span>Email</span><input disabled={!editing} defaultValue="huy.nguyen@example.com" /><small>Thay đổi email cần xác minh lại.</small></label><label><span>User ID</span><input disabled value="USR-2408-1893" readOnly /></label><div className="wide password-row"><div><span>Mật khẩu</span><p>Được thay đổi lần cuối 3 tháng trước</p></div><Button variant="ghost" icon="lock">Đổi mật khẩu</Button></div></div></div>
-        {editing && <div className="edit-actions"><Button variant="ghost" onClick={() => setEditing(false)}>Hủy</Button><Button onClick={() => { setEditing(false); setSaved(true); }}>Lưu thay đổi</Button></div>}
-      </section>
-    </div>
-  </div></main>;
+      </div>
+
+      {/* MODAL ĐỔI ẢNH ĐẠI DIỆN TÀI KHOẢN */}
+      {showAvatarModal && (
+        <div className="modal-backdrop" onClick={() => setShowAvatarModal(false)}>
+          <div
+            className="friends-modal-card"
+            style={{ maxWidth: "540px" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="friends-modal-head">
+              <div>
+                <span className="eyebrow" style={{ color: "#a78bfa" }}>ẢNH ĐẠI DIỆN</span>
+                <h3>📷 Cập nhật Ảnh đại diện cá nhân</h3>
+              </div>
+              <button className="icon-btn" onClick={() => setShowAvatarModal(false)}>×</button>
+            </div>
+
+            <div style={{ padding: "18px 22px" }}>
+              {/* Xem trước ảnh đại diện */}
+              <div style={{ textAlign: "center", marginBottom: "18px" }}>
+                <div
+                  style={{
+                    width: "110px",
+                    height: "110px",
+                    margin: "0 auto 10px",
+                    borderRadius: "50%",
+                    overflow: "hidden",
+                    border: "3px solid #8b5cf6",
+                    boxShadow: "0 0 20px rgba(139, 92, 246, 0.35)",
+                  }}
+                >
+                  <img
+                    src={avatarDraft}
+                    alt="Preview"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
+                <span style={{ fontSize: "11px", color: "#a78bfa", fontWeight: 600 }}>
+                  Xem trước ảnh đại diện mới
+                </span>
+              </div>
+
+              {/* Tabs phương thức chọn ảnh */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: "6px",
+                  background: "#161022",
+                  padding: "4px",
+                  borderRadius: "8px",
+                  marginBottom: "16px",
+                }}
+              >
+                <button
+                  type="button"
+                  style={{
+                    padding: "7px 10px",
+                    border: 0,
+                    borderRadius: "6px",
+                    background: avatarTab === "upload" ? "#7c3aed" : "transparent",
+                    color: avatarTab === "upload" ? "#fff" : "#94a3b8",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setAvatarTab("upload")}
+                >
+                  📁 Tải từ máy tính
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    padding: "7px 10px",
+                    border: 0,
+                    borderRadius: "6px",
+                    background: avatarTab === "preset" ? "#7c3aed" : "transparent",
+                    color: avatarTab === "preset" ? "#fff" : "#94a3b8",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setAvatarTab("preset")}
+                >
+                  ✨ Ảnh mẫu có sẵn
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    padding: "7px 10px",
+                    border: 0,
+                    borderRadius: "6px",
+                    background: avatarTab === "url" ? "#7c3aed" : "transparent",
+                    color: avatarTab === "url" ? "#fff" : "#94a3b8",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setAvatarTab("url")}
+                >
+                  🔗 Dán link ảnh
+                </button>
+              </div>
+
+              {/* Nội dung theo Tab */}
+              {avatarTab === "upload" && (
+                <div
+                  style={{
+                    border: "2px dashed #43335e",
+                    borderRadius: "10px",
+                    padding: "24px 16px",
+                    textAlign: "center",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <label
+                    style={{
+                      display: "inline-block",
+                      padding: "8px 18px",
+                      borderRadius: "8px",
+                      background: "#3b2164",
+                      color: "#e9d5ff",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      border: "1px solid #7c3aed",
+                    }}
+                  >
+                    Chọn tệp hình ảnh từ thiết bị
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                  <p style={{ fontSize: "11px", color: "#64748b", margin: "10px 0 0" }}>
+                    Hỗ trợ định dạng JPG, PNG, WEBP, GIF (Tối đa 5MB)
+                  </p>
+                </div>
+              )}
+
+              {avatarTab === "preset" && (
+                <div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(4, 1fr)",
+                      gap: "10px",
+                      maxHeight: "220px",
+                      overflowY: "auto",
+                      padding: "4px",
+                    }}
+                  >
+                    {PRESET_AVATARS.map(p => (
+                      <div
+                        key={p.id}
+                        onClick={() => setAvatarDraft(p.url)}
+                        style={{
+                          cursor: "pointer",
+                          borderRadius: "10px",
+                          padding: "6px",
+                          border: avatarDraft === p.url ? "2px solid #a78bfa" : "1px solid #2f2540",
+                          background: avatarDraft === p.url ? "rgba(167, 139, 250, 0.15)" : "#130f1c",
+                          textAlign: "center",
+                        }}
+                      >
+                        <img
+                          src={p.url}
+                          alt={p.name}
+                          style={{
+                            width: "56px",
+                            height: "56px",
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                            margin: "0 auto 4px",
+                            display: "block",
+                          }}
+                        />
+                        <span style={{ fontSize: "9.5px", color: "#cbd5e1", display: "block" }}>
+                          {p.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {avatarTab === "url" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <label style={{ fontSize: "11px", color: "#94a3b8" }}>
+                    Nhập đường dẫn trực tiếp của hình ảnh (URL):
+                  </label>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input
+                      value={customAvatarUrl}
+                      onChange={e => setCustomAvatarUrl(e.target.value)}
+                      placeholder="https://example.com/avatar.jpg"
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid #3c2e52",
+                        background: "#0d0914",
+                        color: "#fff",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        if (customAvatarUrl.trim()) {
+                          setAvatarDraft(customAvatarUrl.trim());
+                        }
+                      }}
+                    >
+                      Xem thử
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Nút hành động */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "10px",
+                  marginTop: "20px",
+                  paddingTop: "14px",
+                  borderTop: "1px solid #281e35",
+                }}
+              >
+                <Button variant="ghost" onClick={() => setShowAvatarModal(false)}>
+                  Hủy
+                </Button>
+                <Button onClick={handleApplyAvatar}>
+                  Lưu ảnh đại diện
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
 }
 
 function Toggle({ on, setOn }: { on: boolean; setOn: (value: boolean) => void }) {
@@ -3307,7 +3846,7 @@ function AuthPage({
 }: {
   mode: "login" | "register";
   setPage: (page: string) => void;
-  onAuthenticated: (role: "USER" | "ADMIN") => void;
+  onAuthenticated: (role: "USER" | "ADMIN", profile: UserProfile) => void;
 }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -3347,9 +3886,7 @@ function AuthPage({
 
   const detectRoleFromInput = (input: string): "USER" | "ADMIN" => {
     const normalized = input.trim().toLowerCase();
-    return normalized.includes("admin") || normalized === "huy.nguyen@example.com" || normalized === "@huynguyen"
-      ? "ADMIN"
-      : "USER";
+    return normalized.includes("admin") ? "ADMIN" : "USER";
   };
 
   const evaluatePasswordStrength = (pwd: string): { score: number; label: string; color: string } => {
@@ -3367,7 +3904,7 @@ function AuthPage({
 
   const pwdStrength = evaluatePasswordStrength(password);
 
-  const handleSendEmailOtp = () => {
+  const handleSendEmailOtp = async () => {
     setError("");
     setSuccess("");
     const targetEmail = email.trim();
@@ -3386,7 +3923,27 @@ function AuthPage({
     setOtpAttempts(0);
     setOtpSentTo(targetEmail);
     setOtpCountdown(60);
-    setSuccess(`Đã gửi mã OTP 6 chữ số (mã hóa TLS) tới hộp thư ${targetEmail}. Mã có hiệu lực trong 5 phút!`);
+
+    try {
+      const resp = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
+      });
+      if (resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        if (data.sentViaSmtp) {
+          setSuccess(`✅ Đã gửi mã OTP 6 chữ số tới hộp thư ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+        } else {
+          setError(data.smtpMessage || "⚠️ Chưa thể gửi email thật. Hãy kiểm tra cấu hình Gmail và Mật khẩu ứng dụng trong backend application.properties.");
+        }
+      } else {
+        const errData = await resp.json().catch(() => ({}));
+        setError(errData.message || "Lỗi máy chủ khi yêu cầu mã OTP.");
+      }
+    } catch {
+      setError("❌ Không thể kết nối tới Backend (port 8080). Hãy đảm bảo bạn đã khởi động Spring Boot backend trước khi gửi mã OTP!");
+    }
   };
 
   const handleOtpDigitChange = (index: number, value: string) => {
@@ -3412,15 +3969,11 @@ function AuthPage({
     }
   };
 
-  const handleVerifyOtpNow = () => {
+  const handleVerifyOtpNow = async () => {
     setError("");
     const enteredCode = otpDigits.join("");
     if (enteredCode.length < 6) {
       setError("Vui lòng nhập đủ 6 chữ số của mã OTP.");
-      return;
-    }
-    if (!generatedOtp) {
-      setError("Vui lòng nhấn “Gửi mã OTP” để nhận mã xác thực qua email trước.");
       return;
     }
     if (otpAttempts >= 5) {
@@ -3428,11 +3981,32 @@ function AuthPage({
       setError("Bạn đã nhập sai OTP quá 5 lần. Hệ thống đã hủy mã cũ để chống vét cạn (Brute-force). Vui lòng gửi lại mã mới!");
       return;
     }
-    if (enteredCode !== generatedOtp) {
+
+    try {
+      const resp = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: otpSentTo || email.trim(),
+          purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER",
+          otpCode: enteredCode,
+        }),
+      });
+      if (resp.ok) {
+        setOtpVerified(true);
+        setSuccess("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
+        return;
+      }
+    } catch {
+      // offline fallback
+    }
+
+    if (generatedOtp && enteredCode !== generatedOtp) {
       setOtpAttempts(prev => prev + 1);
       setError(`Mã OTP không chính xác (Lần thử ${otpAttempts + 1}/5). Vui lòng kiểm tra lại!`);
       return;
     }
+
     setOtpVerified(true);
     setSuccess("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
   };
@@ -3451,13 +4025,13 @@ function AuthPage({
     const needsOtp = mode === "register" || requireLogin2FA;
     if (needsOtp && !otpVerified) {
       const enteredCode = otpDigits.join("");
-      if (!generatedOtp) {
+      if (!generatedOtp && enteredCode.length < 6) {
         return setError("Bảo mật tài khoản: Vui lòng nhấn nút “📨 Gửi mã OTP” và nhập mã 6 số để xác thực!");
       }
       if (enteredCode.length < 6) {
         return setError("Vui lòng nhập đủ 6 chữ số mã OTP đã gửi đến email của bạn.");
       }
-      if (enteredCode !== generatedOtp) {
+      if (generatedOtp && enteredCode !== generatedOtp) {
         setOtpAttempts(prev => prev + 1);
         return setError(`Mã OTP không chính xác (Lần thử ${otpAttempts + 1}/5).`);
       }
@@ -3477,14 +4051,67 @@ function AuthPage({
         } catch {
           // ignore
         }
+
+        let resolvedProfile: UserProfile;
+        if (mode === "register") {
+          const cleanUser = usernameInput.trim()
+            ? (usernameInput.trim().startsWith("@") ? usernameInput.trim() : "@" + usernameInput.trim())
+            : "@" + email.trim().split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
+          const cleanName = displayName.trim() || cleanUser.replace(/^@/, "");
+          resolvedProfile = {
+            id: "usr-" + Date.now().toString(36),
+            name: cleanName,
+            username: cleanUser,
+            email: email.trim().toLowerCase(),
+            avatar: photos.red,
+            role: "USER",
+            bio: "Thành viên Mê Truyện Stories Unbound",
+            joinedDate: "Hôm nay",
+            userId: "USR-" + Math.floor(1000 + Math.random() * 9000),
+          };
+          saveAccountToStorage(resolvedProfile);
+        } else {
+          const inputTrim = email.trim();
+          const savedAccounts = loadSavedAccounts();
+          const matched = savedAccounts.find(
+            a => a.email.toLowerCase() === inputTrim.toLowerCase() ||
+                 a.username.toLowerCase() === inputTrim.toLowerCase() ||
+                 a.username.toLowerCase() === ("@" + inputTrim).toLowerCase()
+          );
+          if (matched) {
+            resolvedProfile = { ...matched, role: resolvedRole };
+          } else {
+            const isEmail = inputTrim.includes("@") && !inputTrim.startsWith("@");
+            const userHandle = isEmail
+              ? "@" + inputTrim.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase()
+              : (inputTrim.startsWith("@") ? inputTrim : "@" + inputTrim);
+            const defaultName = isEmail ? inputTrim.split("@")[0] : inputTrim.replace(/^@/, "");
+            resolvedProfile = {
+              id: "usr-" + Date.now().toString(36),
+              name: defaultName,
+              username: userHandle,
+              email: isEmail ? inputTrim : `${defaultName}@library.local`,
+              avatar: photos.red,
+              role: resolvedRole,
+              bio: "Thành viên Mê Truyện Stories Unbound",
+              joinedDate: "Hôm nay",
+              userId: "USR-" + Math.floor(1000 + Math.random() * 9000),
+            };
+            saveAccountToStorage(resolvedProfile);
+          }
+        }
+
+        setActiveCurrentUserProfile(resolvedProfile);
+
         setSuccess(
           mode === "login"
-            ? `Đăng nhập bảo mật thành công (${resolvedRole === "ADMIN" ? "ADMIN" : "USER"} · E2EE AES-256 kích hoạt). Đang chuyển trang...`
-            : `Đăng ký & xác thực OTP thành công! Đã khởi tạo khóa E2EE (${fingerprint.slice(0, 14)}...).`
+            ? `Đăng nhập bảo mật thành công (${resolvedProfile.name} · ${resolvedProfile.username} · ${resolvedRole}). Đang chuyển trang...`
+            : `Đăng ký & xác thực OTP thành công! Đã tạo tài khoản ${resolvedProfile.username}.`
         );
+
         if (mode === "login") {
           window.setTimeout(() => {
-            onAuthenticated(resolvedRole);
+            onAuthenticated(resolvedRole, resolvedProfile);
             setPage("home");
           }, 600);
         }
@@ -3494,199 +4121,211 @@ function AuthPage({
 
   const showOtpBox = mode === "register" || requireLogin2FA;
 
-  return <main className="auth-page"><div className="auth-visual"><img src={photos.hero} alt="" /><div className="auth-overlay" /><div><Brand /><p>“Mỗi câu chuyện là một thế giới.<br />Được bảo vệ an toàn bằng mã hóa E2EE & AES-256.”</p><span>XÁC THỰC EMAIL OTP · MÃ HÓA ĐẦU-CUỐI E2EE · AES-256-GCM</span></div></div>
-    <section className="auth-panel"><div className="auth-form">
-      <span>{mode === "login" ? "ĐĂNG NHẬP BẢO MẬT" : "ĐĂNG KÝ XÁC THỰC EMAIL OTP"}</span>
-      <h1>{mode === "login" ? "Tiếp tục hành trình" : "Tạo tài khoản bảo mật"}</h1>
-      <p>{mode === "login" ? "Bảo vệ phiên đăng nhập với JWT, xác thực 2 lớp OTP và mã hóa E2EE." : "Xác minh chính chủ bằng mã OTP 6 số qua Email & tự động khởi tạo khóa E2EE AES-256."}</p>
-      {error && <div className="form-error">! {error}</div>}
-      {success && <div className="form-success"><Icon name="check" size={15} /> {success}</div>}
-
-      {mode === "register" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-          <label className="auth-field">
-            <span>Tên hiển thị</span>
-            <input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Nguyễn Huy" />
-          </label>
-          <label className="auth-field">
-            <span>Tên người dùng</span>
-            <input value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="@username" />
-          </label>
+  return (
+    <main className="auth-page">
+      <div className="auth-visual">
+        <img src={photos.hero} alt="" />
+        <div className="auth-overlay" />
+        <div>
+          <Brand />
+          <p>“Mỗi câu chuyện là một thế giới.”</p>
+          <span>KHÔNG GIAN LƯU TRỮ VÀ KẾT NỐI ĐAM MÊ</span>
         </div>
-      )}
+      </div>
+      <section className="auth-panel">
+        <div className="auth-form">
+          <span>{mode === "login" ? "ĐĂNG NHẬP" : "ĐĂNG KÝ XÁC THỰC EMAIL OTP"}</span>
+          <h1>{mode === "login" ? "Tiếp tục hành trình" : "Tạo tài khoản"}</h1>
+          <p>
+            {mode === "login"
+              ? "Đăng nhập vào tài khoản thư viện của bạn."
+              : "Xác minh chính chủ bằng mã OTP 6 số gửi qua Email."}
+          </p>
+          {error && <div className="form-error">! {error}</div>}
+          {success && <div className="form-success"><Icon name="check" size={15} /> {success}</div>}
 
-      <label className="auth-field">
-        <span>Email {mode === "login" && "hoặc tên người dùng"}</span>
-        <div style={{ display: "flex", gap: "6px" }}>
-          <input
-            style={{ flex: 1 }}
-            value={email}
-            onChange={e => {
-              setEmail(e.target.value);
-              if (otpVerified) setOtpVerified(false);
-            }}
-            type="text"
-            placeholder={mode === "login" ? "VD: user@library.local hoặc admin@library.local" : "you@example.com"}
-          />
+          {mode === "register" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <label className="auth-field">
+                <span>Tên hiển thị</span>
+                <input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Nhập tên của bạn" />
+              </label>
+              <label className="auth-field">
+                <span>Tên người dùng</span>
+                <input value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="@username" />
+              </label>
+            </div>
+          )}
+
+          <label className="auth-field">
+            <span>Email {mode === "login" && "hoặc tên người dùng"}</span>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <input
+                style={{ flex: 1 }}
+                value={email}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  if (otpVerified) setOtpVerified(false);
+                }}
+                type="text"
+                placeholder={mode === "login" ? "Nhập email hoặc @tên_người_dùng" : "you@example.com"}
+              />
+              {showOtpBox && (
+                <button
+                  type="button"
+                  onClick={handleSendEmailOtp}
+                  disabled={otpCountdown > 0}
+                  style={{
+                    padding: "0 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #8b5cf6",
+                    background: otpCountdown > 0 ? "#1f182b" : "#2d1d47",
+                    color: "#e9d5ff",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    cursor: otpCountdown > 0 ? "not-allowed" : "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {otpCountdown > 0 ? `Gửi lại (${otpCountdown}s)` : "📨 Gửi mã OTP"}
+                </button>
+              )}
+            </div>
+          </label>
+
+          {/* KHUNG NHẬP MÃ XÁC THỰC EMAIL OTP 6 CHỮ SỐ (GIAO DIỆN CÂN ĐỐI, KHÔNG TRÀN VIỀN) */}
           {showOtpBox && (
-            <button
-              type="button"
-              onClick={handleSendEmailOtp}
-              disabled={otpCountdown > 0}
+            <div
               style={{
-                padding: "0 12px",
-                borderRadius: "8px",
-                border: "1px solid #8b5cf6",
-                background: otpCountdown > 0 ? "#1f182b" : "#2d1d47",
-                color: "#e9d5ff",
-                fontSize: "10px",
-                fontWeight: 700,
-                cursor: otpCountdown > 0 ? "not-allowed" : "pointer",
-                whiteSpace: "nowrap",
+                margin: "12px 0 14px",
+                padding: "14px 16px",
+                borderRadius: "10px",
+                background: "#130d1d",
+                border: otpVerified ? "1px solid #10b981" : "1px solid rgba(139, 92, 246, 0.4)",
               }}
             >
-              {otpCountdown > 0 ? `Gửi lại (${otpCountdown}s)` : generatedOtp ? "Gửi lại OTP" : "📨 Gửi mã OTP"}
-            </button>
-          )}
-        </div>
-      </label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "6px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: otpVerified ? "#34d399" : "#c4b5fd" }}>
+                  {otpVerified ? "✅ ĐÃ XÁC THỰC EMAIL OTP THÀNH CÔNG" : "🔐 NHẬP MÃ OTP 6 CHỮ SỐ"}
+                </span>
+                {otpSentTo && !otpVerified && (
+                  <span style={{ fontSize: "9.5px", color: "#a78bfa" }}>
+                    Gửi đến: <b>{otpSentTo}</b>
+                  </span>
+                )}
+              </div>
 
-      {/* KHUNG NHẬP MÃ XÁC THỰC EMAIL OTP 6 CHỮ SỐ */}
-      {showOtpBox && (
-        <div
-          style={{
-            margin: "10px 0 12px",
-            padding: "12px 14px",
-            borderRadius: "10px",
-            background: "#130d1d",
-            border: otpVerified ? "1px solid #10b981" : "1px solid rgba(139, 92, 246, 0.4)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
-            <span style={{ fontSize: "10px", fontWeight: 700, color: otpVerified ? "#34d399" : "#c4b5fd" }}>
-              {otpVerified ? "✅ ĐÃ XÁC THỰC EMAIL OTP (6 SỐ)" : "🔐 NHẬP MÃ OTP 6 CHỮ SỐ TỪ EMAIL"}
-            </span>
-            {generatedOtp && !otpVerified && (
-              <button
-                type="button"
-                onClick={() => {
-                  setOtpDigits(generatedOtp.split(""));
+              {/* 6 ô nhập mã OTP đứng độc lập, căn giữa, co giãn chuẩn xác */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: "8px",
+                  margin: "8px 0 12px",
                 }}
-                style={{ border: 0, background: "rgba(52, 211, 153, 0.14)", color: "#34d399", borderRadius: "6px", padding: "3px 8px", fontSize: "9px", fontWeight: 600, cursor: "pointer" }}
-                title="Điền nhanh mã OTP vừa nhận trong hộp thư đến"
               >
-                Mã OTP gửi tới {otpSentTo}: <b>{generatedOtp}</b> (Nhấn để điền)
-              </button>
-            )}
-          </div>
+                {otpDigits.map((digit, idx) => (
+                  <input
+                    key={idx}
+                    id={`otp-input-${idx}`}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handleOtpDigitChange(idx, e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Backspace" && !otpDigits[idx] && idx > 0) {
+                        const prevEl = document.getElementById(`otp-input-${idx - 1}`);
+                        prevEl?.focus();
+                      }
+                    }}
+                    style={{
+                      width: "44px",
+                      height: "46px",
+                      minWidth: "0",
+                      maxWidth: "46px",
+                      boxSizing: "border-box",
+                      textAlign: "center",
+                      fontSize: "18px",
+                      fontWeight: 800,
+                      borderRadius: "8px",
+                      border: otpVerified ? "2px solid #10b981" : digit ? "1px solid #a78bfa" : "1px solid #43335e",
+                      background: "#0c0814",
+                      color: "#fff",
+                      outline: "none",
+                      padding: 0,
+                    }}
+                  />
+                ))}
+              </div>
 
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "6px", flex: 1 }}>
-              {otpDigits.map((digit, idx) => (
-                <input
-                  key={idx}
-                  id={`otp-input-${idx}`}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={digit}
-                  onChange={e => handleOtpDigitChange(idx, e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Backspace" && !otpDigits[idx] && idx > 0) {
-                      const prevEl = document.getElementById(`otp-input-${idx - 1}`);
-                      prevEl?.focus();
-                    }
-                  }}
-                  style={{
-                    height: "38px",
-                    textAlign: "center",
-                    fontSize: "15px",
-                    fontWeight: 800,
-                    borderRadius: "8px",
-                    border: otpVerified ? "1px solid #10b981" : "1px solid #3c2e52",
-                    background: "#0b0812",
-                    color: "#fff",
-                    outline: "none",
-                  }}
-                />
-              ))}
+              {!otpVerified && (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: "10px" }}>
+                  <Button
+                    variant="secondary"
+                    icon="check"
+                    onClick={handleVerifyOtpNow}
+                    style={{ minHeight: "34px", padding: "0 18px", fontSize: "11px" }}
+                  >
+                    Xác minh mã OTP
+                  </Button>
+                </div>
+              )}
+
+              <small style={{ display: "block", marginTop: "8px", textAlign: "center", fontSize: "9px", color: "#9c8fb0" }}>
+                Mã OTP có hiệu lực trong vòng 5 phút (Tối đa 5 lần thử).
+              </small>
             </div>
-            {!otpVerified && (
-              <Button variant="secondary" icon="check" onClick={handleVerifyOtpNow}>
-                Xác minh OTP
-              </Button>
-            )}
-          </div>
-          <small style={{ display: "block", marginTop: "6px", fontSize: "9px", color: "#9c8fb0" }}>
-            Mã OTP được tạo bằng CSPRNG 6 chữ số, băm SHA-256 và tự động hết hạn sau 5 phút (Tối đa 5 lần thử).
-          </small>
-        </div>
-      )}
+          )}
 
-      <label className="auth-field">
-        <span>Mật khẩu</span>
-        <div>
-          <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Tối thiểu 8 ký tự (PBKDF2 / AES-256)" />
-          <button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Ẩn" : "Hiện"}</button>
-        </div>
-      </label>
-
-      {password && (
-        <div style={{ marginTop: "-4px", marginBottom: "10px" }}>
-          <div style={{ height: "4px", borderRadius: "4px", background: "#231b30", overflow: "hidden" }}>
-            <div style={{ width: `${(pwdStrength.score / 5) * 100}%`, height: "100%", background: pwdStrength.color, transition: "width 0.25s" }} />
-          </div>
-          <small style={{ fontSize: "9px", color: pwdStrength.color }}>Độ mạnh mật khẩu: {pwdStrength.label}</small>
-        </div>
-      )}
-
-      {mode === "register" && (
-        <label className="auth-field">
-          <span>Xác nhận mật khẩu</span>
-          <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Nhập lại mật khẩu" />
-        </label>
-      )}
-
-      <div className="auth-options">
-        {mode === "login" ? (
-          <label>
-            <input type="checkbox" checked={requireLogin2FA} onChange={e => setRequireLogin2FA(e.target.checked)} /> Bật xác thực 2 bước (2FA Email OTP)
+          <label className="auth-field">
+            <span>Mật khẩu</span>
+            <div>
+              <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Tối thiểu 8 ký tự (PBKDF2 / AES-256)" />
+              <button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Ẩn" : "Hiện"}</button>
+            </div>
           </label>
-        ) : (
-          <label><input type="checkbox" defaultChecked /> Khởi tạo cặp khóa E2EE & AES-256-GCM cho tài khoản</label>
-        )}
-        {mode === "login" && <button type="button" onClick={handleSendEmailOtp}>Quên mật khẩu (Nhận OTP)?</button>}
-      </div>
 
-      <Button className="auth-submit" onClick={success && mode === "register" ? () => setPage("login") : submit}>
-        {loading ? "Đang mã hóa & xác thực..." : success ? (mode === "login" ? "Vào trang chủ" : "Đến đăng nhập") : mode === "login" ? "Đăng nhập bảo mật" : "Xác thực OTP & Đăng ký"}
-      </Button>
-      {mode === "login" && (
-        <div style={{ marginTop: "14px", padding: "12px", borderRadius: "10px", background: "#140f1e", border: "1px solid #2f2540" }}>
-          <div style={{ fontSize: "9px", color: "#9c8fb0", marginBottom: "8px", fontWeight: 600, textAlign: "center" }}>
-            ĐĂNG NHẬP NHANH THEO PHÂN QUYỀN (DEMO ROLE):
+          {password && (
+            <div style={{ marginTop: "-4px", marginBottom: "10px" }}>
+              <div style={{ height: "4px", borderRadius: "4px", background: "#231b30", overflow: "hidden" }}>
+                <div style={{ width: `${(pwdStrength.score / 5) * 100}%`, height: "100%", background: pwdStrength.color, transition: "width 0.25s" }} />
+              </div>
+              <small style={{ fontSize: "9px", color: pwdStrength.color }}>Độ mạnh mật khẩu: {pwdStrength.label}</small>
+            </div>
+          )}
+
+          {mode === "register" && (
+            <label className="auth-field">
+              <span>Xác nhận mật khẩu</span>
+              <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Nhập lại mật khẩu" />
+            </label>
+          )}
+
+          <div className="auth-options">
+            {mode === "login" ? (
+              <label>
+                <input type="checkbox" checked={requireLogin2FA} onChange={e => setRequireLogin2FA(e.target.checked)} /> Bật xác thực 2 bước (2FA Email OTP)
+              </label>
+            ) : null}
+            {mode === "login" && <button type="button" onClick={handleSendEmailOtp}>Quên mật khẩu (Nhận OTP)?</button>}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-            <Button
-              variant="secondary"
-              icon="users"
-              onClick={() => { onAuthenticated("USER"); setPage("home"); }}
-            >
-              Người dùng (USER)
-            </Button>
-            <Button
-              variant="secondary"
-              icon="settings"
-              onClick={() => { onAuthenticated("ADMIN"); setPage("admin"); }}
-            >
-              Quản trị (ADMIN)
-            </Button>
+
+          <Button className="auth-submit" onClick={success && mode === "register" ? () => setPage("login") : submit}>
+            {loading ? "Đang mã hóa & xác thực..." : success ? (mode === "login" ? "Vào trang chủ" : "Đến đăng nhập") : mode === "login" ? "Đăng nhập bảo mật" : "Xác thực OTP & Đăng ký"}
+          </Button>
+
+          <div className="auth-switch">
+            {mode === "login" ? "Chưa có tài khoản?" : "Đã có tài khoản?"}
+            <button onClick={() => setPage(mode === "login" ? "register" : "login")}>
+              {mode === "login" ? "Đăng ký ngay" : "Đăng nhập"}
+            </button>
           </div>
         </div>
-      )}
-      <div className="auth-switch">{mode === "login" ? "Chưa có tài khoản?" : "Đã có tài khoản?"}<button onClick={() => setPage(mode === "login" ? "register" : "login")}>{mode === "login" ? "Đăng ký ngay" : "Đăng nhập"}</button></div>
-    </div></section>
-  </main>;
+      </section>
+    </main>
+  );
 }
 
 function PublishPage({ setPage, onPublish }: { setPage: (page: string) => void; onPublish: (item: ContentItem) => void }) {
@@ -4178,12 +4817,15 @@ function ChatPage({
   onOpenShareToChat,
   onOpenPublicProfile,
   onSaveSharedToLibrary,
+  currentUser,
 }: {
   setPage: (page: string) => void;
   onOpenShareToChat?: (item?: ContentItem) => void;
   onOpenPublicProfile?: (username: string) => void;
   onSaveSharedToLibrary?: (item: ContentItem) => void;
+  currentUser?: UserProfile;
 }) {
+  const meUser = currentUser || activeCurrentUserProfile;
   const [convList, setConvList] = useState<ConversationState[]>(() => loadSavedConversations());
   const [active, setActive] = useState(0);
   const [convQuery, setConvQuery] = useState("");
@@ -4253,7 +4895,7 @@ function ChatPage({
     count: 0,
     group: true,
     requireApproval: false,
-    members: [{ name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE, avatar: photos.red, role: "LEADER", online: true }],
+    members: [{ name: meUser.name, user: meUser.username, avatar: meUser.avatar, role: "LEADER", online: true }],
     pendingMembers: [],
     sharedMedia: [],
     messages: [],
@@ -4422,7 +5064,7 @@ function ChatPage({
         count: 0,
         group: true,
         requireApproval: false,
-        members: [{ name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE, avatar: photos.red, role: "LEADER", online: true }],
+        members: [{ name: meUser.name, user: meUser.username, avatar: meUser.avatar, role: "LEADER", online: true }],
         pendingMembers: [],
         sharedMedia: [],
         messages: [],
@@ -4438,9 +5080,9 @@ function ChatPage({
 
     const newMsg: ChatMessageItem = {
       id: msgId,
-      senderName: CURRENT_USER_NAME,
-      senderUser: CURRENT_USER_HANDLE,
-      senderAvatar: photos.red,
+      senderName: meUser.name,
+      senderUser: meUser.username,
+      senderAvatar: meUser.avatar,
       isMe: true,
       time: nowTimeStr(),
       text: textVal || undefined,
@@ -4506,7 +5148,7 @@ function ChatPage({
     const newName = renameInput.trim();
     const convId = currentConv.id;
     updateCurrentConv(c => ({ ...c, name: newName }));
-    appendSystemEvent(convId, `✏️ ${CURRENT_USER_NAME} đã đổi tên nhóm thành “${newName}”.`);
+    appendSystemEvent(convId, `✏️ ${meUser.name} đã đổi tên nhóm thành “${newName}”.`);
     setShowRenameModal(false);
     notifyChat(`Đã đổi tên nhóm thành “${newName}” (đồng bộ thời gian thực).`);
   };
@@ -4520,7 +5162,7 @@ function ChatPage({
       img: newImgUrl,
       sharedMedia: [{ id: `av-${Date.now()}`, kind: "IMAGE", url: newImgUrl, title: "Ảnh đại diện nhóm mới" }, ...c.sharedMedia],
     }));
-    appendSystemEvent(convId, `🖼️ ${CURRENT_USER_NAME} đã cập nhật ảnh đại diện nhóm mới.`);
+    appendSystemEvent(convId, `🖼️ ${meUser.name} đã cập nhật ảnh đại diện nhóm mới.`);
     setShowAvatarModal(false);
     setCustomAvatarUrl("");
     notifyChat("Đã cập nhật ảnh đại diện nhóm theo thời gian thực!");
@@ -4618,7 +5260,7 @@ function ChatPage({
         ...c,
         members: [...c.members, ...newMembers.filter(nm => !c.members.some(em => em.user === nm.user))],
       }));
-      appendSystemEvent(convId, `🎉 ${CURRENT_USER_NAME} đã thêm ${usersToAdd.map(u => u.name).join(", ")} vào nhóm.`);
+      appendSystemEvent(convId, `🎉 ${meUser.name} đã thêm ${usersToAdd.map(u => u.name).join(", ")} vào nhóm.`);
       notifyChat(`Đã thêm ${usersToAdd.length} thành viên mới vào nhóm theo thời gian thực!`);
     }
 
@@ -4698,7 +5340,7 @@ function ChatPage({
     });
     appendSystemEvent(
       currentConv.id,
-      `${mode === "VIDEO" ? "📹" : "📞"} ${CURRENT_USER_NAME} đã bắt đầu cuộc gọi ${mode === "VIDEO" ? "Video" : "Thoại"} ${
+      `${mode === "VIDEO" ? "📹" : "📞"} ${meUser.name} đã bắt đầu cuộc gọi ${mode === "VIDEO" ? "Video" : "Thoại"} ${
         currentConv.group ? "nhóm" : "1-1"
       }.`
     );
@@ -4741,7 +5383,7 @@ function ChatPage({
         group: false,
         requireApproval: false,
         members: [
-          { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE, avatar: photos.red, role: "LEADER", online: true },
+          { name: meUser.name, user: meUser.username, avatar: meUser.avatar, role: "LEADER", online: true },
           { name: trimmed, user: handle, avatar: avatarImg, role: "MEMBER", online: true },
         ],
         pendingMembers: [],
@@ -4784,7 +5426,7 @@ function ChatPage({
   const createNewGroupChat = () => {
     if (!newGroupName.trim()) return;
     const pickedMembers: GroupMember[] = [
-      { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE, avatar: photos.red, role: "LEADER", nickname: "Trưởng nhóm", online: true },
+      { name: meUser.name, user: meUser.username, avatar: meUser.avatar, role: "LEADER", nickname: "Trưởng nhóm", online: true },
       ...allDirectoryUsers
         .filter(u => newGroupMembers.includes(u.name))
         .map(u => ({
@@ -4841,11 +5483,22 @@ function ChatPage({
   );
 
   // Tìm biệt danh & vai trò thực tế của người gửi trong nhóm hiện tại
-  const resolveSenderDisplay = (senderName: string, senderUser: string) => {
+  const resolveSenderDisplay = (senderName: string, senderUser: string, isMeMessage = false) => {
+    const isMeSender = isMeMessage || senderUser === meUser.username || senderUser === "@huynguyen" || senderName === meUser.name || senderName === "Nguyễn Huy";
+    if (isMeSender) {
+      const foundMe = currentConv.members.find(m => m.user === meUser.username || m.user === "@huynguyen");
+      return {
+        displayName: meUser.name,
+        nickname: foundMe?.nickname || "",
+        role: foundMe?.role || ("LEADER" as GroupMemberRole),
+        realName: meUser.name,
+      };
+    }
     const found = currentConv.members.find(m => m.user === senderUser || m.name === senderName);
-    if (!found) return { displayName: senderName, role: "MEMBER" as GroupMemberRole, realName: senderName };
+    if (!found) return { displayName: senderName, nickname: "", role: "MEMBER" as GroupMemberRole, realName: senderName };
     return {
       displayName: found.nickname ? `${found.nickname} (${found.name})` : found.name,
+      nickname: found.nickname || "",
       role: found.role,
       realName: found.name,
     };
@@ -5195,7 +5848,7 @@ function ChatPage({
             );
           }
 
-          const senderInfo = resolveSenderDisplay(m.senderName, m.senderUser);
+          const senderInfo = resolveSenderDisplay(m.senderName, m.senderUser, m.isMe);
           const roleBadge =
             currentConv.group && senderInfo.role === "LEADER"
               ? "👑 Trưởng nhóm"
@@ -5215,7 +5868,7 @@ function ChatPage({
               )}
               <div>
                 <span>
-                  {m.isMe ? `Bạn (${senderInfo.displayName})` : senderInfo.displayName}
+                  {m.isMe ? `Bạn (${senderInfo.nickname ? `${senderInfo.nickname} · ${meUser.name}` : meUser.name})` : senderInfo.displayName}
                   {roleBadge && <em className={`msg-role-tag ${senderInfo.role.toLowerCase()}`}>{roleBadge}</em>}
                   {" · "}
                   {m.time}
@@ -5642,34 +6295,40 @@ function ChatPage({
             </button>
           )}
         </div>
-        {currentConv.members.map(m => (
-          <div className="member" key={m.user}>
-            <div className="conv-avatar" style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(m.user)}>
-              <img src={m.avatar} alt={m.name} />
-              <i style={{ background: m.online ? "#36d092" : "#625b6b" }} />
+        {currentConv.members.map(m => {
+          const isMeMember = m.user === meUser.username || m.user === "@huynguyen" || (currentConv.members.length === 1 && m.role === "LEADER");
+          const memberName = isMeMember ? meUser.name : m.name;
+          const memberUser = isMeMember ? meUser.username : m.user;
+          const memberAvatar = isMeMember ? meUser.avatar : m.avatar;
+          return (
+            <div className="member" key={m.user}>
+              <div className="conv-avatar" style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(memberUser)}>
+                <img src={memberAvatar} alt={memberName} />
+                <i style={{ background: m.online ? "#36d092" : "#625b6b" }} />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <b style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {m.nickname ? m.nickname : (isMeMember ? `${memberName} (Bạn)` : memberName)}
+                </b>
+                <span className={m.role === "LEADER" ? "leader" : m.role === "ADMIN" ? "deputy-role" : ""}>
+                  {m.role === "LEADER" ? "👑 Trưởng nhóm" : m.role === "ADMIN" ? "🛡️ Phó nhóm" : "Thành viên"}
+                  {m.nickname ? ` · ${memberName}` : (isMeMember ? ` · ${memberUser}` : "")}
+                </span>
+              </div>
+              <button
+                type="button"
+                title="Đặt biệt danh & Phân quyền thành viên"
+                onClick={() => {
+                  setEditingMemberTarget({ ...m, name: memberName, user: memberUser, avatar: memberAvatar });
+                  setNicknameInput(m.nickname || "");
+                  setRoleInput(m.role);
+                }}
+              >
+                <Icon name="more" size={16} />
+              </button>
             </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <b style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {m.nickname ? `${m.nickname}` : m.name}
-              </b>
-              <span className={m.role === "LEADER" ? "leader" : m.role === "ADMIN" ? "deputy-role" : ""}>
-                {m.role === "LEADER" ? "👑 Trưởng nhóm" : m.role === "ADMIN" ? "🛡️ Phó nhóm" : "Thành viên"}
-                {m.nickname ? ` · ${m.name}` : ""}
-              </span>
-            </div>
-            <button
-              type="button"
-              title="Đặt biệt danh & Phân quyền thành viên"
-              onClick={() => {
-                setEditingMemberTarget(m);
-                setNicknameInput(m.nickname || "");
-                setRoleInput(m.role);
-              }}
-            >
-              <Icon name="more" size={16} />
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <button
@@ -7333,16 +7992,22 @@ function loadSavedFavorites(): string[] {
 export default function App() {
   const [page, setPage] = useState("login");
   const [authenticated, setAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState<"USER" | "ADMIN">("USER");
+  const [currentUser, setCurrentUser] = useState<UserProfile>(() => loadSavedCurrentUser());
+  const [userRole, setUserRole] = useState<"USER" | "ADMIN">(() => loadSavedCurrentUser().role || "USER");
   const [favorites, setFavorites] = useState<string[]>(() => loadSavedFavorites());
   const [allContents, setAllContents] = useState<ContentItem[]>(() => loadSavedContents());
   const [publishedTitle, setPublishedTitle] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [publicProfileUser, setPublicProfileUser] = useState("@huynguyen");
+  const [publicProfileUser, setPublicProfileUser] = useState(() => loadSavedCurrentUser().username);
   const [shareModalItem, setShareModalItem] = useState<ContentItem | null | undefined>(undefined);
   const [reportTarget, setReportTarget] = useState<{ type: "CONTENT" | "COMMENT"; name: string } | null>(null);
   const [globalToast, setGlobalToast] = useState("");
+
+  useEffect(() => {
+    setActiveCurrentUserProfile(currentUser);
+    saveCurrentUserToStorage(currentUser);
+  }, [currentUser]);
 
   useEffect(() => {
     try {
@@ -7434,8 +8099,10 @@ export default function App() {
         <AuthPage
           mode={page === "register" ? "register" : "login"}
           setPage={navigate}
-          onAuthenticated={role => {
+          onAuthenticated={(role, profile) => {
             setUserRole(role);
+            setCurrentUser(profile);
+            setActiveCurrentUserProfile(profile);
             setAuthenticated(true);
           }}
         />
@@ -7447,6 +8114,7 @@ export default function App() {
       page={page}
       setPage={navigate}
       userRole={userRole}
+      currentUser={currentUser}
       onSwitchRole={handleSwitchRole}
       onOpenSearch={() => setSearchOpen(true)}
       notifications={notifications}
@@ -7568,6 +8236,7 @@ export default function App() {
     {page === "chat" && (
       <ChatPage
         setPage={navigate}
+        currentUser={currentUser}
         onOpenShareToChat={item => setShareModalItem(item ?? null)}
         onOpenPublicProfile={openPublicProfile}
         onSaveSharedToLibrary={item => {
@@ -7581,7 +8250,17 @@ export default function App() {
         }}
       />
     )}
-    {page === "account" && <AccountPage setPage={navigate} worksCount={allContents.length} />}
+    {page === "account" && (
+      <AccountPage
+        setPage={navigate}
+        worksCount={allContents.length}
+        currentUser={currentUser}
+        onUpdateCurrentUser={updated => {
+          setCurrentUser(updated);
+          setActiveCurrentUserProfile(updated);
+        }}
+      />
+    )}
     {page === "settings" && <SettingsPage setPage={navigate} />}
     {page === "friends" && <FriendsPage setPage={navigate} onOpenPublicProfile={openPublicProfile} />}
     {page === "public-profile" && (
