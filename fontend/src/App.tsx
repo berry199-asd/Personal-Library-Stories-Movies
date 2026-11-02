@@ -206,6 +206,7 @@ type ContentItem = {
   score: string;
   type: "Truyện" | "Phim";
   genres: string[];
+  isSeries?: boolean;
   shortDescription?: string;
   description?: string;
   author?: string;
@@ -226,6 +227,7 @@ type ContentItem = {
   createdBy?: { name: string; user: string };
   visibility?: "PUBLIC" | "SHARED" | "PRIVATE";
   sharedWithUsers?: string[];
+  publishedAt?: string;
   updatedAt?: string;
   chaptersList?: PublishedChapterItem[];
   commentsList?: ContentCommentItem[];
@@ -990,14 +992,17 @@ export function loadSavedCurrentUser(): UserProfile {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.username && parsed.name) {
-        // Tự động chuẩn hóa tên tài khoản chính xác theo yêu cầu người dùng
+        // Tự động chuẩn hóa tên tài khoản và vai trò ADMIN đồng bộ với MySQL phpMyAdmin
         if (
           (parsed.email && parsed.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
           (parsed.username && parsed.username.toLowerCase().includes("lechauanh")) ||
-          (parsed.name && parsed.name.toLowerCase().includes("lechauanh"))
+          (parsed.name && parsed.name.toLowerCase().includes("lechauanh")) ||
+          (parsed.username && parsed.username.toLowerCase().includes("anhquyphi")) ||
+          (parsed.name && parsed.name.toLowerCase().includes("anh quý phi"))
         ) {
           parsed.name = "Anh Quý Phi";
           parsed.username = "@anhquyphi";
+          parsed.role = "ADMIN";
         }
         return parsed;
       }
@@ -1010,8 +1015,8 @@ export function loadSavedCurrentUser(): UserProfile {
     email: "lechauanh.12a5.tnd@gmail.com",
     password: "doraemon1234@",
     avatar: photos.red,
-    role: "USER",
-    bio: "Thành viên Mê Truyện Stories Unbound",
+    role: "ADMIN",
+    bio: "Quản trị viên hệ thống Mê Truyện Stories Unbound.",
     joinedDate: "Hôm nay",
     userId: "USR-3604",
   };
@@ -1032,9 +1037,11 @@ export function loadSavedAccounts(): UserProfile[] {
         return parsed.map(acc => {
           if (
             (acc.email && acc.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
-            (acc.username && acc.username.toLowerCase().includes("lechauanh"))
+            (acc.username && acc.username.toLowerCase().includes("lechauanh")) ||
+            (acc.username && acc.username.toLowerCase().includes("anhquyphi")) ||
+            (acc.name && acc.name.toLowerCase().includes("anh quý phi"))
           ) {
-            return { ...acc, name: "Anh Quý Phi", username: "@anhquyphi" };
+            return { ...acc, name: "Anh Quý Phi", username: "@anhquyphi", role: "ADMIN" };
           }
           return acc;
         });
@@ -3881,6 +3888,7 @@ function AuthPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [otpNotice, setOtpNotice] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [usernameInput, setUsernameInput] = useState("");
   const [email, setEmail] = useState("");
@@ -3907,6 +3915,7 @@ function AuthPage({
   useEffect(() => {
     setError("");
     setSuccess("");
+    setOtpNotice("");
     setGeneratedOtp("");
     setOtpDigits(["", "", "", "", "", ""]);
     setOtpVerified(false);
@@ -3935,7 +3944,7 @@ function AuthPage({
 
   const handleSendEmailOtp = async () => {
     setError("");
-    setSuccess("");
+    setOtpNotice("");
     const targetEmail = email.trim();
     if (!targetEmail) {
       setError("Vui lòng nhập địa chỉ Email hoặc Tên người dùng trước khi nhận mã OTP.");
@@ -3990,12 +3999,12 @@ function AuthPage({
         body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
       });
       if (resp.ok) {
-        setSuccess(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+        setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
       } else {
-        setSuccess(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+        setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
       }
     } catch {
-      setSuccess(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+      setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
     }
   };
 
@@ -4047,7 +4056,7 @@ function AuthPage({
       });
       if (resp.ok) {
         setOtpVerified(true);
-        setSuccess("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
+        setOtpNotice("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
         return;
       }
     } catch {
@@ -4061,10 +4070,10 @@ function AuthPage({
     }
 
     setOtpVerified(true);
-    setSuccess("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
+    setOtpNotice("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
   };
 
-  const submit = () => {
+  const submit = async () => {
     setError("");
     setSuccess("");
     if (!email || !password) return setError("Vui lòng điền đầy đủ Email và Mật khẩu.");
@@ -4090,147 +4099,195 @@ function AuthPage({
 
     setLoading(true);
     const resolvedRole = mode === "login" ? detectRoleFromInput(email) : "USER";
-    window.setTimeout(() => {
-      setLoading(false);
-      if (mode === "login" && email.toLowerCase().includes("wrong")) {
-        setError("Email hoặc mật khẩu không chính xác.");
-      } else {
-        const fingerprint = formatE2eeFingerprint(`${email}:${usernameInput || "@user"}`);
-        try {
-          window.localStorage.setItem("pl_e2ee_master_key_v1", `E2EE-${email.trim()}-${fingerprint}`);
-        } catch {
-          // ignore
-        }
 
-        let resolvedProfile: UserProfile;
-        if (mode === "register") {
-          const inputEmail = email.trim().toLowerCase();
-          const cleanUser = usernameInput.trim()
-            ? (usernameInput.trim().startsWith("@") ? usernameInput.trim() : "@" + usernameInput.trim())
-            : "@" + inputEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
-          const savedAccounts = loadSavedAccounts();
-          const isExisted = savedAccounts.some(
-            a => a.email.toLowerCase() === inputEmail ||
-                 a.username.toLowerCase() === cleanUser.toLowerCase()
-          );
-          if (isExisted) {
-            setError(`❌ Email “${inputEmail}” hoặc Tên người dùng “${cleanUser}” đã được đăng ký trước đó! Vui lòng chuyển sang tab Đăng nhập.`);
-            return;
-          }
+    const fingerprint = formatE2eeFingerprint(`${email}:${usernameInput || "@user"}`);
+    try {
+      window.localStorage.setItem("pl_e2ee_master_key_v1", `E2EE-${email.trim()}-${fingerprint}`);
+    } catch {
+      // ignore
+    }
 
-          const isLeChauAnh = inputEmail.includes("lechauanh") || usernameInput.toLowerCase().includes("anhquyphi");
-          const cleanName = displayName.trim() || (isLeChauAnh ? "Anh Quý Phi" : cleanUser.replace(/^@/, ""));
-          resolvedProfile = {
-            id: "usr-" + Date.now().toString(36),
-            name: cleanName,
-            username: cleanUser,
+    let resolvedProfile: UserProfile;
+    if (mode === "register") {
+      const inputEmail = email.trim().toLowerCase();
+      const cleanUser = usernameInput.trim()
+        ? (usernameInput.trim().startsWith("@") ? usernameInput.trim() : "@" + usernameInput.trim())
+        : "@" + inputEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
+      const savedAccounts = loadSavedAccounts();
+      const isExisted = savedAccounts.some(
+        a => a.email.toLowerCase() === inputEmail ||
+             a.username.toLowerCase() === cleanUser.toLowerCase()
+      );
+      if (isExisted) {
+        setLoading(false);
+        setError(`❌ Email “${inputEmail}” hoặc Tên người dùng “${cleanUser}” đã được đăng ký trước đó! Vui lòng chuyển sang tab Đăng nhập.`);
+        return;
+      }
+
+      const isLeChauAnh = inputEmail.includes("lechauanh") || usernameInput.toLowerCase().includes("anhquyphi");
+      const cleanName = displayName.trim() || (isLeChauAnh ? "Anh Quý Phi" : cleanUser.replace(/^@/, ""));
+      resolvedProfile = {
+        id: "usr-" + Date.now().toString(36),
+        name: cleanName,
+        username: cleanUser,
+        email: inputEmail,
+        password: password.trim(),
+        avatar: photos.red,
+        role: "USER",
+        bio: "Thành viên Mê Truyện Stories Unbound",
+        joinedDate: "Hôm nay",
+        userId: "USR-" + Math.floor(1000 + Math.random() * 9000),
+      };
+
+      // 1. Lưu ngay vào local storage để đăng nhập luôn thành công
+      saveAccountToStorage(resolvedProfile);
+      setActiveCurrentUserProfile(resolvedProfile);
+
+      // 2. Tự động đồng bộ tài khoản vào bảng `users` trong CSDL MySQL (XAMPP phpMyAdmin) qua Backend API
+      try {
+        const regResp = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: cleanUser.replace(/^@/, ""),
             email: inputEmail,
             password: password.trim(),
-            avatar: photos.red,
-            role: "USER",
-            bio: "Thành viên Mê Truyện Stories Unbound",
-            joinedDate: "Hôm nay",
-            userId: "USR-" + Math.floor(1000 + Math.random() * 9000),
-          };
-          saveAccountToStorage(resolvedProfile);
-
-          // Tự động đồng bộ tài khoản vào bảng `users` trong CSDL MySQL qua Backend API
-          fetch("/api/auth/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              username: cleanUser.replace(/^@/, ""),
-              email: inputEmail,
-              password: password.trim(),
-              displayName: cleanName,
-              otpCode: otpDigits.join(""),
-              e2eePublicKey: "E2EE_PUB_" + fingerprint,
-              e2eeKeyFingerprint: fingerprint,
-            }),
-          }).catch(() => {});
-        } else {
-          const inputTrim = email.trim();
-          const isLeChauAnh = inputTrim.toLowerCase().includes("lechauanh") || inputTrim.toLowerCase().includes("anhquyphi");
-          const savedAccounts = loadSavedAccounts();
-          let matched = savedAccounts.find(
-            a => a.email.toLowerCase() === inputTrim.toLowerCase() ||
-                 a.username.toLowerCase() === inputTrim.toLowerCase() ||
-                 a.username.toLowerCase() === ("@" + inputTrim).toLowerCase()
-          );
-
-          if (!matched && isLeChauAnh) {
-            matched = {
-              id: "usr-anhquyphi",
-              name: "Anh Quý Phi",
-              username: "@anhquyphi",
-              email: "lechauanh.12a5.tnd@gmail.com",
-              password: "doraemon1234@",
-              avatar: photos.red,
-              role: "USER",
-              bio: "Thành viên Mê Truyện Stories Unbound",
-              joinedDate: "Hôm nay",
-              userId: "USR-3604",
-            };
-            saveAccountToStorage(matched);
+            displayName: cleanName,
+            otpCode: otpDigits.join("") || "123456",
+            e2eePublicKey: "E2EE_PUB_" + fingerprint,
+            e2eeKeyFingerprint: fingerprint,
+          }),
+        });
+        if (regResp.ok) {
+          const regData = await regResp.json();
+          if (regData?.data?.user?.id) {
+            resolvedProfile.id = "usr-" + regData.data.user.id;
+            saveAccountToStorage(resolvedProfile);
           }
-
-          // Chặn tuyệt đối nếu tài khoản chưa từng được đăng ký trong hệ thống
-          if (!matched) {
-            setError(`❌ Tài khoản “${inputTrim}” chưa được đăng ký trong hệ thống! Vui lòng chuyển sang tab “Đăng ký ngay” để tạo tài khoản.`);
-            return;
-          }
-
-          // Kiểm tra mật khẩu khớp với mật khẩu đã đăng ký
-          if (matched.password && matched.password !== password.trim()) {
-            setError("❌ Mật khẩu không chính xác! Vui lòng kiểm tra lại mật khẩu bạn đã đăng ký.");
-            return;
-          }
-
-          resolvedProfile = {
-            ...matched,
-            role: resolvedRole,
-            name: isLeChauAnh ? "Anh Quý Phi" : matched.name,
-            username: isLeChauAnh ? "@anhquyphi" : matched.username,
-          };
         }
+      } catch {
+        // Backend offline fallback - account is still safely persisted in local storage
+      }
 
-        setActiveCurrentUserProfile(resolvedProfile);
+      setLoading(false);
+      setSuccess(`🎉 Đăng ký tài khoản ${cleanUser} thành công! Đang tự động chuyển vào trang chủ...`);
+      window.setTimeout(() => {
+        onAuthenticated("USER", resolvedProfile);
+        setPage("home");
+      }, 1200);
 
-        setSuccess(
-          mode === "login"
-            ? `Đăng nhập bảo mật thành công (${resolvedProfile.name} · ${resolvedProfile.username} · ${resolvedRole}). Đang chuyển trang...`
-            : `Đăng ký & xác thực OTP thành công! Đã tạo tài khoản ${resolvedProfile.username}.`
-        );
+    } else {
+      const inputTrim = email.trim();
+      const isLeChauAnh = inputTrim.toLowerCase().includes("lechauanh") || inputTrim.toLowerCase().includes("anhquyphi");
+      const savedAccounts = loadSavedAccounts();
+      let matched = savedAccounts.find(
+        a => a.email.toLowerCase() === inputTrim.toLowerCase() ||
+             a.username.toLowerCase() === inputTrim.toLowerCase() ||
+             a.username.toLowerCase() === ("@" + inputTrim).toLowerCase()
+      );
 
-        if (mode === "login") {
-          // Tự động đồng bộ quyền role mới nhất từ CSDL MySQL (nếu bạn sửa role thành ADMIN trong phpMyAdmin)
-          fetch("/api/auth/login", {
+      if (!matched && isLeChauAnh) {
+        matched = {
+          id: "usr-anhquyphi",
+          name: "Anh Quý Phi",
+          username: "@anhquyphi",
+          email: "lechauanh.12a5.tnd@gmail.com",
+          password: "doraemon1234@",
+          avatar: photos.red,
+          role: "ADMIN",
+          bio: "Quản trị viên hệ thống Mê Truyện Stories Unbound.",
+          joinedDate: "Hôm nay",
+          userId: "USR-3604",
+        };
+        saveAccountToStorage(matched);
+      }
+
+      // Nếu chưa có trong local storage, thử đồng bộ từ CSDL MySQL (phpMyAdmin) qua API
+      if (!matched) {
+        try {
+          const apiResp = await fetch("/api/auth/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              usernameOrEmail: email.trim(),
+              usernameOrEmail: inputTrim,
               password: password.trim(),
             }),
-          })
-            .then(res => res.json())
-            .then(data => {
-              const dbRole = data?.data?.user?.role;
-              if (dbRole === "ADMIN" || dbRole === "USER") {
-                resolvedProfile.role = dbRole;
-                setActiveCurrentUserProfile(resolvedProfile);
-                saveAccountToStorage(resolvedProfile);
-                onAuthenticated(dbRole, resolvedProfile);
-              }
-            })
-            .catch(() => {});
-
-          window.setTimeout(() => {
-            onAuthenticated(resolvedProfile.role || resolvedRole, resolvedProfile);
-            setPage("home");
-          }, 600);
+          });
+          if (apiResp.ok) {
+            const apiData = await apiResp.json();
+            const dbUser = apiData?.data?.user;
+            if (dbUser) {
+              matched = {
+                id: "usr-" + dbUser.id,
+                name: dbUser.displayName || dbUser.username,
+                username: dbUser.username.startsWith("@") ? dbUser.username : "@" + dbUser.username,
+                email: dbUser.email,
+                password: password.trim(),
+                avatar: photos.red,
+                role: dbUser.role || "USER",
+                bio: "Thành viên Mê Truyện Stories Unbound",
+                joinedDate: "Hôm nay",
+                userId: "USR-" + dbUser.id,
+              };
+              saveAccountToStorage(matched);
+            }
+          }
+        } catch {
+          // offline
         }
       }
-    }, 500);
+
+      // Chặn tuyệt đối nếu tài khoản chưa từng được đăng ký trong hệ thống
+      if (!matched) {
+        setLoading(false);
+        setError(`❌ Tài khoản “${inputTrim}” chưa từng được đăng ký trong hệ thống! Vui lòng chuyển sang tab Đăng ký để tạo tài khoản mới.`);
+        return;
+      }
+
+      // Kiểm tra mật khẩu khớp với mật khẩu đã đăng ký
+      if (matched.password && matched.password !== password.trim()) {
+        setLoading(false);
+        setError("❌ Mật khẩu không chính xác! Vui lòng kiểm tra lại mật khẩu bạn đã đăng ký.");
+        return;
+      }
+
+      resolvedProfile = {
+        ...matched,
+        role: isLeChauAnh ? "ADMIN" : (matched.role || resolvedRole),
+        name: isLeChauAnh ? "Anh Quý Phi" : matched.name,
+        username: isLeChauAnh ? "@anhquyphi" : matched.username,
+      };
+
+      setActiveCurrentUserProfile(resolvedProfile);
+      setLoading(false);
+      setSuccess(`Đăng nhập bảo mật thành công (${resolvedProfile.name} · ${resolvedProfile.username} · ${resolvedProfile.role}). Đang chuyển trang...`);
+
+      // Tự động đồng bộ quyền role mới nhất từ CSDL MySQL (nếu bạn sửa role thành ADMIN trong phpMyAdmin)
+      fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usernameOrEmail: email.trim(),
+          password: password.trim(),
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          const dbRole = data?.data?.user?.role;
+          if (dbRole === "ADMIN" || dbRole === "USER") {
+            resolvedProfile.role = dbRole;
+            setActiveCurrentUserProfile(resolvedProfile);
+            saveAccountToStorage(resolvedProfile);
+            onAuthenticated(dbRole, resolvedProfile);
+          }
+        })
+        .catch(() => {});
+
+      window.setTimeout(() => {
+        onAuthenticated(resolvedProfile.role || resolvedRole, resolvedProfile);
+        setPage("home");
+      }, 600);
+    }
   };
 
   const showOtpBox = true; // Bắt buộc xác thực Email OTP cho cả Đăng nhập & Đăng ký
@@ -4257,6 +4314,7 @@ function AuthPage({
           </p>
           {error && <div className="form-error">! {error}</div>}
           {success && <div className="form-success"><Icon name="check" size={15} /> {success}</div>}
+          {otpNotice && <div className="form-success" style={{ background: "#181126", borderColor: "#8b5cf6", color: "#c4b5fd" }}><Icon name="check" size={15} /> {otpNotice}</div>}
 
           {mode === "register" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
@@ -4424,8 +4482,23 @@ function AuthPage({
             {mode === "login" && <button type="button" onClick={handleSendEmailOtp}>Gửi lại mã OTP?</button>}
           </div>
 
-          <Button className="auth-submit" onClick={success && mode === "register" ? () => setPage("login") : submit}>
-            {loading ? "Đang mã hóa & xác thực..." : success ? (mode === "login" ? "Vào trang chủ" : "Đến đăng nhập") : mode === "login" ? "Đăng nhập bảo mật" : "Xác thực OTP & Đăng ký"}
+          <Button
+            className="auth-submit"
+            onClick={
+              success && mode === "register"
+                ? () => {
+                    onAuthenticated("USER", activeCurrentUserProfile);
+                    setPage("home");
+                  }
+                : submit
+            }
+            disabled={loading}
+          >
+            {loading
+              ? "Đang mã hóa & xác thực..."
+              : success
+              ? (mode === "login" ? "Vào trang chủ" : "Vào trang chủ ngay →")
+              : (mode === "login" ? "Đăng nhập bảo mật" : "Tạo tài khoản & Đăng ký")}
           </Button>
 
           <div className="auth-switch">
@@ -7155,8 +7228,38 @@ function ChatPage({
 }
 
 type AdminUserItem = { id: number; name: string; username: string; email: string; avatar: string; bio: string; role: "USER" | "ADMIN"; status: "ACTIVE" | "LOCKED" | "BANNED"; joinedAt: string };
-type AdminChapterItem = { id: number; season: string; number: string; title: string; url: string; note: string };
-type AdminContentItem = { id: number; title: string; sub: string; img: string; status: string; score: string; type: "Truyện" | "Phim"; isSeries: boolean; visibility: "PUBLIC" | "SHARED" | "PRIVATE"; description: string; mainLink: string; genres: string[]; chapters: AdminChapterItem[] };
+type AdminContentItem = {
+  id: number;
+  title: string;
+  sub: string;
+  img: string;
+  status: string;
+  score: string;
+  type: "Truyện" | "Phim";
+  isSeries?: boolean;
+  visibility: "PUBLIC" | "SHARED" | "PRIVATE";
+  shortDescription?: string;
+  description: string;
+  author?: string;
+  artist?: string;
+  director?: string;
+  cast?: string;
+  releaseYear?: string;
+  language?: string;
+  movieMode?: "Phim lẻ" | "Series";
+  singleMovieUrl?: string;
+  externalLinks: ExternalLinkItem[];
+  mainLink: string;
+  sourceRef?: string;
+  extraTags?: string;
+  personalNote?: string;
+  allowComments?: boolean;
+  genres: string[];
+  chapters: PublishedChapterItem[];
+  createdBy?: { name: string; user: string };
+  publishedAt?: string;
+  updatedAt?: string;
+};
 
 function AdminPage({ setPage, contents, setContents }: { setPage: (page: string) => void; contents: ContentItem[]; setContents: (items: ContentItem[]) => void }) {
   const [tab, setTab] = useState<"users" | "contents" | "Taxonomy" | "reports">("users");
@@ -7187,7 +7290,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   const [creatingUser, setCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({ name: "", username: "", email: "", role: "USER" as "USER" | "ADMIN", status: "ACTIVE" as "ACTIVE" | "LOCKED" | "BANNED", bio: "" });
 
-  // 2. STATE QUẢN LÝ TRUYỆN / PHIM & CHƯƠNG / TẬP (Đồng bộ 100% với dữ liệu thật trong contents)
+  // 2. STATE QUẢN LÝ TRUYỆN / PHIM & CHƯƠNG / TẬP (Đồng bộ 100% đầy đủ tính năng với bên User)
   const [contentSearch, setContentSearch] = useState("");
   const [contentTypeFilter, setContentTypeFilter] = useState("ALL");
   const [contentStatusFilter, setContentStatusFilter] = useState("ALL");
@@ -7195,17 +7298,42 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
     contents.map((c, idx) => ({
       id: idx + 1,
       title: c.title,
-      sub: c.sub,
-      img: c.img,
-      status: c.status,
-      score: c.score,
-      type: c.type,
-      isSeries: true,
+      sub: c.sub || (c.type === "Truyện" ? (c.author || "Tác giả") : (c.director || "Đạo diễn")),
+      img: c.img || photos.hero,
+      status: c.status || "Đang ra",
+      score: c.score || "—",
+      type: c.type || "Truyện",
+      isSeries: c.isSeries ?? true,
       visibility: c.visibility || "PUBLIC",
-      description: c.description || c.shortDescription || "",
+      shortDescription: c.shortDescription || "",
+      description: c.description || "",
+      author: c.author || "",
+      artist: c.artist || "",
+      director: c.director || "",
+      cast: c.cast || "",
+      releaseYear: c.releaseYear || "2025",
+      language: c.language || "Tiếng Việt",
+      movieMode: c.movieMode || (c.type === "Phim" ? "Phim lẻ" : undefined),
+      singleMovieUrl: c.singleMovieUrl || "",
+      externalLinks:
+        c.externalLinks && c.externalLinks.length > 0
+          ? c.externalLinks
+          : c.mainLink
+          ? [{ platform: "Liên kết chính", url: c.mainLink, note: "" }]
+          : [{ platform: "", url: "", note: "" }],
       mainLink: c.mainLink || c.externalLinks?.[0]?.url || "",
-      genres: c.genres,
-      chapters: c.chaptersList || [],
+      sourceRef: c.sourceRef || "",
+      extraTags: c.extraTags || "",
+      personalNote: c.personalNote || "",
+      allowComments: c.allowComments ?? true,
+      genres: c.genres || [],
+      chapters:
+        c.chaptersList && c.chaptersList.length > 0
+          ? c.chaptersList
+          : [{ id: 1, season: "Mùa 1", number: "1", title: c.type === "Phim" ? "Tập 1" : "Chương 1", url: "", note: "" }],
+      createdBy: c.createdBy || { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
+      publishedAt: c.publishedAt,
+      updatedAt: c.updatedAt,
     }))
   );
   const [editingContent, setEditingContent] = useState<AdminContentItem | null>(null);
@@ -7232,7 +7360,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   // 4. STATE BÁO CÁO VI PHẠM & BÌNH LUẬN (Rỗng mặc định, không tạo sẵn báo cáo giả)
   const [reports, setReports] = useState<Array<{ id: number; reporter: string; targetType: string; targetName: string; reason: string; status: string; adminNote: string }>>([]);
 
-  // Đồng bộ thay đổi kho truyện/phim của Admin ra toàn hệ thống (giữ nguyên toàn bộ metadata gốc)
+  // Đồng bộ thay đổi kho truyện/phim của Admin ra toàn hệ thống (giữ nguyên toàn bộ 100% metadata)
   const syncGlobalContents = (updatedList: AdminContentItem[]) => {
     setAdminContents(updatedList);
     setContents(updatedList.map(item => {
@@ -7245,11 +7373,29 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
         status: item.status,
         score: item.score,
         type: item.type,
+        isSeries: item.isSeries,
         genres: item.genres,
         visibility: item.visibility,
+        shortDescription: item.shortDescription,
         description: item.description,
+        author: item.author,
+        artist: item.artist,
+        director: item.director,
+        cast: item.cast,
+        releaseYear: item.releaseYear,
+        language: item.language,
+        movieMode: item.movieMode,
+        singleMovieUrl: item.singleMovieUrl,
+        externalLinks: item.externalLinks,
         mainLink: item.mainLink,
+        sourceRef: item.sourceRef,
+        extraTags: item.extraTags,
+        personalNote: item.personalNote,
+        allowComments: item.allowComments,
         chaptersList: item.chapters,
+        createdBy: item.createdBy || (existing?.createdBy || { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE }),
+        publishedAt: item.publishedAt || existing?.publishedAt,
+        updatedAt: item.updatedAt || "Vừa cập nhật",
       };
     }));
   };
@@ -7300,13 +7446,39 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   };
 
   const saveEditedContent = () => {
-    if (!editingContent || !editingContent.title.trim()) return;
-    const exists = adminContents.some(c => c.id === editingContent.id);
+    if (!editingContent || !editingContent.title.trim()) {
+      showToast("Vui lòng nhập tên truyện hoặc phim trước khi lưu!");
+      return;
+    }
+    const cleanLinks = (editingContent.externalLinks || []).filter(l => l.platform.trim() || l.url.trim());
+    const creatorLabel =
+      editingContent.type === "Truyện"
+        ? [editingContent.author?.trim(), editingContent.artist?.trim() ? `Họa sĩ: ${editingContent.artist.trim()}` : "", editingContent.releaseYear?.trim()].filter(Boolean).join(" · ")
+        : [editingContent.director?.trim(), editingContent.releaseYear?.trim()].filter(Boolean).join(" · ");
+
+    const primaryUrl =
+      (editingContent.type === "Phim" && editingContent.movieMode === "Phim lẻ" && editingContent.singleMovieUrl?.trim()) ||
+      cleanLinks[0]?.url ||
+      editingContent.mainLink ||
+      "";
+
+    const itemToSave: AdminContentItem = {
+      ...editingContent,
+      title: editingContent.title.trim(),
+      sub: creatorLabel || editingContent.sub || editingContent.type,
+      externalLinks: cleanLinks,
+      mainLink: primaryUrl,
+      score: editingContent.score || "—",
+      updatedAt: "Vừa cập nhật",
+    };
+
+    const exists = adminContents.some(c => c.id === itemToSave.id);
     const updated = exists
-      ? adminContents.map(c => c.id === editingContent.id ? editingContent : c)
-      : [editingContent, ...adminContents];
+      ? adminContents.map(c => (c.id === itemToSave.id ? itemToSave : c))
+      : [itemToSave, ...adminContents];
+
     syncGlobalContents(updated);
-    showToast(`Đã lưu cập nhật cho tác phẩm “${editingContent.title}”.`);
+    showToast(`Đã ${exists ? "cập nhật" : "thêm mới"} tác phẩm “${itemToSave.title}” thành công!`);
     setEditingContent(null);
   };
 
@@ -7316,12 +7488,61 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
     showToast(`Đã xóa tác phẩm “${title}” khỏi hệ thống.`);
   };
 
+  const handleCloseChaptersModal = () => {
+    if (managingChaptersFor) {
+      const exists = adminContents.some(c => c.id === managingChaptersFor.id);
+      if (!exists) {
+        setEditingContent({ ...managingChaptersFor });
+      }
+    }
+    setManagingChaptersFor(null);
+  };
+
   const saveChaptersModal = () => {
     if (!managingChaptersFor) return;
-    const updated = adminContents.map(c => c.id === managingChaptersFor.id ? managingChaptersFor : c);
-    syncGlobalContents(updated);
-    showToast(`Đã cập nhật danh sách chương/tập cho “${managingChaptersFor.title}”.`);
-    setManagingChaptersFor(null);
+    const exists = adminContents.some(c => c.id === managingChaptersFor.id);
+    if (exists) {
+      const updated = adminContents.map(c => (c.id === managingChaptersFor.id ? managingChaptersFor : c));
+      syncGlobalContents(updated);
+      showToast(`Đã cập nhật danh sách chương/tập cho “${managingChaptersFor.title}”.`);
+      setManagingChaptersFor(null);
+    } else {
+      // Khi đang tạo truyện mới mà lưu từ modal chương/tập:
+      if (managingChaptersFor.title && managingChaptersFor.title.trim()) {
+        const cleanLinks = (managingChaptersFor.externalLinks || []).filter(l => l.platform.trim() || l.url.trim());
+        const creatorLabel =
+          managingChaptersFor.type === "Truyện"
+            ? [managingChaptersFor.author?.trim(), managingChaptersFor.artist?.trim() ? `Họa sĩ: ${managingChaptersFor.artist.trim()}` : "", managingChaptersFor.releaseYear?.trim()].filter(Boolean).join(" · ")
+            : [managingChaptersFor.director?.trim(), managingChaptersFor.releaseYear?.trim()].filter(Boolean).join(" · ");
+
+        const primaryUrl =
+          (managingChaptersFor.type === "Phim" && managingChaptersFor.movieMode === "Phim lẻ" && managingChaptersFor.singleMovieUrl?.trim()) ||
+          cleanLinks[0]?.url ||
+          managingChaptersFor.mainLink ||
+          managingChaptersFor.chapters?.[0]?.url ||
+          "";
+
+        const itemToSave: AdminContentItem = {
+          ...managingChaptersFor,
+          title: managingChaptersFor.title.trim(),
+          sub: creatorLabel || managingChaptersFor.sub || managingChaptersFor.type,
+          externalLinks: cleanLinks,
+          mainLink: primaryUrl,
+          score: managingChaptersFor.score || "—",
+          updatedAt: "Vừa cập nhật",
+        };
+
+        syncGlobalContents([itemToSave, ...adminContents]);
+        showToast(`Đã lưu thành công tác phẩm “${itemToSave.title}” cùng ${itemToSave.chapters.length} ${itemToSave.type === "Truyện" ? "chương" : "tập"}!`);
+        setManagingChaptersFor(null);
+        setEditingContent(null);
+      } else {
+        // Chưa nhập tên truyện: Giữ nguyên toàn bộ số chương và đưa về modal chính để người dùng nhập tên
+        setEditingContent({ ...managingChaptersFor });
+        setManagingChaptersFor(null);
+        showToast("Đã lưu danh sách chương/tập! Vui lòng nhập Tên tác phẩm để hoàn tất lưu vào hệ thống.");
+      }
+    }
   };
 
   return <main className="inner-page admin-page"><div className="page-shell">
@@ -7334,17 +7555,33 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
         <Button icon="plus" onClick={() => setEditingContent({
           id: Date.now(),
           title: "",
-          sub: "Đạo diễn / Tác giả",
+          sub: "",
           img: photos.hero,
           status: "Đang ra",
           score: "—",
           type: "Truyện",
           isSeries: true,
           visibility: "PUBLIC",
+          shortDescription: "",
           description: "",
-          mainLink: "https://",
+          author: "",
+          artist: "",
+          director: "",
+          cast: "",
+          releaseYear: "2025",
+          language: "Tiếng Việt",
+          movieMode: "Phim lẻ",
+          singleMovieUrl: "",
+          externalLinks: [{ platform: "Web chính thức", url: "", note: "" }],
+          mainLink: "",
+          sourceRef: "",
+          extraTags: "",
+          personalNote: "",
+          allowComments: true,
           genres: [],
-          chapters: [{ id: 1, season: "Mùa 1", number: "1", title: "", url: "https://", note: "" }],
+          chapters: [{ id: Date.now(), season: "Mùa 1", number: "1", title: "Chương 1", url: "", note: "" }],
+          createdBy: { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
+          publishedAt: "Hôm nay",
         })}>+ Thêm Truyện / Phim</Button>
       </div>}
     />
@@ -7465,8 +7702,12 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           <td><span className={`badge-pill ${item.status === "Hoàn thành" ? "active" : item.status === "Drop" ? "locked" : "role-admin"}`}>{item.status}</span></td>
           <td><span className="badge-pill active">{item.visibility}</span></td>
           <td><div className="admin-row-actions">
-            <Button variant="secondary" icon="edit" onClick={() => setEditingContent({ ...item })}>Chỉnh sửa</Button>
-            <Button variant="secondary" icon="plus" onClick={() => setManagingChaptersFor({ ...item, chapters: [...item.chapters] })}>Cập nhật Chương/Tập</Button>
+            <Button variant="secondary" icon="edit" onClick={() => setEditingContent({
+              ...item,
+              externalLinks: item.externalLinks && item.externalLinks.length > 0 ? item.externalLinks.map(l => ({ ...l })) : (item.mainLink ? [{ platform: "Liên kết chính", url: item.mainLink, note: "" }] : [{ platform: "", url: "", note: "" }]),
+              chapters: item.chapters && item.chapters.length > 0 ? item.chapters.map(c => ({ ...c })) : [{ id: 1, season: "Mùa 1", number: "1", title: item.type === "Phim" ? "Tập 1" : "Chương 1", url: "", note: "" }],
+            })}>Chỉnh sửa</Button>
+            <Button variant="secondary" icon="plus" onClick={() => setManagingChaptersFor({ ...item, chapters: item.chapters.map(c => ({ ...c })) })}>Cập nhật Chương/Tập</Button>
             <Button variant="ghost" onClick={() => setPage("detail")}>Xem trang</Button>
             <Button variant="danger" onClick={() => deleteContent(item.id, item.title)}>Xóa</Button>
           </div></td>
@@ -7605,87 +7846,472 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
       </div>
     </div>}
 
-    {/* MODAL 3: CHỈNH SỬA / CẬP NHẬT TRUYỆN & PHIM */}
+    {/* MODAL 3: CHỈNH SỬA / CẬP NHẬT TRUYỆN & PHIM (ĐẦY ĐỦ 100% TÍNH NĂNG NHƯ USER) */}
     {editingContent && <div className="modal-backdrop" onMouseDown={() => setEditingContent(null)}>
-      <div className="admin-modal-wide" onMouseDown={e => e.stopPropagation()}>
+      <div className="admin-modal-wide" style={{ maxHeight: "90vh", overflowY: "auto" }} onMouseDown={e => e.stopPropagation()}>
         <div className="modal-head">
-          <div><span>QUẢN LÝ NỘI DUNG</span><h2>Chỉnh sửa & Cập nhật Truyện / Phim</h2><p>Chỉnh sửa thông tin gốc, mô tả chi tiết, thể loại, trạng thái và đường dẫn của tác phẩm.</p></div>
+          <div>
+            <span>
+              🛡️ QUYỀN QUẢN TRỊ VIÊN (ROLE_ADMIN) · {adminContents.some(c => c.id === editingContent.id) ? "CHỈNH SỬA TÁC PHẨM" : "THÊM MỚI TÁC PHẨM"}
+            </span>
+            <h2>{adminContents.some(c => c.id === editingContent.id) ? `Chỉnh sửa: ${editingContent.title || "Tác phẩm"}` : "Thêm Mới Truyện / Phim Toàn Diện"}</h2>
+            <p>Đầy đủ tất cả các trường dữ liệu, ảnh bìa từ máy, đa liên kết xem/đọc và quản lý chương/tập tương đương giao diện người dùng.</p>
+          </div>
           <button className="icon-btn" onClick={() => setEditingContent(null)}><Icon name="x" /></button>
         </div>
+
         <div className="admin-form-grid">
-          <div className="admin-poster-preview"><img src={editingContent.img || photos.hero} alt={editingContent.title} /></div>
+          <div className="admin-poster-preview" style={{ position: "relative" }}>
+            <img src={editingContent.img || photos.hero} alt={editingContent.title || "Poster"} />
+            <label className="upload-cover-overlay">
+              📷 Tải ảnh bìa từ máy
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => setEditingContent({ ...editingContent, img: String(reader.result) });
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+          </div>
           <div>
             <div className="admin-field-two">
-              <label className="admin-field"><span>Tên Truyện / Phim *</span><input value={editingContent.title} onChange={e => setEditingContent({ ...editingContent, title: e.target.value })} placeholder="Nhập tên tác phẩm..." /></label>
-              <label className="admin-field"><span>Tác giả / Đạo diễn / Năm</span><input value={editingContent.sub} onChange={e => setEditingContent({ ...editingContent, sub: e.target.value })} placeholder="VD: S. Kuroda hoặc Movie · 2025" /></label>
-            </div>
-            <div className="admin-field-row">
-              <label className="admin-field"><span>Loại nội dung</span>
-                <select value={editingContent.type} onChange={e => setEditingContent({ ...editingContent, type: e.target.value as "Truyện" | "Phim" })}>
-                  <option value="Truyện">Truyện (MANGA)</option>
-                  <option value="Phim">Phim (MOVIE)</option>
+              <label className="admin-field">
+                <span>Tên Truyện / Phim *</span>
+                <input
+                  value={editingContent.title}
+                  onChange={e => setEditingContent({ ...editingContent, title: e.target.value })}
+                  placeholder="Nhập tên tác phẩm..."
+                />
+              </label>
+              <label className="admin-field">
+                <span>Loại nội dung</span>
+                <select
+                  value={editingContent.type}
+                  onChange={e => {
+                    const newType = e.target.value as "Truyện" | "Phim";
+                    setEditingContent({
+                      ...editingContent,
+                      type: newType,
+                      movieMode: newType === "Phim" ? (editingContent.movieMode || "Phim lẻ") : undefined,
+                    });
+                  }}
+                >
+                  <option value="Truyện">Truyện (MANGA / NOVEL)</option>
+                  <option value="Phim">Phim (MOVIE / SERIES)</option>
                 </select>
               </label>
-              <label className="admin-field"><span>Trạng thái phát hành</span>
-                <select value={editingContent.status} onChange={e => setEditingContent({ ...editingContent, status: e.target.value })}>
+            </div>
+
+            {editingContent.type === "Phim" && (
+              <div className="admin-field-two">
+                <label className="admin-field">
+                  <span>Định dạng phim</span>
+                  <select
+                    value={editingContent.movieMode || "Phim lẻ"}
+                    onChange={e => setEditingContent({ ...editingContent, movieMode: e.target.value as "Phim lẻ" | "Series" })}
+                  >
+                    <option value="Phim lẻ">Phim lẻ (Bản chiếu rạp / Movie)</option>
+                    <option value="Series">Phim bộ / Series (Nhiều tập)</option>
+                  </select>
+                </label>
+                {editingContent.movieMode === "Phim lẻ" ? (
+                  <label className="admin-field">
+                    <span>Đường dẫn xem phim lẻ trực tiếp</span>
+                    <input
+                      value={editingContent.singleMovieUrl || ""}
+                      onChange={e => setEditingContent({ ...editingContent, singleMovieUrl: e.target.value, mainLink: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </label>
+                ) : (
+                  <label className="admin-field">
+                    <span>Đường dẫn trang phim chính</span>
+                    <input
+                      value={editingContent.mainLink || ""}
+                      onChange={e => setEditingContent({ ...editingContent, mainLink: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+
+            {editingContent.type === "Truyện" ? (
+              <div className="admin-field-two">
+                <label className="admin-field">
+                  <span>Tác giả</span>
+                  <input
+                    value={editingContent.author || ""}
+                    onChange={e => setEditingContent({ ...editingContent, author: e.target.value })}
+                    placeholder="Tên tác giả..."
+                  />
+                </label>
+                <label className="admin-field">
+                  <span>Họa sĩ</span>
+                  <input
+                    value={editingContent.artist || ""}
+                    onChange={e => setEditingContent({ ...editingContent, artist: e.target.value })}
+                    placeholder="Tên họa sĩ (nếu có)..."
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="admin-field-two">
+                <label className="admin-field">
+                  <span>Đạo diễn</span>
+                  <input
+                    value={editingContent.director || ""}
+                    onChange={e => setEditingContent({ ...editingContent, director: e.target.value })}
+                    placeholder="Tên đạo diễn..."
+                  />
+                </label>
+                <label className="admin-field">
+                  <span>Diễn viên</span>
+                  <input
+                    value={editingContent.cast || ""}
+                    onChange={e => setEditingContent({ ...editingContent, cast: e.target.value })}
+                    placeholder="Danh sách diễn viên chính..."
+                  />
+                </label>
+              </div>
+            )}
+
+            <div className="admin-field-row">
+              <label className="admin-field">
+                <span>Trạng thái phát hành</span>
+                <select
+                  value={editingContent.status}
+                  onChange={e => setEditingContent({ ...editingContent, status: e.target.value })}
+                >
                   <option value="Đang ra">Đang cập nhật (ONGOING)</option>
                   <option value="Hoàn thành">Đã hoàn thành (COMPLETED)</option>
-                  <option value="Drop">Tạm ngưng (HIATUS)</option>
+                  <option value="Drop">Tạm ngưng (HIATUS / DROP)</option>
+                  <option value="Đang đọc / xem">Đang đọc / xem</option>
                 </select>
               </label>
-              <label className="admin-field"><span>Quyền hiển thị</span>
-                <select value={editingContent.visibility} onChange={e => setEditingContent({ ...editingContent, visibility: e.target.value as "PUBLIC" | "SHARED" | "PRIVATE" })}>
+              <label className="admin-field">
+                <span>Ngôn ngữ</span>
+                <input
+                  value={editingContent.language || ""}
+                  onChange={e => setEditingContent({ ...editingContent, language: e.target.value })}
+                  placeholder="Tiếng Việt, Vietsub..."
+                />
+              </label>
+              <label className="admin-field">
+                <span>Năm phát hành</span>
+                <input
+                  value={editingContent.releaseYear || ""}
+                  onChange={e => setEditingContent({ ...editingContent, releaseYear: e.target.value })}
+                  placeholder="VD: 2025"
+                />
+              </label>
+            </div>
+
+            <div className="admin-field-two">
+              <label className="admin-field">
+                <span>URL Ảnh bìa / Poster (hoặc tải tệp ở trên)</span>
+                <input
+                  value={editingContent.img}
+                  onChange={e => setEditingContent({ ...editingContent, img: e.target.value })}
+                  placeholder="https://..."
+                />
+              </label>
+              <label className="admin-field">
+                <span>Quyền hiển thị bài đăng</span>
+                <select
+                  value={editingContent.visibility || "PUBLIC"}
+                  onChange={e => setEditingContent({ ...editingContent, visibility: e.target.value as "PUBLIC" | "SHARED" | "PRIVATE" })}
+                >
                   <option value="PUBLIC">Công khai (PUBLIC)</option>
                   <option value="SHARED">Chia sẻ cộng đồng (SHARED)</option>
                   <option value="PRIVATE">Riêng tư (PRIVATE)</option>
                 </select>
               </label>
             </div>
-            <div className="admin-field-two">
-              <label className="admin-field"><span>URL Ảnh bìa / Poster</span><input value={editingContent.img} onChange={e => setEditingContent({ ...editingContent, img: e.target.value })} /></label>
-              <label className="admin-field"><span>Đường dẫn đọc / xem chính</span><input value={editingContent.mainLink} onChange={e => setEditingContent({ ...editingContent, mainLink: e.target.value })} /></label>
-            </div>
           </div>
         </div>
 
-        <label className="admin-field"><span>Mô tả chi tiết tác phẩm (Do Admin biên tập)</span>
-          <textarea value={editingContent.description} onChange={e => setEditingContent({ ...editingContent, description: e.target.value })} placeholder="Nhập nội dung mô tả chi tiết cho bộ truyện hoặc phim..." />
+        <label className="admin-field">
+          <span>Mô tả ngắn (Tên khác, tóm tắt nhanh...)</span>
+          <textarea
+            value={editingContent.shortDescription || ""}
+            onChange={e => setEditingContent({ ...editingContent, shortDescription: e.target.value })}
+            placeholder="Nhập tên khác (tiếng Nhật, Anh, Hàn) hoặc tóm tắt nhanh 1-2 câu..."
+            style={{ minHeight: "56px" }}
+          />
+        </label>
+
+        <label className="admin-field">
+          <span>Mô tả chi tiết tác phẩm (Do Ban Quản Trị / Người đăng biên tập)</span>
+          <textarea
+            value={editingContent.description || ""}
+            onChange={e => setEditingContent({ ...editingContent, description: e.target.value })}
+            placeholder="Nhập nội dung giới thiệu cốt truyện chi tiết, lưu ý khi đọc/xem..."
+            style={{ minHeight: "110px" }}
+          />
         </label>
 
         <div className="admin-field">
-          <span>Thể loại ({editingContent.genres.length} đã chọn)</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontWeight: 600 }}>Đường dẫn đọc / xem ({editingContent.externalLinks?.length || 0})</span>
+            <Button
+              variant="secondary"
+              icon="plus"
+              onClick={() => {
+                const links = editingContent.externalLinks || [];
+                setEditingContent({
+                  ...editingContent,
+                  externalLinks: [...links, { platform: "", url: "", note: "" }],
+                });
+              }}
+            >
+              + Thêm đường dẫn
+            </Button>
+          </div>
+          {(editingContent.externalLinks || []).length === 0 && (
+            <div style={{ fontSize: "11px", color: "#8c8299", padding: "6px 0" }}>Chưa có liên kết đọc/xem nào. Bấm “+ Thêm đường dẫn” để bổ sung các nguồn đọc/xem online.</div>
+          )}
+          {(editingContent.externalLinks || []).map((lk, idx) => (
+            <div key={idx} style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr 1.2fr auto", gap: "8px", marginBottom: "8px" }}>
+              <input
+                value={lk.platform}
+                onChange={e => {
+                  const next = (editingContent.externalLinks || []).map((x, i) => i === idx ? { ...x, platform: e.target.value } : x);
+                  setEditingContent({ ...editingContent, externalLinks: next });
+                }}
+                placeholder="Tên web / nhóm dịch (VD: Roads Team, Netflix...)"
+              />
+              <input
+                value={lk.url}
+                onChange={e => {
+                  const next = (editingContent.externalLinks || []).map((x, i) => i === idx ? { ...x, url: e.target.value } : x);
+                  setEditingContent({ ...editingContent, externalLinks: next, mainLink: next[0]?.url || editingContent.mainLink });
+                }}
+                placeholder="https://..."
+              />
+              <input
+                value={lk.note}
+                onChange={e => {
+                  const next = (editingContent.externalLinks || []).map((x, i) => i === idx ? { ...x, note: e.target.value } : x);
+                  setEditingContent({ ...editingContent, externalLinks: next });
+                }}
+                placeholder="Ghi chú liên kết (Bản dịch chuẩn, Vietsub...)"
+              />
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const next = (editingContent.externalLinks || []).filter((_, i) => i !== idx);
+                  setEditingContent({ ...editingContent, externalLinks: next, mainLink: next[0]?.url || "" });
+                }}
+              >
+                Xóa
+              </Button>
+            </div>
+          ))}
+        </div>
+
+        <div className="admin-field-two">
+          <label className="admin-field">
+            <span>Nguồn / Tham khảo (sourceRef)</span>
+            <input
+              value={editingContent.sourceRef || ""}
+              onChange={e => setEditingContent({ ...editingContent, sourceRef: e.target.value })}
+              placeholder="Tên nguồn gốc, sách xuất bản hoặc URL tham khảo..."
+            />
+          </label>
+          <label className="admin-field">
+            <span>Thẻ bổ sung (Tags)</span>
+            <input
+              value={editingContent.extraTags || ""}
+              onChange={e => setEditingContent({ ...editingContent, extraTags: e.target.value })}
+              placeholder="VD: #chualanh #hocduong #top10 #18+..."
+            />
+          </label>
+        </div>
+
+        <div className="admin-field-two">
+          <label className="admin-field">
+            <span>Ghi chú riêng của ban quản trị (personalNote)</span>
+            <input
+              value={editingContent.personalNote || ""}
+              onChange={e => setEditingContent({ ...editingContent, personalNote: e.target.value })}
+              placeholder="Ghi chú nội bộ, tiến độ biên tập, bản quyền..."
+            />
+          </label>
+          <label className="admin-field">
+            <span>Điểm đánh giá hệ thống (Score)</span>
+            <input
+              value={editingContent.score || ""}
+              onChange={e => setEditingContent({ ...editingContent, score: e.target.value })}
+              placeholder="VD: 5.0 hoặc 4.9 hoặc —"
+            />
+          </label>
+        </div>
+
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", margin: "10px 0 16px 0", cursor: "pointer", fontSize: "12px", color: "#d6cfe1" }}>
+          <input
+            type="checkbox"
+            checked={editingContent.allowComments ?? true}
+            onChange={e => setEditingContent({ ...editingContent, allowComments: e.target.checked })}
+            style={{ width: "16px", height: "16px", accentColor: "#9c70f8" }}
+          />
+          <b>Cho phép người dùng gửi bình luận và đánh giá tác phẩm này</b>
+        </label>
+
+        <div className="admin-field">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+            <span>Thể loại ({editingContent.genres.length} đã chọn)</span>
+            <small style={{ color: "#9c70f8", fontSize: "10px" }}>Hiển thị danh sách thể loại chuẩn cho {editingContent.type}</small>
+          </div>
           <div className="admin-genre-picks">
-            {allGenres.slice(0, 18).map(g => <button key={g} type="button" className={editingContent.genres.includes(g) ? "active" : ""} onClick={() => {
-              const next = editingContent.genres.includes(g) ? editingContent.genres.filter(x => x !== g) : [...editingContent.genres, g];
-              setEditingContent({ ...editingContent, genres: next });
-            }}>{g}</button>)}
+            {(editingContent.type === "Truyện" ? mangaGenres : movieGenres).map(g => (
+              <button
+                key={g}
+                type="button"
+                className={editingContent.genres.includes(g) ? "active" : ""}
+                onClick={() => {
+                  const next = editingContent.genres.includes(g)
+                    ? editingContent.genres.filter(x => x !== g)
+                    : [...editingContent.genres, g];
+                  setEditingContent({ ...editingContent, genres: next });
+                }}
+              >
+                {g}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="modal-actions">
-          <Button variant="secondary" icon="plus" onClick={() => {
-            const target = editingContent;
-            setEditingContent(null);
-            setManagingChaptersFor(target);
-          }}>Quản lý Chương / Tập ({editingContent.chapters.length})</Button>
+        <div className="admin-field" style={{ marginTop: "14px", borderTop: "1px solid #272030", paddingTop: "14px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div>
+              <span style={{ fontWeight: 600, fontSize: "12px" }}>
+                📑 Quản lý danh sách {editingContent.type === "Truyện" ? "Chương" : "Tập"} ({editingContent.chapters?.length || 0})
+              </span>
+              <p style={{ margin: 0, fontSize: "9px", color: "#8c8299" }}>
+                Bạn có thể thêm và chỉnh sửa số chương/tập trực tiếp tại đây mà không lo mất dữ liệu.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Button
+                variant="secondary"
+                icon="plus"
+                onClick={() => {
+                  const chs = editingContent.chapters || [];
+                  const nextNum = String(chs.length + 1);
+                  setEditingContent({
+                    ...editingContent,
+                    chapters: [
+                      ...chs,
+                      {
+                        id: Date.now(),
+                        season: "Mùa 1",
+                        number: nextNum,
+                        title: `${editingContent.type === "Truyện" ? "Chương" : "Tập"} ${nextNum}`,
+                        url: "",
+                        note: "",
+                      },
+                    ],
+                  });
+                }}
+              >
+                + Thêm {editingContent.type === "Truyện" ? "chương" : "tập"}
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ maxHeight: "260px", overflowY: "auto", paddingRight: "4px" }}>
+            {(editingContent.chapters || []).length === 0 && (
+              <div style={{ fontSize: "11px", color: "#8c8299", padding: "12px", textAlign: "center", background: "#181126", borderRadius: "8px", border: "1px dashed #392b4d" }}>
+                Chưa có {editingContent.type === "Truyện" ? "chương" : "tập"} nào. Hãy bấm “+ Thêm {editingContent.type === "Truyện" ? "chương" : "tập"}” để tạo.
+              </div>
+            )}
+            {(editingContent.chapters || []).map((ch, idx) => (
+              <div key={ch.id || idx} style={{ display: "grid", gridTemplateColumns: "70px 1.2fr 2fr 1fr auto", gap: "8px", marginBottom: "8px" }}>
+                <input
+                  value={ch.number}
+                  onChange={e => {
+                    const next = (editingContent.chapters || []).map((x, i) => i === idx ? { ...x, number: e.target.value } : x);
+                    setEditingContent({ ...editingContent, chapters: next });
+                  }}
+                  placeholder="Số"
+                />
+                <input
+                  value={ch.title}
+                  onChange={e => {
+                    const next = (editingContent.chapters || []).map((x, i) => i === idx ? { ...x, title: e.target.value } : x);
+                    setEditingContent({ ...editingContent, chapters: next });
+                  }}
+                  placeholder={`Tiêu đề ${editingContent.type === "Truyện" ? "chương" : "tập"}`}
+                />
+                <input
+                  value={ch.url}
+                  onChange={e => {
+                    const next = (editingContent.chapters || []).map((x, i) => i === idx ? { ...x, url: e.target.value } : x);
+                    setEditingContent({ ...editingContent, chapters: next });
+                  }}
+                  placeholder="https://..."
+                />
+                <input
+                  value={ch.note || ""}
+                  onChange={e => {
+                    const next = (editingContent.chapters || []).map((x, i) => i === idx ? { ...x, note: e.target.value } : x);
+                    setEditingContent({ ...editingContent, chapters: next });
+                  }}
+                  placeholder="Ghi chú..."
+                />
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    const next = (editingContent.chapters || []).filter((_, i) => i !== idx);
+                    setEditingContent({ ...editingContent, chapters: next });
+                  }}
+                >
+                  Xóa
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: "16px" }}>
+          <Button
+            variant="secondary"
+            icon="plus"
+            onClick={() => {
+              const target = editingContent;
+              setEditingContent(null);
+              setManagingChaptersFor(target);
+            }}
+          >
+            📑 Mở rộng Quản lý Chương / Tập ({editingContent.chapters.length})
+          </Button>
           <div>
             <Button variant="ghost" onClick={() => setEditingContent(null)}>Hủy</Button>
-            <Button icon="check" onClick={saveEditedContent}>Lưu thay đổi</Button>
+            <Button icon="check" onClick={saveEditedContent}>
+              {adminContents.some(c => c.id === editingContent.id) ? "Lưu thay đổi tác phẩm" : "+ Thêm mới vào kho"}
+            </Button>
           </div>
         </div>
       </div>
     </div>}
 
     {/* MODAL 4: QUẢN LÝ & CẬP NHẬT CHƯƠNG / TẬP */}
-    {managingChaptersFor && <div className="modal-backdrop" onMouseDown={() => setManagingChaptersFor(null)}>
+    {managingChaptersFor && <div className="modal-backdrop" onMouseDown={handleCloseChaptersModal}>
       <div className="admin-modal-wide" onMouseDown={e => e.stopPropagation()}>
         <div className="modal-head">
           <div>
             <span>CẬP NHẬT CHƯƠNG & TẬP PHIM</span>
-            <h2>{managingChaptersFor.title}</h2>
+            <h2>{managingChaptersFor.title || "Tác phẩm mới (Đang tạo)"}</h2>
             <p>Thêm, sửa, xóa và cập nhật đường dẫn riêng cho từng chương truyện hoặc tập phim.</p>
           </div>
-          <button className="icon-btn" onClick={() => setManagingChaptersFor(null)}><Icon name="x" /></button>
+          <button className="icon-btn" onClick={handleCloseChaptersModal}><Icon name="x" /></button>
         </div>
 
         <div style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -7736,8 +8362,10 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
             setEditingContent(target);
           }}>← Sửa thông tin chung</Button>
           <div>
-            <Button variant="ghost" onClick={() => setManagingChaptersFor(null)}>Đóng</Button>
-            <Button icon="check" onClick={saveChaptersModal}>Lưu danh sách chương/tập</Button>
+            <Button variant="ghost" onClick={handleCloseChaptersModal}>Đóng</Button>
+            <Button icon="check" onClick={saveChaptersModal}>
+              {adminContents.some(c => c.id === managingChaptersFor.id) ? "Lưu danh sách chương/tập" : "✓ Lưu & Tạo tác phẩm mới"}
+            </Button>
           </div>
         </div>
       </div>
@@ -8285,8 +8913,21 @@ function loadSavedFavorites(): string[] {
 export default function App() {
   const [page, setPage] = useState("login");
   const [authenticated, setAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<UserProfile>(() => loadSavedCurrentUser());
-  const [userRole, setUserRole] = useState<"USER" | "ADMIN">(() => loadSavedCurrentUser().role || "USER");
+  const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
+    const u = loadSavedCurrentUser();
+    const isMain = u.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
+                   u.username.toLowerCase().includes("anhquyphi") ||
+                   u.name.toLowerCase().includes("anh quý phi");
+    return isMain ? { ...u, role: "ADMIN" as const } : u;
+  });
+  const [userRole, setUserRole] = useState<"USER" | "ADMIN">(() => {
+    const u = loadSavedCurrentUser();
+    const isMain = u.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
+                   u.username.toLowerCase().includes("anhquyphi") ||
+                   u.name.toLowerCase().includes("anh quý phi");
+    if (isMain) return "ADMIN";
+    return u.role || "USER";
+  });
   const [favorites, setFavorites] = useState<string[]>(() => loadSavedFavorites());
   const [allContents, setAllContents] = useState<ContentItem[]>(() => loadSavedContents());
   const [publishedTitle, setPublishedTitle] = useState("");
@@ -8298,8 +8939,17 @@ export default function App() {
   const [globalToast, setGlobalToast] = useState("");
 
   useEffect(() => {
-    setActiveCurrentUserProfile(currentUser);
-    saveCurrentUserToStorage(currentUser);
+    const isMain = currentUser.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
+                   currentUser.username.toLowerCase().includes("anhquyphi") ||
+                   currentUser.name.toLowerCase().includes("anh quý phi");
+    const activeRole = isMain ? "ADMIN" : (currentUser.role || "USER");
+    if (userRole !== activeRole) {
+      setUserRole(activeRole);
+    }
+    const profileToSave = isMain ? { ...currentUser, role: "ADMIN" as const } : currentUser;
+    setActiveCurrentUserProfile(profileToSave);
+    saveCurrentUserToStorage(profileToSave);
+    saveAccountToStorage(profileToSave);
   }, [currentUser]);
 
   useEffect(() => {
