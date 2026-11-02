@@ -1,0 +1,12 @@
+{
+  "title": "Mê Truyện — Quản Lý Thư Viện Truyện, Phim Cá Nhân & Chia Sẻ Cộng Đồng",
+  "language": "vi",
+  "description": "Nền tảng quản lý thư viện truyện, phim cá nhân kết hợp chia sẻ cộng đồng và nhắn tin nhóm thời gian thực.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
