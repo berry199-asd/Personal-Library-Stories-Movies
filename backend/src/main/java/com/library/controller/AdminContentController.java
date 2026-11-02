@@ -60,17 +60,21 @@ public class AdminContentController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> deleteContentByAdmin(@PathVariable Long id) {
-        contentService.deleteContent(id);
+    public ResponseEntity<ApiResponse<Void>> deleteContentByAdmin(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserDetails adminUser
+    ) {
+        contentService.deleteContent(id, adminUser != null ? adminUser.getId() : null, true);
         return ResponseEntity.ok(ApiResponse.ok("Quản trị viên: Đã xóa truyện/phim khỏi hệ thống", null));
     }
 
     @PostMapping("/{contentId}/chapters")
     public ResponseEntity<ApiResponse<ChapterResponse>> addChapterByAdmin(
             @PathVariable Long contentId,
-            @Valid @RequestBody ChapterRequest request
+            @Valid @RequestBody ChapterRequest request,
+            @AuthenticationPrincipal CustomUserDetails adminUser
     ) {
-        ChapterResponse created = contentService.addChapter(contentId, request);
+        ChapterResponse created = contentService.addChapter(contentId, request, adminUser != null ? adminUser.getId() : null, true);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created("Quản trị viên: Thêm chương/tập mới thành công", created));
     }
@@ -78,17 +82,21 @@ public class AdminContentController {
     @PutMapping("/chapters/{chapterId}")
     public ResponseEntity<ApiResponse<ChapterResponse>> updateChapterByAdmin(
             @PathVariable Long chapterId,
-            @Valid @RequestBody ChapterRequest request
+            @Valid @RequestBody ChapterRequest request,
+            @AuthenticationPrincipal CustomUserDetails adminUser
     ) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Quản trị viên: Cập nhật chương/tập thành công",
-                contentService.updateChapter(chapterId, request)
+                contentService.updateChapter(chapterId, request, adminUser != null ? adminUser.getId() : null, true)
         ));
     }
 
     @DeleteMapping("/chapters/{chapterId}")
-    public ResponseEntity<ApiResponse<Void>> deleteChapterByAdmin(@PathVariable Long chapterId) {
-        contentService.deleteChapter(chapterId);
+    public ResponseEntity<ApiResponse<Void>> deleteChapterByAdmin(
+            @PathVariable Long chapterId,
+            @AuthenticationPrincipal CustomUserDetails adminUser
+    ) {
+        contentService.deleteChapter(chapterId, adminUser != null ? adminUser.getId() : null, true);
         return ResponseEntity.ok(ApiResponse.ok("Quản trị viên: Đã xóa chương/tập", null));
     }
 }

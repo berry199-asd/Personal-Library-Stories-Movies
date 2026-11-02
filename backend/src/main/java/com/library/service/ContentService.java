@@ -21,17 +21,19 @@ public interface ContentService {
 
     PageResponse<ContentResponse> getAllContentsForAdmin(Pageable pageable);
 
+    PageResponse<ContentResponse> getMyPublishedContents(Long userId, Pageable pageable);
+
     ContentResponse getContentDetail(Long id, Long currentUserId, boolean isAdmin);
 
     ContentResponse createContent(ContentRequest request, Long creatorUserId);
 
     ContentResponse updateContent(Long id, ContentRequest request, Long actorUserId, boolean isAdmin);
 
-    void deleteContent(Long id);
+    void deleteContent(Long id, Long actorUserId, boolean isAdmin);
 
-    ChapterResponse addChapter(Long contentId, ChapterRequest request);
+    ChapterResponse addChapter(Long contentId, ChapterRequest request, Long actorUserId, boolean isAdmin);
 
-    ChapterResponse updateChapter(Long chapterId, ChapterRequest request);
+    ChapterResponse updateChapter(Long chapterId, ChapterRequest request, Long actorUserId, boolean isAdmin);
 
-    void deleteChapter(Long chapterId);
+    void deleteChapter(Long chapterId, Long actorUserId, boolean isAdmin);
 }

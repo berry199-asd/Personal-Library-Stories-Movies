@@ -17,6 +17,8 @@ public interface ContentRepository extends JpaRepository<Content, Long>, JpaSpec
 
     Page<Content> findByVisibilityIn(Iterable<ContentVisibility> visibilities, Pageable pageable);
 
+    Page<Content> findByCreatedById(Long userId, Pageable pageable);
+
     @Query("SELECT DISTINCT c FROM Content c " +
             "LEFT JOIN c.genres g " +
             "WHERE (:keyword IS NULL OR LOWER(c.title) LIKE LOWER(CONCAT('%', :keyword, '%')) " +

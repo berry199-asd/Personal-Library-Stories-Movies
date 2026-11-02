@@ -177,6 +177,15 @@ function Navbar({
   </header>;
 }
 
+type PublishedChapterItem = {
+  id: number;
+  season: string;
+  number: string;
+  title: string;
+  url: string;
+  note: string;
+};
+
 type ContentItem = {
   title: string;
   sub: string;
@@ -186,19 +195,164 @@ type ContentItem = {
   type: "Truyện" | "Phim";
   genres: string[];
   sharedFrom?: { name: string; user: string; sharedAt?: string };
+  createdBy?: { name: string; user: string };
+  description?: string;
+  mainLink?: string;
+  visibility?: "PUBLIC" | "SHARED" | "PRIVATE";
+  updatedAt?: string;
+  chaptersList?: PublishedChapterItem[];
 };
+
+const defaultChaptersFor = (title: string, isMovie: boolean): PublishedChapterItem[] => [
+  { id: 1, season: "Mùa 1", number: "1", title: isMovie ? `Tập 1: Mở màn ${title}` : "Chương 1: Khởi đầu hành trình", url: isMovie ? "https://www.netflix.com" : "https://mangadex.org", note: "Bản chính thức" },
+  { id: 2, season: "Mùa 1", number: "2", title: isMovie ? "Tập 2: Dấu vết trong mưa" : "Chương 2: Bí mật trong đêm", url: isMovie ? "https://www.netflix.com" : "https://mangadex.org", note: "Đã cập nhật link" },
+  { id: 3, season: "Mùa 1", number: isMovie ? "3" : "10.5", title: isMovie ? "Tập 3: Cao trào" : "Chương 10.5: Màn đêm buông xuống", url: isMovie ? "https://www.netflix.com" : "https://mangadex.org", note: "Mới cập nhật" },
+];
+
 const libraryItems: ContentItem[] = [
-  { title: "Nightfall City", sub: "S. Kuroda", img: photos.red, status: "Đang đọc / xem", score: "4.9", type: "Truyện", genres: ["Action", "Mystery", "Sci-Fi"] },
-  { title: "Thành Phố Mưa", sub: "Anime Series", img: photos.rain, status: "Đang ra", score: "4.7", type: "Phim", genres: ["Animation", "Drama", "Romance"] },
-  { title: "Lồng Đèn Đỏ", sub: "Yuki Nakama", img: photos.lantern, status: "Hoàn thành", score: "4.8", type: "Truyện", genres: ["Historical", "Mystery", "Supernatural"], sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "Hôm qua" } },
-  { title: "Ký Ức Ngõ Hẻm", sub: "Movie · 2024", img: photos.alley, status: "Đang ra", score: "4.6", type: "Phim", genres: ["Crime", "Psychological", "Thriller"], sharedFrom: { name: "Minh Trần", user: "@minhtran", sharedAt: "2 ngày trước" } },
-  { title: "Ngày Ta Gặp Lại", sub: "M. Tanaka", img: photos.street, status: "Hoàn thành", score: "4.9", type: "Truyện", genres: ["Romance", "Slice of Life", "Josei"], sharedFrom: { name: "Thu Hà", user: "@hanguyen", sharedAt: "3 ngày trước" } },
-  { title: "Ánh Sáng Cuối Hè", sub: "Movie · 2023", img: photos.city, status: "Drop", score: "4.3", type: "Phim", genres: ["Drama", "Family"] },
-  { title: "Võ Đài Linh Hồn", sub: "K. Yamato", img: photos.hero, status: "Đang ra", score: "4.5", type: "Truyện", genres: ["Action", "Martial Arts", "Shounen"] },
-  { title: "Phía Sau Hoàng Hôn", sub: "Movie · 2025", img: photos.lantern, status: "Đang đọc / xem", score: "4.7", type: "Phim", genres: ["Mystery", "Sci-Fi"], sharedFrom: { name: "Tuấn Minh", user: "@tuanminh", sharedAt: "5 ngày trước" } },
-  { title: "Học Viện Ánh Trăng", sub: "A. Mori", img: photos.rain, status: "Đang ra", score: "4.4", type: "Truyện", genres: ["School Life", "Fantasy", "Shoujo"] },
-  { title: "Bản Giao Hưởng Cuối", sub: "Movie · 2022", img: photos.street, status: "Hoàn thành", score: "4.8", type: "Phim", genres: ["Musical", "Romance"], sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "1 tuần trước" } },
-  { title: "Thành Phố Không Ngủ", sub: "Movie · 2024", img: photos.lantern, status: "Muốn đọc / xem", score: "4.7", type: "Phim", genres: ["Sci-Fi", "Mystery", "Drama"], sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "Lưu từ khung Chat" } },
+  {
+    title: "Nightfall City",
+    sub: "S. Kuroda",
+    img: photos.red,
+    status: "Đang đọc / xem",
+    score: "4.9",
+    type: "Truyện",
+    genres: ["Action", "Mystery", "Sci-Fi"],
+    createdBy: { name: "Nguyễn Huy", user: "@huynguyen" },
+    visibility: "PUBLIC",
+    mainLink: "https://mangadex.org",
+    updatedAt: "Hôm nay",
+    description: "Trong một Tokyo tương lai nơi ký ức được mã hóa và mua bán, thám tử Rei Nakamura tỉnh dậy mà không còn quá khứ.",
+    chaptersList: defaultChaptersFor("Nightfall City", false),
+  },
+  {
+    title: "Thành Phố Mưa",
+    sub: "Anime Series",
+    img: photos.rain,
+    status: "Đang ra",
+    score: "4.7",
+    type: "Phim",
+    genres: ["Animation", "Drama", "Romance"],
+    createdBy: { name: "Nguyễn Huy", user: "@huynguyen" },
+    visibility: "PUBLIC",
+    mainLink: "https://www.netflix.com",
+    updatedAt: "2 giờ trước",
+    description: "Bộ anime chữa lành kể về những cuộc gặp gỡ tình cờ dưới hiên ga tàu mỗi chiều mưa tầm tã.",
+    chaptersList: defaultChaptersFor("Thành Phố Mưa", true),
+  },
+  {
+    title: "Lồng Đèn Đỏ",
+    sub: "Yuki Nakama",
+    img: photos.lantern,
+    status: "Hoàn thành",
+    score: "4.8",
+    type: "Truyện",
+    genres: ["Historical", "Mystery", "Supernatural"],
+    sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "Hôm qua" },
+    createdBy: { name: "Lan Anh", user: "@lananh" },
+    visibility: "PUBLIC",
+  },
+  {
+    title: "Ký Ức Ngõ Hẻm",
+    sub: "Movie · 2024",
+    img: photos.alley,
+    status: "Đang ra",
+    score: "4.6",
+    type: "Phim",
+    genres: ["Crime", "Psychological", "Thriller"],
+    sharedFrom: { name: "Minh Trần", user: "@minhtran", sharedAt: "2 ngày trước" },
+    createdBy: { name: "Minh Trần", user: "@minhtran" },
+    visibility: "PUBLIC",
+  },
+  {
+    title: "Ngày Ta Gặp Lại",
+    sub: "M. Tanaka",
+    img: photos.street,
+    status: "Hoàn thành",
+    score: "4.9",
+    type: "Truyện",
+    genres: ["Romance", "Slice of Life", "Josei"],
+    sharedFrom: { name: "Thu Hà", user: "@hanguyen", sharedAt: "3 ngày trước" },
+    createdBy: { name: "Thu Hà", user: "@hanguyen" },
+    visibility: "PUBLIC",
+  },
+  {
+    title: "Ánh Sáng Cuối Hè",
+    sub: "Movie · 2023",
+    img: photos.city,
+    status: "Drop",
+    score: "4.3",
+    type: "Phim",
+    genres: ["Drama", "Family"],
+    createdBy: { name: "Tuấn Minh", user: "@tuanminh" },
+    visibility: "PUBLIC",
+  },
+  {
+    title: "Võ Đài Linh Hồn",
+    sub: "K. Yamato",
+    img: photos.hero,
+    status: "Đang ra",
+    score: "4.5",
+    type: "Truyện",
+    genres: ["Action", "Martial Arts", "Shounen"],
+    createdBy: { name: "Nguyễn Huy", user: "@huynguyen" },
+    visibility: "PUBLIC",
+    mainLink: "https://mangadex.org",
+    updatedAt: "Hôm qua",
+    description: "Hành trình vươn tới đỉnh cao võ đạo của thiếu niên mang trong mình linh hồn hộ vệ cổ đại.",
+    chaptersList: defaultChaptersFor("Võ Đài Linh Hồn", false),
+  },
+  {
+    title: "Phía Sau Hoàng Hôn",
+    sub: "Movie · 2025",
+    img: photos.lantern,
+    status: "Đang đọc / xem",
+    score: "4.7",
+    type: "Phim",
+    genres: ["Mystery", "Sci-Fi"],
+    sharedFrom: { name: "Tuấn Minh", user: "@tuanminh", sharedAt: "5 ngày trước" },
+    createdBy: { name: "Tuấn Minh", user: "@tuanminh" },
+    visibility: "SHARED",
+  },
+  {
+    title: "Học Viện Ánh Trăng",
+    sub: "A. Mori",
+    img: photos.rain,
+    status: "Đang ra",
+    score: "4.4",
+    type: "Truyện",
+    genres: ["School Life", "Fantasy", "Shoujo"],
+    createdBy: { name: "Nguyễn Huy", user: "@huynguyen" },
+    visibility: "SHARED",
+    mainLink: "https://mangadex.org",
+    updatedAt: "3 ngày trước",
+    description: "Ngôi trường phép thuật chỉ mở cổng khi trăng tròn, nơi các học viên nắm giữ sức mạnh tinh tú.",
+    chaptersList: defaultChaptersFor("Học Viện Ánh Trăng", false),
+  },
+  {
+    title: "Bản Giao Hưởng Cuối",
+    sub: "Movie · 2022",
+    img: photos.street,
+    status: "Hoàn thành",
+    score: "4.8",
+    type: "Phim",
+    genres: ["Musical", "Romance"],
+    sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "1 tuần trước" },
+    createdBy: { name: "Lan Anh", user: "@lananh" },
+    visibility: "PUBLIC",
+  },
+  {
+    title: "Thành Phố Không Ngủ",
+    sub: "Movie · 2024",
+    img: photos.lantern,
+    status: "Muốn đọc / xem",
+    score: "4.7",
+    type: "Phim",
+    genres: ["Sci-Fi", "Mystery", "Drama"],
+    sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "Lưu từ khung Chat" },
+    createdBy: { name: "Lan Anh", user: "@lananh" },
+    visibility: "PUBLIC",
+  },
 ];
 
 const mangaGenres = ["BL", "BG", "GL", "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Psychological", "Romance", "School Life", "Slice of Life", "Supernatural", "Thriller", "Martial Arts", "Isekai", "Sci-Fi", "Sports", "Shounen", "Shoujo", "Seinen", "Josei"];
@@ -859,24 +1013,339 @@ function ShareModal({ close }: { close: () => void }) {
   </div></div>;
 }
 
+const CURRENT_USER_HANDLE = "@huynguyen";
+const CURRENT_USER_NAME = "Nguyễn Huy";
+
+function canManagePublishedContent(item: ContentItem, userRole: "USER" | "ADMIN"): boolean {
+  if (userRole === "ADMIN") return true;
+  return item.createdBy?.user === CURRENT_USER_HANDLE;
+}
+
+function PublishedWorkEditorModal({
+  initialItem,
+  userRole,
+  onClose,
+  onSave,
+  onOpenChaptersModal,
+}: {
+  initialItem: ContentItem;
+  userRole: "USER" | "ADMIN";
+  onClose: () => void;
+  onSave: (oldTitle: string, updated: ContentItem) => void;
+  onOpenChaptersModal: (draft: ContentItem) => void;
+}) {
+  const [draft, setDraft] = useState<ContentItem>({
+    ...initialItem,
+    description:
+      initialItem.description ||
+      `Mô tả chi tiết cho tác phẩm “${initialItem.title}” (${initialItem.sub}).`,
+    mainLink: initialItem.mainLink || (initialItem.type === "Truyện" ? "https://mangadex.org" : "https://www.netflix.com"),
+    visibility: initialItem.visibility || "PUBLIC",
+    chaptersList: initialItem.chaptersList || defaultChaptersFor(initialItem.title, initialItem.type === "Phim"),
+  });
+
+  const isOwner = initialItem.createdBy?.user === CURRENT_USER_HANDLE;
+
+  const handleCoverUpload = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setDraft(prev => ({ ...prev, img: String(reader.result) }));
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="admin-modal-wide" onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span>
+              {isOwner
+                ? "✍️ CHỈNH SỬA TRUYỆN / PHIM TÔI ĐĂNG (@huynguyen)"
+                : `🛡️ QUYỀN QUẢN TRỊ VIÊN (${userRole}) · CHỈNH SỬA BÀI ĐĂNG CỦA ${initialItem.createdBy?.user || "@user"}`}
+            </span>
+            <h2>Chỉnh sửa & Cập nhật: {initialItem.title}</h2>
+            <p>Cập nhật thông tin gốc, ảnh bìa, trạng thái phát hành, quyền hiển thị và thể loại của tác phẩm.</p>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+
+        <div className="admin-form-grid">
+          <div className="admin-poster-preview" style={{ position: "relative" }}>
+            <img src={draft.img || photos.hero} alt={draft.title} />
+            <label className="upload-cover-overlay">
+              📷 Đổi ảnh bìa
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => handleCoverUpload(e.target.files?.[0])} />
+            </label>
+          </div>
+          <div>
+            <div className="admin-field-two">
+              <label className="admin-field">
+                <span>Tên Truyện / Phim *</span>
+                <input
+                  value={draft.title}
+                  onChange={e => setDraft({ ...draft, title: e.target.value })}
+                  placeholder="Nhập tên tác phẩm..."
+                />
+              </label>
+              <label className="admin-field">
+                <span>Tác giả / Đạo diễn / Năm</span>
+                <input
+                  value={draft.sub}
+                  onChange={e => setDraft({ ...draft, sub: e.target.value })}
+                  placeholder="VD: S. Kuroda hoặc Movie · 2025"
+                />
+              </label>
+            </div>
+            <div className="admin-field-row">
+              <label className="admin-field">
+                <span>Loại nội dung</span>
+                <select value={draft.type} onChange={e => setDraft({ ...draft, type: e.target.value as "Truyện" | "Phim" })}>
+                  <option value="Truyện">Truyện (MANGA)</option>
+                  <option value="Phim">Phim (MOVIE)</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>Trạng thái phát hành</span>
+                <select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })}>
+                  <option value="Đang ra">Đang cập nhật (ONGOING)</option>
+                  <option value="Đang đọc / xem">Đang đọc / xem</option>
+                  <option value="Hoàn thành">Đã hoàn thành (COMPLETED)</option>
+                  <option value="Drop">Tạm ngưng (HIATUS / DROP)</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>Quyền hiển thị bài đăng</span>
+                <select
+                  value={draft.visibility || "PUBLIC"}
+                  onChange={e => setDraft({ ...draft, visibility: e.target.value as "PUBLIC" | "SHARED" | "PRIVATE" })}
+                >
+                  <option value="PUBLIC">Công khai (PUBLIC)</option>
+                  <option value="SHARED">Chia sẻ cộng đồng (SHARED)</option>
+                  <option value="PRIVATE">Riêng tư (PRIVATE)</option>
+                </select>
+              </label>
+            </div>
+            <div className="admin-field-two">
+              <label className="admin-field">
+                <span>URL Ảnh bìa / Poster</span>
+                <input value={draft.img} onChange={e => setDraft({ ...draft, img: e.target.value })} />
+              </label>
+              <label className="admin-field">
+                <span>Đường dẫn đọc / xem chính</span>
+                <input
+                  value={draft.mainLink || ""}
+                  onChange={e => setDraft({ ...draft, mainLink: e.target.value })}
+                  placeholder="https://..."
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <label className="admin-field">
+          <span>Mô tả chi tiết tác phẩm</span>
+          <textarea
+            value={draft.description || ""}
+            onChange={e => setDraft({ ...draft, description: e.target.value })}
+            placeholder="Nhập nội dung tóm tắt, giới thiệu chi tiết cho bộ truyện hoặc phim..."
+          />
+        </label>
+
+        <div className="admin-field">
+          <span>Thể loại ({draft.genres.length} đã chọn)</span>
+          <div className="admin-genre-picks">
+            {allGenres.slice(0, 20).map(g => (
+              <button
+                key={g}
+                type="button"
+                className={draft.genres.includes(g) ? "active" : ""}
+                onClick={() => {
+                  const next = draft.genres.includes(g) ? draft.genres.filter(x => x !== g) : [...draft.genres, g];
+                  setDraft({ ...draft, genres: next });
+                }}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="modal-actions">
+          <Button
+            variant="secondary"
+            icon="plus"
+            onClick={() => onOpenChaptersModal(draft)}
+          >
+            📑 Quản lý Chương / Tập ({(draft.chaptersList || []).length})
+          </Button>
+          <div>
+            <Button variant="ghost" onClick={onClose}>Hủy</Button>
+            <Button
+              icon="check"
+              onClick={() => {
+                if (!draft.title.trim()) return;
+                onSave(initialItem.title, {
+                  ...draft,
+                  title: draft.title.trim(),
+                  updatedAt: "Vừa cập nhật",
+                });
+              }}
+            >
+              Lưu cập nhật bài đăng
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PublishedChaptersModal({
+  initialItem,
+  userRole,
+  onClose,
+  onSave,
+  onBackToInfoEditor,
+}: {
+  initialItem: ContentItem;
+  userRole: "USER" | "ADMIN";
+  onClose: () => void;
+  onSave: (oldTitle: string, updated: ContentItem) => void;
+  onBackToInfoEditor?: (draft: ContentItem) => void;
+}) {
+  const [chapters, setChapters] = useState<PublishedChapterItem[]>(
+    initialItem.chaptersList || defaultChaptersFor(initialItem.title, initialItem.type === "Phim")
+  );
+  const isOwner = initialItem.createdBy?.user === CURRENT_USER_HANDLE;
+  const unitLabel = initialItem.type === "Truyện" ? "Chương" : "Tập";
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="admin-modal-wide" onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span>
+              {isOwner
+                ? "✍️ CẬP NHẬT CHƯƠNG / TẬP CHO BÀI TÔI ĐĂNG"
+                : `🛡️ QUYỀN QUẢN TRỊ VIÊN (${userRole}) · CẬP NHẬT CHƯƠNG / TẬP`}
+            </span>
+            <h2>{initialItem.title} ({chapters.length} {unitLabel.toLowerCase()})</h2>
+            <p>Thêm {unitLabel.toLowerCase()} mới, chỉnh sửa tiêu đề, đường dẫn đọc/xem và ghi chú cho từng {unitLabel.toLowerCase()}.</p>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+
+        <div style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <b style={{ fontSize: "11px" }}>Danh sách {unitLabel.toLowerCase()} hiện có ({chapters.length})</b>
+          <Button
+            variant="secondary"
+            icon="plus"
+            onClick={() => {
+              const nextNum = String(chapters.length + 1);
+              setChapters([
+                ...chapters,
+                {
+                  id: Date.now(),
+                  season: "Mùa 1",
+                  number: nextNum,
+                  title: `${unitLabel} ${nextNum}: Nội dung mới`,
+                  url: initialItem.type === "Truyện" ? "https://mangadex.org" : "https://www.netflix.com",
+                  note: "Vừa đăng",
+                },
+              ]);
+            }}
+          >
+            + Thêm {unitLabel.toLowerCase()} mới
+          </Button>
+        </div>
+
+        <div style={{ maxHeight: "340px", overflowY: "auto", paddingRight: "4px" }}>
+          {chapters.map((ch, idx) => (
+            <div className="admin-chap-row" key={ch.id}>
+              <input
+                value={ch.number}
+                onChange={e => setChapters(chapters.map((x, i) => (i === idx ? { ...x, number: e.target.value } : x)))}
+                placeholder="Số (1, 1.5)"
+              />
+              <input
+                value={ch.title}
+                onChange={e => setChapters(chapters.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)))}
+                placeholder={`Tiêu đề ${unitLabel.toLowerCase()}`}
+              />
+              <input
+                value={ch.url}
+                onChange={e => setChapters(chapters.map((x, i) => (i === idx ? { ...x, url: e.target.value } : x)))}
+                placeholder="https://..."
+              />
+              <input
+                value={ch.note}
+                onChange={e => setChapters(chapters.map((x, i) => (i === idx ? { ...x, note: e.target.value } : x)))}
+                placeholder="Ghi chú..."
+              />
+              <Button
+                variant="danger"
+                onClick={() => setChapters(chapters.filter((_, i) => i !== idx))}
+              >
+                Xóa
+              </Button>
+            </div>
+          ))}
+        </div>
+
+        <div className="modal-actions">
+          {onBackToInfoEditor ? (
+            <Button
+              variant="ghost"
+              onClick={() => onBackToInfoEditor({ ...initialItem, chaptersList: chapters })}
+            >
+              ← Sửa thông tin chung
+            </Button>
+          ) : <div />}
+          <div>
+            <Button variant="ghost" onClick={onClose}>Hủy</Button>
+            <Button
+              icon="check"
+              onClick={() =>
+                onSave(initialItem.title, {
+                  ...initialItem,
+                  chaptersList: chapters,
+                  updatedAt: "Vừa cập nhật chương/tập",
+                })
+              }
+            >
+              Lưu danh sách {unitLabel.toLowerCase()}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LibraryPage({
   setPage,
   favorites,
   toggleFavorite,
   items = libraryItems,
+  userRole = "USER",
+  onUpdatePublishedContent,
   onRemoveFromLibrary,
   onRestoreToLibrary,
   onOpenPublicProfile,
   onOpenShareToChat,
+  onSelectContent,
 }: {
   setPage: (page: string) => void;
   favorites: string[];
   toggleFavorite: (title: string) => void;
   items?: ContentItem[];
+  userRole?: "USER" | "ADMIN";
+  onUpdatePublishedContent?: (oldTitle: string, updated: ContentItem) => void;
   onRemoveFromLibrary?: (title: string) => void;
   onRestoreToLibrary?: (item: ContentItem) => void;
   onOpenPublicProfile?: (username: string) => void;
   onOpenShareToChat?: (item: ContentItem) => void;
+  onSelectContent?: (item: ContentItem) => void;
 }) {
   const [tab, setTab] = useState("Tất cả");
   const [modal, setModal] = useState(false);
@@ -886,6 +1355,10 @@ function LibraryPage({
   const [sortBy, setSortBy] = useState<"newest" | "rating" | "az">("newest");
   const [libToast, setLibToast] = useState("");
   const [lastRemovedItem, setLastRemovedItem] = useState<ContentItem | null>(null);
+
+  // State Chỉnh sửa & Cập nhật Truyện / Phim Tôi Đăng (cho chính User đăng nó hoặc Admin)
+  const [editingPublishedItem, setEditingPublishedItem] = useState<ContentItem | null>(null);
+  const [editingChaptersItem, setEditingChaptersItem] = useState<ContentItem | null>(null);
 
   // Quản lý danh mục riêng (Tạo mới, Chỉnh sửa, Xóa & Thêm truyện/phim vào danh mục)
   const [categories, setCategories] = useState([
@@ -1037,6 +1510,7 @@ function LibraryPage({
   const getCategoryCount = (catName: string) =>
     items.filter(item => getItemMeta(item).categories.includes(catName)).length;
 
+  const myPublishedItems = items.filter(item => item.createdBy?.user === CURRENT_USER_HANDLE);
   const sharedFromOthersItems = items.filter(item => Boolean(item.sharedFrom));
   const activeReadingItems = items.filter(item => {
     const st = getItemMeta(item).readingStatus;
@@ -1045,22 +1519,24 @@ function LibraryPage({
 
   const views = [
     { id: "all", value: String(items.length).padStart(2, "0"), label: "Tổng tác phẩm" },
+    { id: "published", value: String(myPublishedItems.length).padStart(2, "0"), label: "Truyện/Phim tôi đăng ✍️" },
     { id: "favorites", value: String(items.filter(i => favorites.includes(i.title)).length).padStart(2, "0"), label: "Yêu thích ♥" },
     { id: "shared", value: String(sharedFromOthersItems.length).padStart(2, "0"), label: "Lưu từ chia sẻ 🌐" },
     { id: "categories", value: String(categories.length).padStart(2, "0"), label: "Danh mục riêng" },
-    { id: "active", value: String(activeReadingItems.length).padStart(2, "0"), label: "Đang đọc / xem" },
   ];
 
   const isCustomCategoryTab = categories.some(c => c.name === tab);
 
-  // Sàng lọc thực sự theo cả View, Tab (Trạng thái / Yêu thích / Lưu từ chia sẻ / Danh mục riêng), Loại và Từ khóa
+  // Sàng lọc thực sự theo cả View, Tab (Trạng thái / Bài tôi đăng / Yêu thích / Lưu từ chia sẻ / Danh mục riêng), Loại và Từ khóa
   const filteredItems = items
     .filter(item => {
       const meta = getItemMeta(item);
+      if (view === "published" && item.createdBy?.user !== CURRENT_USER_HANDLE) return false;
       if (view === "favorites" && !favorites.includes(item.title)) return false;
       if (view === "shared" && !item.sharedFrom) return false;
       if (view === "active" && meta.readingStatus !== "Đang đọc / xem" && meta.readingStatus !== "Đang ra") return false;
 
+      if (tab === "Truyện tôi đăng") return item.createdBy?.user === CURRENT_USER_HANDLE;
       if (tab === "Yêu thích") return favorites.includes(item.title);
       if (tab === "Lưu từ chia sẻ") return Boolean(item.sharedFrom);
       if (tab === "Đang đọc / xem") return meta.readingStatus === "Đang đọc / xem" || meta.readingStatus === "Đang ra";
@@ -1081,6 +1557,7 @@ function LibraryPage({
 
   const systemTabs: { key: string; label: string; count: number; badge?: string }[] = [
     { key: "Tất cả", label: "Tất cả", count: items.length },
+    { key: "Truyện tôi đăng", label: "Truyện / Phim tôi đăng", count: myPublishedItems.length, badge: "✍️" },
     { key: "Yêu thích", label: "Yêu thích", count: items.filter(i => favorites.includes(i.title)).length, badge: "♥" },
     { key: "Lưu từ chia sẻ", label: "Lưu từ chia sẻ", count: sharedFromOthersItems.length, badge: "🌐" },
     { key: "Đang đọc / xem", label: "Đang đọc / xem", count: activeReadingItems.length },
@@ -1094,7 +1571,7 @@ function LibraryPage({
         <div>
           <span>KHÔNG GIAN CỦA BẠN</span>
           <h1>Thư Viện Cá Nhân</h1>
-          <p>Quản lý truyện/phim của bạn, phân loại theo danh mục riêng và lưu giữ các tác phẩm hay được bạn bè chia sẻ.</p>
+          <p>Quản lý truyện/phim của bạn, chỉnh sửa & cập nhật tác phẩm do bạn đăng tải, phân loại danh mục riêng và lưu giữ chia sẻ từ bạn bè.</p>
         </div>
         <div>
           <Button variant="secondary" icon="share" onClick={() => onOpenPublicProfile?.("@lananh")}>Khám phá thư viện bạn bè</Button>
@@ -1131,7 +1608,8 @@ function LibraryPage({
             className={view === item.id ? "active" : ""}
             onClick={() => {
               setView(item.id);
-              if (item.id === "favorites") setTab("Yêu thích");
+              if (item.id === "published") setTab("Truyện tôi đăng");
+              else if (item.id === "favorites") setTab("Yêu thích");
               else if (item.id === "shared") setTab("Lưu từ chia sẻ");
               else if (item.id === "active") setTab("Đang đọc / xem");
               else if (item.id === "all") setTab("Tất cả");
@@ -1144,13 +1622,13 @@ function LibraryPage({
         ))}
       </div>
 
-      {/* Thanh Tab Sàng lọc theo Trạng thái, Lưu từ chia sẻ & Toàn bộ Danh mục riêng */}
+      {/* Thanh Tab Sàng lọc theo Trạng thái, Bài tôi đăng, Lưu từ chia sẻ & Toàn bộ Danh mục riêng */}
       <div className="category-tabs">
         {systemTabs.map(t => (
           <button
             key={t.key}
             className={view !== "categories" && tab === t.key ? "active" : ""}
-            onClick={() => { setView("all"); setTab(t.key); }}
+            onClick={() => { setView(t.key === "Truyện tôi đăng" ? "published" : "all"); setTab(t.key); }}
           >
             {t.badge && <span>{t.badge}</span>}
             {t.label}
@@ -1175,7 +1653,14 @@ function LibraryPage({
         <SectionTitle eyebrow="HOẠT ĐỘNG GẦN ĐÂY" title="Lịch sử đọc / xem gần đây" action="Xem toàn bộ" />
         <div className="history-track">
           {items.slice(0, 10).map((item, i) => (
-            <button className="history-card" key={item.title} onClick={() => setPage("detail")}>
+            <button
+              className="history-card"
+              key={item.title}
+              onClick={() => {
+                onSelectContent?.(item);
+                setPage("detail");
+              }}
+            >
               <img src={item.img} alt={item.title} />
               <div>
                 <span>{item.type === "Truyện" ? "MANGA" : "MOVIE"} · {i < 2 ? "Vừa xong" : `${i + 1} giờ trước`}</span>
@@ -1194,6 +1679,11 @@ function LibraryPage({
             <b>{view === "categories" ? "Quản lý Danh mục riêng" : `Đang lọc: ${tab}`}</b> ·{" "}
             {view === "categories" ? `${categories.length} danh mục` : `${shownItems.length} tác phẩm`}
           </p>
+          {view !== "categories" && tab === "Truyện tôi đăng" && (
+            <Button icon="plus" onClick={() => setPage("publish")}>
+              + Đăng truyện / phim mới
+            </Button>
+          )}
           {view !== "categories" && isCustomCategoryTab && (
             <Button variant="secondary" icon="plus" onClick={() => setAssigningCategoryName(tab)}>
               Thêm truyện/phim vào “{tab}”
@@ -1263,7 +1753,7 @@ function LibraryPage({
           <p>
             {isCustomCategoryTab
               ? `Bạn có thể nhấn nút bên dưới để chọn thêm truyện hoặc phim từ thư viện vào danh mục “${tab}”.`
-              : "Hãy thử đổi bộ lọc hoặc lưu thêm tác phẩm mới từ kho cộng đồng và thư viện bạn bè."}
+              : "Hãy thử đổi bộ lọc hoặc đăng tải tác phẩm mới của bạn."}
           </p>
           <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginTop: "10px" }}>
             {isCustomCategoryTab && (
@@ -1281,10 +1771,22 @@ function LibraryPage({
           {shownItems.map((item, i) => {
             const meta = getItemMeta(item);
             const stars = "★".repeat(meta.rating) + "☆".repeat(5 - meta.rating);
+            const isMyPublished = item.createdBy?.user === CURRENT_USER_HANDLE;
+            const canEditPublished = canManagePublishedContent(item, userRole);
+            const chCount = (item.chaptersList || defaultChaptersFor(item.title, item.type === "Phim")).length;
+
             return (
               <article className="personal-card" key={`${item.title}-${i}`}>
                 <div className="personal-poster">
-                  <img src={item.img} alt={item.title} onClick={() => setPage("detail")} style={{ cursor: "pointer" }} />
+                  <img
+                    src={item.img}
+                    alt={item.title}
+                    onClick={() => {
+                      onSelectContent?.(item);
+                      setPage("detail");
+                    }}
+                    style={{ cursor: "pointer" }}
+                  />
                   <span className={`status ${meta.readingStatus === "Hoàn thành" ? "done" : meta.readingStatus === "Drop" ? "drop" : ""}`}>
                     {meta.readingStatus}
                   </span>
@@ -1297,7 +1799,15 @@ function LibraryPage({
                 <div className="personal-body">
                   <div className="title-row">
                     <div>
-                      <h3 onClick={() => setPage("detail")} style={{ cursor: "pointer" }}>{item.title}</h3>
+                      <h3
+                        onClick={() => {
+                          onSelectContent?.(item);
+                          setPage("detail");
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
+                        {item.title}
+                      </h3>
                       <p>{item.type} · {item.sub}</p>
                     </div>
                     <div className="personal-rating" title={`Điểm cá nhân: ${meta.rating}/5 sao`}>{stars}</div>
@@ -1329,6 +1839,36 @@ function LibraryPage({
                       + Danh mục
                     </button>
                   </div>
+
+                  {/* Hộp Quản lý & Chỉnh sửa - Cập nhật Truyện / Phim Tôi Đăng (Chỉ hiện cho chính User đăng nó hoặc Admin) */}
+                  {canEditPublished && (
+                    <div className={`published-owner-box ${isMyPublished ? "owner" : "admin-override"}`}>
+                      <div className="published-owner-head">
+                        <span>
+                          {isMyPublished
+                            ? `✍️ Truyện/Phim tôi đăng (${CURRENT_USER_HANDLE})`
+                            : `🛡️ Quyền Admin · Đăng bởi ${item.createdBy?.user || "@user"}`}
+                        </span>
+                        <small>{item.updatedAt || "Đã xuất bản"}</small>
+                      </div>
+                      <div className="published-owner-actions">
+                        <button
+                          type="button"
+                          onClick={() => setEditingPublishedItem(item)}
+                          title="Chỉnh sửa thông tin gốc, ảnh bìa, mô tả, thể loại của bài đăng"
+                        >
+                          ✏️ Sửa bài đăng
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingChaptersItem(item)}
+                          title="Cập nhật thêm chương truyện hoặc tập phim mới"
+                        >
+                          📑 Chương/Tập ({chCount})
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Nhãn hiển thị nếu tác phẩm được lưu từ phần chia sẻ của người khác */}
                   {item.sharedFrom && (
@@ -1362,7 +1902,7 @@ function LibraryPage({
                     <div className="active-progress">
                       <span>{item.type === "Truyện" ? `Chương ${85 - i}/100` : `Tập ${8 + i}/12`}</span>
                       <div className="progress"><i style={{ width: `${78 - i * 8}%` }} /></div>
-                      <Button variant="secondary" icon="play" onClick={() => setPage("detail")}>
+                      <Button variant="secondary" icon="play" onClick={() => { onSelectContent?.(item); setPage("detail"); }}>
                         {item.type === "Truyện" ? "Đọc tiếp" : "Xem tiếp"}
                       </Button>
                     </div>
@@ -1402,6 +1942,42 @@ function LibraryPage({
     </div>
 
     {modal && <ShareModal close={() => setModal(false)} />}
+
+    {/* MODAL CHỈNH SỬA THÔNG TIN GỐC TRUYỆN / PHIM TÔI ĐĂNG (HOẶC ADMIN) */}
+    {editingPublishedItem && (
+      <PublishedWorkEditorModal
+        initialItem={editingPublishedItem}
+        userRole={userRole}
+        onClose={() => setEditingPublishedItem(null)}
+        onSave={(oldTitle, updated) => {
+          onUpdatePublishedContent?.(oldTitle, updated);
+          setEditingPublishedItem(null);
+          setLibToast(`Đã cập nhật thông tin bài đăng “${updated.title}” thành công!`);
+        }}
+        onOpenChaptersModal={draft => {
+          setEditingPublishedItem(null);
+          setEditingChaptersItem(draft);
+        }}
+      />
+    )}
+
+    {/* MODAL CẬP NHẬT CHƯƠNG / TẬP CHO TRUYỆN / PHIM TÔI ĐĂNG (HOẶC ADMIN) */}
+    {editingChaptersItem && (
+      <PublishedChaptersModal
+        initialItem={editingChaptersItem}
+        userRole={userRole}
+        onClose={() => setEditingChaptersItem(null)}
+        onSave={(oldTitle, updated) => {
+          onUpdatePublishedContent?.(oldTitle, updated);
+          setEditingChaptersItem(null);
+          setLibToast(`Đã cập nhật danh sách chương/tập cho “${updated.title}”! `);
+        }}
+        onBackToInfoEditor={draft => {
+          setEditingChaptersItem(null);
+          setEditingPublishedItem(draft);
+        }}
+      />
+    )}
 
     {/* MODAL 1: TẠO / SỬA DANH MỤC CÁ NHÂN */}
     {categoryModal && (
@@ -1638,6 +2214,9 @@ function DetailPage({
   publishedTitle = "",
   savedItems = libraryItems,
   favorites = [],
+  userRole = "USER",
+  onUpdatePublishedContent,
+  onDeletePublishedContent,
   onToggleLibrary,
   onToggleFavorite,
   onOpenShareToChat,
@@ -1647,6 +2226,9 @@ function DetailPage({
   publishedTitle?: string;
   savedItems?: ContentItem[];
   favorites?: string[];
+  userRole?: "USER" | "ADMIN";
+  onUpdatePublishedContent?: (oldTitle: string, updated: ContentItem) => void;
+  onDeletePublishedContent?: (title: string) => void;
   onToggleLibrary?: (item: ContentItem) => void;
   onToggleFavorite?: (title: string) => void;
   onOpenShareToChat?: (item: ContentItem) => void;
@@ -1661,6 +2243,9 @@ function DetailPage({
   const [userRating, setUserRating] = useState(5);
   const [commentText, setCommentText] = useState("");
   const [isSpoiler, setIsSpoiler] = useState(false);
+  const [editingWorkModal, setEditingWorkModal] = useState(false);
+  const [editingChaptersModal, setEditingChaptersModal] = useState(false);
+
   const [comments, setComments] = useState([
     {
       id: 1,
@@ -1683,10 +2268,14 @@ function DetailPage({
     score: "4.8",
     type: "Truyện",
     genres: ["Cyberpunk", "Mystery", "Action", "Psychological"],
+    createdBy: { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
   };
 
   const inLibrary = savedItems.some(x => x.title === currentItem.title);
   const liked = favorites.includes(currentItem.title);
+  const isOwner = currentItem.createdBy?.user === CURRENT_USER_HANDLE;
+  const canEditWork = canManagePublishedContent(currentItem, userRole);
+  const chapters = currentItem.chaptersList || defaultChaptersFor(currentItem.title, currentItem.type === "Phim");
 
   const toggleChapterRead = (idx: number) => setReadChapters(prev => prev.includes(idx) ? prev.filter(x => x !== idx) : [...prev, idx]);
 
@@ -1711,15 +2300,71 @@ function DetailPage({
   };
 
   return <main className="detail-page">
-    {publishedTitle && <div className="published-banner"><Icon name="check" /><span>Đang xem chi tiết tác phẩm “<b>{currentItem.title}</b>”.</span></div>}
     {detailToast && <div className="published-banner" style={{ cursor: "pointer" }} onClick={() => setDetailToast("")}><Icon name="check" /><span>{detailToast}</span></div>}
+
+    {/* Thanh công cụ Quản lý Bài đăng dành riêng cho Tác giả đăng tải (@huynguyen) hoặc Quản trị viên (ADMIN) */}
+    <div className="page-shell" style={{ paddingTop: "14px" }}>
+      {canEditWork ? (
+        <div className="author-manage-banner">
+          <div>
+            <span className="author-manage-badge">
+              {isOwner ? "✍️ BÀI ĐĂNG CỦA TÔI" : "🛡️ QUYỀN QUẢN TRỊ VIÊN (ADMIN)"}
+            </span>
+            <b>
+              {isOwner
+                ? `Bạn (${CURRENT_USER_HANDLE}) là người đăng tải “${currentItem.title}” — Bạn có toàn quyền chỉnh sửa nội dung và cập nhật chương/tập.`
+                : `Quản trị viên (ADMIN): Bạn có quyền chỉnh sửa & cập nhật bài đăng của ${currentItem.createdBy?.name || "Người dùng"} (${currentItem.createdBy?.user || "@user"}).`}
+            </b>
+          </div>
+          <div className="author-manage-btns">
+            <Button variant="secondary" icon="edit" onClick={() => setEditingWorkModal(true)}>
+              Chỉnh sửa bài đăng
+            </Button>
+            <Button icon="plus" onClick={() => setEditingChaptersModal(true)}>
+              Cập nhật Chương / Tập ({chapters.length})
+            </Button>
+            {onDeletePublishedContent && (
+              <Button variant="danger" onClick={() => onDeletePublishedContent(currentItem.title)}>
+                Xóa bài đăng
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="author-readonly-banner">
+          <span>
+            🌐 Tác phẩm được đăng tải bởi <b>{currentItem.createdBy?.name || "Thành viên cộng đồng"} ({currentItem.createdBy?.user || "@community"})</b> · Chỉ chính người đăng tải hoặc Quản trị viên (ADMIN) mới có quyền chỉnh sửa thông tin gốc & cập nhật chương/tập.
+          </span>
+        </div>
+      )}
+    </div>
+
     <section className="detail-hero"><img className="detail-backdrop" src={currentItem.img || photos.hero} alt="" /><div className="detail-overlay" /><div className="detail-content">
       <div className="detail-poster"><img src={currentItem.img} alt={currentItem.title} /><div className="match">98% PHÙ HỢP</div></div>
-      <div className="detail-copy"><div className="detail-badges"><span>{currentItem.type === "Phim" ? "MOVIE" : "MANGA"}</span><span className="ongoing">{currentItem.status.toUpperCase()}</span></div><h1>{currentItem.title}</h1><p className="jp">{currentItem.sub}</p>
+      <div className="detail-copy">
+        <div className="detail-badges">
+          <span>{currentItem.type === "Phim" ? "MOVIE" : "MANGA"}</span>
+          <span className="ongoing">{currentItem.status.toUpperCase()}</span>
+          {currentItem.visibility && <span>{currentItem.visibility}</span>}
+        </div>
+        <h1>{currentItem.title}</h1>
+        <p className="jp">
+          Đăng bởi {currentItem.createdBy?.name || CURRENT_USER_NAME} ({currentItem.createdBy?.user || CURRENT_USER_HANDLE}) · {currentItem.updatedAt || "Đã kiểm duyệt"}
+        </p>
         <div className="creator"><span>THÔNG TIN <b>{currentItem.sub}</b></span><i /><span>PHÁT HÀNH <b>2022 — Nay</b></span><i /><Rating value={currentItem.score} /></div>
         <div className="genre-row">{currentItem.genres.map(g => <span key={g}>{g}</span>)}</div>
-        <p className="description">Trong một thế giới nơi ký ức và cảm xúc đan xen giữa thực tại và chiều không gian số, nhân vật chính bước vào hành trình bóc tách sự thật ẩn giấu phía sau {currentItem.title}.</p>
-        <div className="external"><button onClick={() => window.open("https://www.netflix.com", "_blank", "noopener,noreferrer")}>Netflix <Icon name="arrow" size={15} /></button><button onClick={() => window.open("https://mangadex.org", "_blank", "noopener,noreferrer")}>MangaDex <Icon name="arrow" size={15} /></button></div>
+        <p className="description">
+          {currentItem.description ||
+            `Trong một thế giới nơi ký ức và cảm xúc đan xen giữa thực tại và chiều không gian số, nhân vật chính bước vào hành trình bóc tách sự thật ẩn giấu phía sau ${currentItem.title}.`}
+        </p>
+        <div className="external">
+          <button onClick={() => window.open(currentItem.mainLink || "https://www.netflix.com", "_blank", "noopener,noreferrer")}>
+            Nguồn chính thức <Icon name="arrow" size={15} />
+          </button>
+          <button onClick={() => window.open("https://mangadex.org", "_blank", "noopener,noreferrer")}>
+            MangaDex <Icon name="arrow" size={15} />
+          </button>
+        </div>
         <div className="detail-actions">
           <Button
             icon={inLibrary ? "check" : "plus"}
@@ -1740,16 +2385,94 @@ function DetailPage({
           >
             {liked ? "Đã yêu thích" : "Yêu thích"}
           </Button>
+          {canEditWork && (
+            <Button variant="secondary" icon="edit" onClick={() => setEditingWorkModal(true)}>
+              Sửa bài đăng
+            </Button>
+          )}
           <Button variant="ghost" icon="share" onClick={() => onOpenShareToChat?.(currentItem)}>Chia sẻ qua Chat</Button>
           <Button variant="ghost" icon="flag" onClick={() => onOpenReport?.("CONTENT", currentItem.title)}>Báo cáo</Button>
         </div>
       </div>
     </div></section>
     <div className="page-shell detail-lower">
-      <section className="chapters-panel"><SectionTitle eyebrow="DANH SÁCH NỘI DUNG" title="Mùa & Chương" />
-        <div className="season-tabs">{["Mùa 1", "Mùa 2"].map(x => <button key={x} onClick={() => setSeason(x)} className={season === x ? "active" : ""}>{x}<small>{x === "Mùa 1" ? "12 CHƯƠNG" : "8 CHƯƠNG"}</small></button>)}</div>
-        <div className="chapter-list">{["Màn đêm buông xuống", "Dấu vết trong mưa", "Ký ức không thuộc về ta", "Kẻ buôn giấc mơ", "Khoảng lặng trước bình minh"].map((x, i) => <div className="chapter" key={x}><button className={`checkbox ${readChapters.includes(i) ? "checked" : ""}`} onClick={() => toggleChapterRead(i)}>{readChapters.includes(i) && <Icon name="check" size={14} />}</button><div className="chap-num">CHAP<br /><b>{10.5 - i * .5}</b></div><div className="chap-title"><b>{x}</b><span>{readChapters.includes(i) ? "Đã đọc" : "Chưa đọc"} · {18 + i * 3} phút</span></div><button className="comment-count" onClick={() => setReviewTab("Bình luận Chương/Tập")}><Icon name="message" size={15} /> {12 + i * 4}</button><Button variant="secondary" icon="arrow" onClick={() => window.open("https://mangadex.org", "_blank", "noopener,noreferrer")}>Mở link đọc</Button></div>)}</div>
+      <section className="chapters-panel">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+          <SectionTitle eyebrow="DANH SÁCH NỘI DUNG" title={`Mùa & ${currentItem.type === "Truyện" ? "Chương" : "Tập"} (${chapters.length})`} />
+          {canEditWork && (
+            <Button variant="secondary" icon="plus" onClick={() => setEditingChaptersModal(true)}>
+              + Cập nhật / Thêm {currentItem.type === "Truyện" ? "Chương" : "Tập"}
+            </Button>
+          )}
+        </div>
+        <div className="season-tabs">{["Mùa 1", "Mùa 2"].map(x => <button key={x} onClick={() => setSeason(x)} className={season === x ? "active" : ""}>{x}<small>{x === "Mùa 1" ? `${chapters.length} MỤC` : "SẮP RA MẮT"}</small></button>)}</div>
+        <div className="chapter-list">
+          {chapters.map((ch, i) => (
+            <div className="chapter" key={ch.id}>
+              <button className={`checkbox ${readChapters.includes(i) ? "checked" : ""}`} onClick={() => toggleChapterRead(i)}>
+                {readChapters.includes(i) && <Icon name="check" size={14} />}
+              </button>
+              <div className="chap-num">
+                {currentItem.type === "Truyện" ? "CHAP" : "TẬP"}<br /><b>{ch.number}</b>
+              </div>
+              <div className="chap-title">
+                <b>{ch.title}</b>
+                <span>{readChapters.includes(i) ? "Đã đọc/xem" : "Chưa đọc/xem"} · {ch.note || "Bản chuẩn"}</span>
+              </div>
+              <button className="comment-count" onClick={() => setReviewTab("Bình luận Chương/Tập")}>
+                <Icon name="message" size={15} /> {12 + i * 4}
+              </button>
+              {canEditWork && (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title="Chỉnh sửa chương/tập này"
+                  onClick={() => setEditingChaptersModal(true)}
+                >
+                  <Icon name="edit" size={14} />
+                </button>
+              )}
+              <Button variant="secondary" icon="arrow" onClick={() => window.open(ch.url || "https://mangadex.org", "_blank", "noopener,noreferrer")}>
+                Mở link
+              </Button>
+            </div>
+          ))}
+        </div>
       </section>
+
+      {editingWorkModal && (
+        <PublishedWorkEditorModal
+          initialItem={currentItem}
+          userRole={userRole}
+          onClose={() => setEditingWorkModal(false)}
+          onSave={(oldTitle, updated) => {
+            onUpdatePublishedContent?.(oldTitle, updated);
+            setEditingWorkModal(false);
+            setDetailToast(`Đã lưu chỉnh sửa thông tin tác phẩm “${updated.title}”! `);
+          }}
+          onOpenChaptersModal={() => {
+            setEditingWorkModal(false);
+            setEditingChaptersModal(true);
+          }}
+        />
+      )}
+
+      {editingChaptersModal && (
+        <PublishedChaptersModal
+          initialItem={currentItem}
+          userRole={userRole}
+          onClose={() => setEditingChaptersModal(false)}
+          onSave={(oldTitle, updated) => {
+            onUpdatePublishedContent?.(oldTitle, updated);
+            setEditingChaptersModal(false);
+            setDetailToast(`Đã cập nhật danh sách chương/tập cho “${updated.title}”! `);
+          }}
+          onBackToInfoEditor={() => {
+            setEditingChaptersModal(false);
+            setEditingWorkModal(true);
+          }}
+        />
+      )}
       <section className="reviews"><SectionTitle eyebrow="CỘNG ĐỒNG" title="Đánh giá & Bình luận" />
         <div className="review-tabs">{["Bình luận chung", "Bình luận Chương/Tập"].map(x => <button className={reviewTab === x ? "active" : ""} onClick={() => setReviewTab(x)} key={x}>{x}</button>)}</div>
         <div className="comment-form">
@@ -1972,7 +2695,28 @@ function PublishPage({ setPage, onPublish }: { setPage: (page: string) => void; 
         <div className="publish-actions"><Button variant="ghost" onClick={() => setPage("library")}>Hủy</Button><div><Button variant="secondary" onClick={() => { setNotice("Đã lưu bản nháp lúc 21:42."); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Lưu bản nháp</Button><Button variant="secondary" onClick={() => attempt("preview")}>Xem trước</Button><Button icon="arrow" onClick={() => attempt("publish")}>Đăng truyện / phim</Button></div></div>
       </div>
     </div>
-  </div>{dialog && <div className="modal-backdrop"><div className="confirm-dialog publish-confirm"><div className="danger-symbol safe"><Icon name={dialog === "preview" ? "search" : "check"} /></div><h2>{dialog === "preview" ? "Xem trước nội dung?" : "Sẵn sàng đăng tải?"}</h2><p>{dialog === "preview" ? `Bản xem trước “${title}” sẽ hiển thị theo dữ liệu bạn đã nhập.` : `“${title}” sẽ được đăng với quyền: ${privacy}. Bạn có thể chỉnh sửa sau.`}</p><div><Button variant="ghost" onClick={() => setDialog("")}>Quay lại</Button><Button onClick={() => dialog === "publish" ? onPublish({ title, sub: "Nội dung do bạn đăng", img: cover || photos.hero, status: "Đang ra", score: "—", type, genres: genres.length ? genres : ["Drama"] }) : setDialog("")}>{dialog === "publish" ? "Xác nhận đăng" : "Mở xem trước"}</Button></div></div></div>}</main>;
+  </div>{dialog && <div className="modal-backdrop"><div className="confirm-dialog publish-confirm"><div className="danger-symbol safe"><Icon name={dialog === "preview" ? "search" : "check"} /></div><h2>{dialog === "preview" ? "Xem trước nội dung?" : "Sẵn sàng đăng tải?"}</h2><p>{dialog === "preview" ? `Bản xem trước “${title}” sẽ hiển thị theo dữ liệu bạn đã nhập.` : `“${title}” sẽ được đăng với quyền: ${privacy}. Bạn có thể chỉnh sửa sau.`}</p><div><Button variant="ghost" onClick={() => setDialog("")}>Quay lại</Button><Button onClick={() => dialog === "publish" ? onPublish({
+    title,
+    sub: `${type} · ${CURRENT_USER_NAME} · ${genres.length ? genres.join(", ") : "Drama"}`,
+    img: cover || photos.hero,
+    status: "Đang ra",
+    score: "—",
+    type,
+    genres: genres.length ? genres : ["Drama"],
+    createdBy: { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
+    description: `Tác phẩm ${type.toLowerCase()} “${title}” do ${CURRENT_USER_NAME} (${CURRENT_USER_HANDLE}) đăng tải và quản lý trực tiếp trên nền tảng.`,
+    mainLink: links[0]?.url?.trim() || (type === "Phim" ? "https://netflix.com/" : "https://mangadex.org/"),
+    visibility: privacy === "Riêng tư" ? "PRIVATE" : privacy === "Chia sẻ riêng" ? "SHARED" : "PUBLIC",
+    updatedAt: "Vừa đăng",
+    chaptersList: chapters.map((ch, idx) => ({
+      id: idx + 1,
+      season: "Mùa 1",
+      number: String(ch.number || idx + 1),
+      title: ch.title.trim() || `${type === "Phim" ? "Tập" : "Chương"} ${idx + 1}`,
+      url: ch.url.trim() || (type === "Phim" ? "https://netflix.com/" : "https://mangadex.org/"),
+      note: "Bản chính thức",
+    })),
+  }) : setDialog("")}>{dialog === "publish" ? "Xác nhận đăng" : "Mở xem trước"}</Button></div></div></div>}</main>;
 }
 
 const friendData = [
@@ -5186,6 +5930,16 @@ export default function App() {
 
   const toggleFavorite = (title: string) => setFavorites(current => current.includes(title) ? current.filter(x => x !== title) : [...current, title]);
 
+  const handleUpdatePublishedContent = (oldTitle: string, updated: ContentItem) => {
+    setAllContents(prev => prev.map(x => (x.title === oldTitle ? updated : x)));
+    if (publishedTitle === oldTitle && updated.title !== oldTitle) {
+      setPublishedTitle(updated.title);
+    }
+    if (oldTitle !== updated.title && favorites.includes(oldTitle)) {
+      setFavorites(prev => prev.map(f => (f === oldTitle ? updated.title : f)));
+    }
+  };
+
   const navigate = (target: string) => {
     if (target === "login") {
       setAuthenticated(false);
@@ -5328,10 +6082,13 @@ export default function App() {
         favorites={favorites}
         toggleFavorite={toggleFavorite}
         items={allContents}
+        userRole={userRole}
         onOpenPublicProfile={openPublicProfile}
         onOpenShareToChat={item => setShareModalItem(item)}
         onRemoveFromLibrary={title => setAllContents(prev => prev.filter(x => x.title !== title))}
         onRestoreToLibrary={item => setAllContents(prev => (prev.some(x => x.title === item.title) ? prev : [item, ...prev]))}
+        onUpdatePublishedContent={handleUpdatePublishedContent}
+        onSelectContent={item => setPublishedTitle(item.title)}
       />
     )}
     {page === "detail" && (
@@ -5339,6 +6096,7 @@ export default function App() {
         publishedTitle={publishedTitle}
         savedItems={allContents}
         favorites={favorites}
+        userRole={userRole}
         onToggleLibrary={item => {
           setAllContents(prev =>
             prev.some(x => x.title === item.title)
@@ -5350,6 +6108,12 @@ export default function App() {
         onOpenShareToChat={item => setShareModalItem(item)}
         onOpenReport={(type, name) => setReportTarget({ type, name })}
         onOpenPublicProfile={openPublicProfile}
+        onUpdatePublishedContent={handleUpdatePublishedContent}
+        onDeletePublishedContent={title => {
+          setAllContents(prev => prev.filter(x => x.title !== title));
+          showGlobalToast(`Đã xóa vĩnh viễn tác phẩm “${title}” khỏi hệ thống!`);
+          navigate("library");
+        }}
       />
     )}
     {page === "chat" && (

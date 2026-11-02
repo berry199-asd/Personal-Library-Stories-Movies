@@ -87,13 +87,25 @@ export const authApi = {
     }),
 };
 
-// Bước 4: Content, Genre & Chapter APIs
+// Bước 4: Content, Genre & Chapter APIs (Bao gồm quản lý bài đăng của chính User & Admin)
 export const contentApi = {
   getGenres: () => apiRequest('/genres'),
   searchContents: (params: URLSearchParams) => apiRequest(`/contents?${params.toString()}`),
+  getMyPublishedContents: (page = 0, size = 20) =>
+    apiRequest(`/contents/my-published?page=${page}&size=${size}`),
   getDetail: (id: number) => apiRequest(`/contents/${id}`),
   publishContent: (payload: unknown) =>
     apiRequest('/contents', { method: 'POST', body: JSON.stringify(payload) }),
+  updateOwnOrManagedContent: (id: number, payload: unknown) =>
+    apiRequest(`/contents/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteOwnOrManagedContent: (id: number) =>
+    apiRequest(`/contents/${id}`, { method: 'DELETE' }),
+  addChapterToContent: (contentId: number, payload: unknown) =>
+    apiRequest(`/contents/${contentId}/chapters`, { method: 'POST', body: JSON.stringify(payload) }),
+  updateContentChapter: (contentId: number, chapterId: number, payload: unknown) =>
+    apiRequest(`/contents/${contentId}/chapters/${chapterId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteContentChapter: (contentId: number, chapterId: number) =>
+    apiRequest(`/contents/${contentId}/chapters/${chapterId}`, { method: 'DELETE' }),
 };
 
 // Bước 5: Personal Library, Custom Categories & Public Shared Library APIs

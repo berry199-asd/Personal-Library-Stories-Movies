@@ -1,7 +1,9 @@
 package com.library.controller;
 
+import com.library.dto.request.ChapterRequest;
 import com.library.dto.request.ContentRequest;
 import com.library.dto.response.ApiResponse;
+import com.library.dto.response.ChapterResponse;
 import com.library.dto.response.ContentResponse;
 import com.library.dto.response.PageResponse;
 import com.library.enums.ContentStatus;
@@ -45,6 +47,18 @@ public class ContentController {
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách truyện/phim thành công", result));
     }
 
+    @GetMapping("/my-published")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<PageResponse<ContentResponse>>> getMyPublishedContents(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal CustomUserDetails currentUser
+    ) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"));
+        PageResponse<ContentResponse> result = contentService.getMyPublishedContents(currentUser.getId(), pageable);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách truyện/phim do bạn đăng tải thành công", result));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ContentResponse>> getContentDetail(
             @PathVariable Long id,
@@ -69,13 +83,62 @@ public class ContentController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    public ResponseEntity<ApiResponse<ContentResponse>> updateOwnContent(
+    public ResponseEntity<ApiResponse<ContentResponse>> updateOwnOrManagedContent(
             @PathVariable Long id,
             @Valid @RequestBody ContentRequest request,
             @AuthenticationPrincipal CustomUserDetails currentUser
     ) {
         boolean isAdmin = currentUser.getRole() == RoleType.ADMIN;
         ContentResponse updated = contentService.updateContent(id, request, currentUser.getId(), isAdmin);
-        return ResponseEntity.ok(ApiResponse.ok("Cập nhật thông tin tác phẩm thành công", updated));
+        return ResponseEntity.ok(ApiResponse.ok("Cập nhật thông tin truyện/phim đã đăng thành công", updated));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> deleteOwnOrManagedContent(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserDetails currentUser
+    ) {
+        boolean isAdmin = currentUser.getRole() == RoleType.ADMIN;
+        contentService.deleteContent(id, currentUser.getId(), isAdmin);
+        return ResponseEntity.ok(ApiResponse.ok("Đã xóa truyện/phim đã đăng thành công", null));
+    }
+
+    @PostMapping("/{contentId}/chapters")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ChapterResponse>> addChapterToOwnContent(
+            @PathVariable Long contentId,
+            @Valid @RequestBody ChapterRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser
+    ) {
+        boolean isAdmin = currentUser.getRole() == RoleType.ADMIN;
+        ChapterResponse created = contentService.addChapter(contentId, request, currentUser.getId(), isAdmin);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created("Thêm chương/tập mới cho tác phẩm thành công", created));
+    }
+
+    @PutMapping("/{contentId}/chapters/{chapterId}")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ChapterResponse>> updateOwnChapter(
+            @PathVariable Long contentId,
+            @PathVariable Long chapterId,
+            @Valid @RequestBody ChapterRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser
+    ) {
+        boolean isAdmin = currentUser.getRole() == RoleType.ADMIN;
+        ChapterResponse updated = contentService.updateChapter(chapterId, request, currentUser.getId(), isAdmin);
+        return ResponseEntity.ok(ApiResponse.ok("Cập nhật chương/tập thành công", updated));
+    }
+
+    @DeleteMapping("/{contentId}/chapters/{chapterId}")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> deleteOwnChapter(
+            @PathVariable Long contentId,
+            @PathVariable Long chapterId,
+            @AuthenticationPrincipal CustomUserDetails currentUser
+    ) {
+        boolean isAdmin = currentUser.getRole() == RoleType.ADMIN;
+        contentService.deleteChapter(chapterId, currentUser.getId(), isAdmin);
+        return ResponseEntity.ok(ApiResponse.ok("Đã xóa chương/tập khỏi tác phẩm", null));
     }
 }
