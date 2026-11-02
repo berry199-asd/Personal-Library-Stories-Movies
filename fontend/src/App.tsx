@@ -2011,20 +2011,280 @@ function FriendsPage({ setPage, onOpenPublicProfile }: { setPage: (page: string)
   </div>{confirm && <div className="modal-backdrop"><div className="confirm-dialog"><div className="danger-symbol"><Icon name="flag" /></div><h2>{confirm.action === "block" ? `Chặn ${confirm.name}?` : `Hủy kết bạn với ${confirm.name}?`}</h2><p>{confirm.action === "block" ? "Người này sẽ không thể tìm thấy, gửi lời mời hoặc nhắn tin cho bạn." : "Hai bạn sẽ không còn thấy nội dung chỉ chia sẻ với bạn bè."}</p><div><Button variant="ghost" onClick={() => setConfirm(null)}>Hủy</Button><Button variant="danger" onClick={() => { setFriends(friends.filter(x => x !== confirm.name)); setToast(confirm.action === "block" ? `Đã chặn ${confirm.name}.` : `Đã hủy kết bạn với ${confirm.name}.`); setConfirm(null); }}>Xác nhận</Button></div></div></div>}</main>;
 }
 
-const conversations = [
-  { name: "Hội mê manga", text: "Minh: Chap mới đỉnh quá!", img: photos.city, count: 8, group: true },
-  { name: "Lan Anh", text: "Cậu xem phim này chưa?", img: photos.rain, count: 2 },
-  { name: "Movie Night", text: "Hẹn mọi người tối thứ 7", img: photos.lantern, count: 0, group: true },
-  { name: "Tuấn Minh", text: "Đã thu hồi một tin nhắn", img: photos.street, count: 0 },
-  { name: "Kệ sách nửa đêm", text: "Hà: Mình vừa thêm truyện...", img: photos.alley, count: 0, group: true },
+type GroupMemberRole = "LEADER" | "ADMIN" | "MEMBER";
+
+type GroupMember = {
+  name: string;
+  user: string;
+  avatar: string;
+  role: GroupMemberRole;
+  nickname?: string;
+  online: boolean;
+};
+
+type PendingGroupMember = {
+  name: string;
+  user: string;
+  avatar: string;
+  invitedBy: string;
+  requestedAt: string;
+};
+
+type ChatAttachment = {
+  id: string;
+  kind: "IMAGE" | "VIDEO" | "FILE";
+  name: string;
+  url: string;
+  sizeLabel: string;
+};
+
+type ChatMessageItem = {
+  id: string;
+  senderName: string;
+  senderUser: string;
+  senderAvatar: string;
+  isMe: boolean;
+  time: string;
+  text?: string;
+  revoked?: boolean;
+  systemEvent?: boolean;
+  status?: "Đã gửi" | "Đã nhận" | "Đã xem";
+  attachments?: ChatAttachment[];
+  sharedContent?: {
+    title: string;
+    typeLabel: string;
+    score: string;
+    desc: string;
+    img: string;
+  };
+};
+
+type ConversationState = {
+  id: string;
+  name: string;
+  text: string;
+  img: string;
+  count: number;
+  group: boolean;
+  requireApproval: boolean;
+  members: GroupMember[];
+  pendingMembers: PendingGroupMember[];
+  sharedMedia: Array<{ id: string; kind: "IMAGE" | "VIDEO"; url: string; title: string }>;
+  messages: ChatMessageItem[];
+};
+
+const SAMPLE_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+
+const initialConversationStates: ConversationState[] = [
+  {
+    id: "conv-manga-club",
+    name: "Hội mê manga",
+    text: "Lan Anh: Phim này cũng có vibe khá giống đó...",
+    img: photos.city,
+    count: 2,
+    group: true,
+    requireApproval: true,
+    members: [
+      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", nickname: "Admin Huy", online: true },
+      { name: "Lan Anh", user: "@lananh", avatar: photos.rain, role: "ADMIN", nickname: "Thánh soi chap mới", online: true },
+      { name: "Minh Trần", user: "@minhtran", avatar: photos.city, role: "MEMBER", nickname: "Minh Cyberpunk", online: true },
+      { name: "Thu Hà", user: "@hanguyen", avatar: photos.lantern, role: "MEMBER", nickname: "", online: false },
+      { name: "Tuấn Minh", user: "@tuanminh", avatar: photos.street, role: "MEMBER", nickname: "Nhà phê bình", online: true },
+    ],
+    pendingMembers: [
+      { name: "Hoàng Nam", user: "@hoangnam", avatar: photos.alley, invitedBy: "Minh Trần", requestedAt: "5 phút trước" },
+      { name: "Khánh Linh", user: "@khanhlinh", avatar: photos.red, invitedBy: "Lan Anh", requestedAt: "18 phút trước" },
+    ],
+    sharedMedia: [
+      { id: "m1", kind: "IMAGE", url: photos.red, title: "Nightfall City Poster" },
+      { id: "m2", kind: "IMAGE", url: photos.rain, title: "Thành Phố Mưa Concept" },
+      { id: "m3", kind: "IMAGE", url: photos.lantern, title: "Lồng Đèn Đỏ Artwork" },
+    ],
+    messages: [
+      {
+        id: "msg-1",
+        senderName: "Lan Anh",
+        senderUser: "@lananh",
+        senderAvatar: photos.rain,
+        isMe: false,
+        time: "20:14",
+        text: "Mọi người đã đọc chap 10.5 của Nightfall City chưa?",
+      },
+      {
+        id: "msg-2",
+        senderName: "Huy Nguyễn",
+        senderUser: "@huynguyen",
+        senderAvatar: photos.red,
+        isMe: true,
+        time: "20:16",
+        text: "Vừa đọc xong luôn. Cái kết bất ngờ thật!",
+        status: "Đã xem",
+      },
+      {
+        id: "msg-3",
+        senderName: "Minh Trần",
+        senderUser: "@minhtran",
+        senderAvatar: photos.city,
+        isMe: false,
+        time: "20:18",
+        revoked: true,
+      },
+      {
+        id: "msg-4",
+        senderName: "Lan Anh",
+        senderUser: "@lananh",
+        senderAvatar: photos.rain,
+        isMe: false,
+        time: "20:20",
+        text: "Phim này cũng có vibe khá giống đó, để mình chia sẻ nhé.",
+        sharedContent: {
+          title: "Thành Phố Không Ngủ",
+          typeLabel: "PHIM · 2024",
+          score: "4.7",
+          desc: "Một kiến trúc sư truy tìm những mảnh ký ức bị thất lạc giữa đô thị tương lai.",
+          img: photos.lantern,
+        },
+      },
+    ],
+  },
+  {
+    id: "conv-lan-anh",
+    name: "Lan Anh",
+    text: "Cậu xem phim này chưa?",
+    img: photos.rain,
+    count: 1,
+    group: false,
+    requireApproval: false,
+    members: [
+      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", nickname: "Huy", online: true },
+      { name: "Lan Anh", user: "@lananh", avatar: photos.rain, role: "MEMBER", nickname: "Lan Anh 🌸", online: true },
+    ],
+    pendingMembers: [],
+    sharedMedia: [{ id: "m-la-1", kind: "IMAGE", url: photos.rain, title: "Poster Anime" }],
+    messages: [
+      {
+        id: "la-1",
+        senderName: "Lan Anh",
+        senderUser: "@lananh",
+        senderAvatar: photos.rain,
+        isMe: false,
+        time: "20:21",
+        text: "Cậu xem bộ Thành Phố Mưa bản Director's Cut chưa? Nhạc phim đỉnh lắm luôn!",
+      },
+    ],
+  },
+  {
+    id: "conv-movie-night",
+    name: "Movie Night",
+    text: "Hẹn mọi người tối thứ 7",
+    img: photos.lantern,
+    count: 0,
+    group: true,
+    requireApproval: true,
+    members: [
+      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", nickname: "Chủ rạp", online: true },
+      { name: "Tuấn Minh", user: "@tuanminh", avatar: photos.street, role: "ADMIN", nickname: "Chọn phim", online: true },
+      { name: "Lan Anh", user: "@lananh", avatar: photos.rain, role: "MEMBER", nickname: "", online: true },
+    ],
+    pendingMembers: [],
+    sharedMedia: [{ id: "m-mn-1", kind: "IMAGE", url: photos.lantern, title: "Lịch chiếu tối thứ 7" }],
+    messages: [
+      {
+        id: "mn-1",
+        senderName: "Tuấn Minh",
+        senderUser: "@tuanminh",
+        senderAvatar: photos.street,
+        isMe: false,
+        time: "19:45",
+        text: "Hẹn mọi người tối thứ 7 lúc 21h bật Video Call xem chung nhé!",
+      },
+    ],
+  },
+  {
+    id: "conv-tuan-minh",
+    name: "Tuấn Minh",
+    text: "Đã gửi tệp kịch bản phân tích",
+    img: photos.street,
+    count: 0,
+    group: false,
+    requireApproval: false,
+    members: [
+      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", online: true },
+      { name: "Tuấn Minh", user: "@tuanminh", avatar: photos.street, role: "MEMBER", online: false },
+    ],
+    pendingMembers: [],
+    sharedMedia: [],
+    messages: [
+      {
+        id: "tm-1",
+        senderName: "Tuấn Minh",
+        senderUser: "@tuanminh",
+        senderAvatar: photos.street,
+        isMe: false,
+        time: "18:30",
+        text: "Mình gửi cậu bản PDF tổng hợp timeline của Nightfall City nhé.",
+        attachments: [
+          {
+            id: "att-init-1",
+            kind: "FILE",
+            name: "Nightfall_City_Timeline_Analysis.pdf",
+            url: "#",
+            sizeLabel: "2.4 MB · PDF",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "conv-midnight-shelf",
+    name: "Kệ sách nửa đêm",
+    text: "Hà: Mình vừa thêm truyện...",
+    img: photos.alley,
+    count: 0,
+    group: true,
+    requireApproval: false,
+    members: [
+      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", online: true },
+      { name: "Thu Hà", user: "@hanguyen", avatar: photos.lantern, role: "ADMIN", nickname: "Mọt sách đêm", online: false },
+      { name: "Minh Trần", user: "@minhtran", avatar: photos.city, role: "MEMBER", online: true },
+    ],
+    pendingMembers: [],
+    sharedMedia: [{ id: "m-ms-1", kind: "IMAGE", url: photos.alley, title: "Ký Ức Ngõ Hẻm" }],
+    messages: [
+      {
+        id: "ms-1",
+        senderName: "Thu Hà",
+        senderUser: "@hanguyen",
+        senderAvatar: photos.lantern,
+        isMe: false,
+        time: "20:24",
+        text: "Mình vừa thêm bộ Tiệm Cầm Đồ Thời Gian vào kệ chung của nhóm rồi đó!",
+      },
+    ],
+  },
 ];
 
-function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage: (page: string) => void; onOpenShareToChat?: (item?: ContentItem) => void; onOpenPublicProfile?: (username: string) => void }) {
-  const [convList, setConvList] = useState(conversations);
+function ChatPage({
+  setPage,
+  onOpenShareToChat,
+  onOpenPublicProfile,
+  onSaveSharedToLibrary,
+}: {
+  setPage: (page: string) => void;
+  onOpenShareToChat?: (item?: ContentItem) => void;
+  onOpenPublicProfile?: (username: string) => void;
+  onSaveSharedToLibrary?: (item: ContentItem) => void;
+}) {
+  const [convList, setConvList] = useState<ConversationState[]>(initialConversationStates);
   const [active, setActive] = useState(0);
   const [convQuery, setConvQuery] = useState("");
+  const [inChatSearch, setInChatSearch] = useState("");
+  const [showInChatSearch, setShowInChatSearch] = useState(false);
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<string[]>([]);
+  const [stagedAttachments, setStagedAttachments] = useState<ChatAttachment[]>([]);
+  const [showSampleMediaPicker, setShowSampleMediaPicker] = useState(false);
+  const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   // Modal Quản lý bạn bè, lời mời kết bạn đã nhận / đã gửi và tìm kiếm ngay trong trang Nhắn tin
   const [showFriendsModal, setShowFriendsModal] = useState(false);
@@ -2041,16 +2301,494 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupMembers, setNewGroupMembers] = useState<string[]>(["Lan Anh", "Tuấn Minh"]);
 
+  // Các Modal quản lý nhóm nâng cao (Đổi tên nhóm, Đổi Avatar nhóm, Thêm thành viên, Phê duyệt, Đặt biệt danh & Phân quyền, Video Call)
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameInput, setRenameInput] = useState("");
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [customAvatarUrl, setCustomAvatarUrl] = useState("");
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [addMemberQuery, setAddMemberQuery] = useState("");
+  const [selectedToAdd, setSelectedToAdd] = useState<string[]>([]);
+  const [addAsPendingMode, setAddAsPendingMode] = useState(false);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [editingMemberTarget, setEditingMemberTarget] = useState<GroupMember | null>(null);
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [roleInput, setRoleInput] = useState<GroupMemberRole>("MEMBER");
+
+  // State cho Chat Video Nhóm / 1-1 Thời gian thực
+  const [activeCall, setActiveCall] = useState<{
+    mode: "VIDEO" | "AUDIO";
+    isGroup: boolean;
+    title: string;
+    seconds: number;
+    micOn: boolean;
+    camOn: boolean;
+    screenShare: boolean;
+    participants: GroupMember[];
+  } | null>(null);
+
+  const currentConv = convList[active] || convList[0];
+
   const notifyChat = (msg: string) => {
     setChatToast(msg);
-    window.setTimeout(() => setChatToast(""), 3200);
+    window.setTimeout(() => setChatToast(""), 3500);
   };
 
-  const send = () => {
-    if (message.trim()) {
-      setMessages([...messages, message.trim()]);
-      setMessage("");
+  // ĐỒNG BỘ THỜI GIAN THỰC (BroadcastChannel giữa các tab + Live Timer cho Video Call)
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel("personal_library_chat_realtime_v2");
+      channel.onmessage = event => {
+        if (event.data?.type === "SYNC_CONVERSATIONS" && Array.isArray(event.data.payload)) {
+          setConvList(event.data.payload);
+        }
+      };
+    } catch {
+      // Fallback nếu môi trường không hỗ trợ BroadcastChannel
     }
+    return () => {
+      channel?.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeCall) return;
+    const timer = window.setInterval(() => {
+      setActiveCall(prev => (prev ? { ...prev, seconds: prev.seconds + 1 } : null));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeCall !== null]);
+
+  const broadcastAndSetConvList = (updater: (prev: ConversationState[]) => ConversationState[]) => {
+    setConvList(prev => {
+      const next = updater(prev);
+      try {
+        const channel = new BroadcastChannel("personal_library_chat_realtime_v2");
+        channel.postMessage({ type: "SYNC_CONVERSATIONS", payload: next });
+        channel.close();
+      } catch {
+        // Ignore broadcast error
+      }
+      return next;
+    });
+  };
+
+  const nowTimeStr = () => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+
+  const updateCurrentConv = (updater: (conv: ConversationState) => ConversationState) => {
+    const targetId = currentConv.id;
+    broadcastAndSetConvList(prev => prev.map(c => (c.id === targetId ? updater(c) : c)));
+  };
+
+  const appendSystemEvent = (convId: string, eventText: string) => {
+    const sysMsg: ChatMessageItem = {
+      id: `sys-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      senderName: "Hệ thống",
+      senderUser: "@system",
+      senderAvatar: photos.red,
+      isMe: false,
+      time: nowTimeStr(),
+      text: eventText,
+      systemEvent: true,
+    };
+    broadcastAndSetConvList(prev =>
+      prev.map(c =>
+        c.id === convId
+          ? {
+              ...c,
+              text: eventText,
+              messages: [...c.messages, sysMsg],
+            }
+          : c
+      )
+    );
+  };
+
+  // Xử lý chọn tệp / hình ảnh / video từ máy tính
+  const handleFileUpload = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach(file => {
+      const isImg = file.type.startsWith("image/");
+      const isVid = file.type.startsWith("video/");
+      const sizeKB = Math.max(1, Math.round(file.size / 1024));
+      const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`;
+
+      if (isImg) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result);
+          setStagedAttachments(prev => [
+            ...prev,
+            {
+              id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              kind: "IMAGE",
+              name: file.name,
+              url: dataUrl,
+              sizeLabel: `${sizeLabel} · ẢNH`,
+            },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else if (isVid) {
+        const objectUrl = URL.createObjectURL(file);
+        setStagedAttachments(prev => [
+          ...prev,
+          {
+            id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            kind: "VIDEO",
+            name: file.name,
+            url: objectUrl,
+            sizeLabel: `${sizeLabel} · VIDEO`,
+          },
+        ]);
+      } else {
+        const ext = file.name.split(".").pop()?.toUpperCase() || "FILE";
+        setStagedAttachments(prev => [
+          ...prev,
+          {
+            id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            kind: "FILE",
+            name: file.name,
+            url: "#",
+            sizeLabel: `${sizeLabel} · ${ext}`,
+          },
+        ]);
+      }
+    });
+  };
+
+  // Gửi tin nhắn + tệp/hình ảnh/video đồng bộ thời gian thực
+  const send = () => {
+    if (!message.trim() && stagedAttachments.length === 0) return;
+    const textVal = message.trim();
+    const attachmentsToSend = [...stagedAttachments];
+    const msgId = `msg-${Date.now()}`;
+    const targetConvId = currentConv.id;
+
+    const newMsg: ChatMessageItem = {
+      id: msgId,
+      senderName: "Huy Nguyễn",
+      senderUser: "@huynguyen",
+      senderAvatar: photos.red,
+      isMe: true,
+      time: nowTimeStr(),
+      text: textVal || undefined,
+      status: "Đã gửi",
+      attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
+    };
+
+    const summaryText =
+      textVal ||
+      (attachmentsToSend[0]?.kind === "IMAGE"
+        ? "🖼️ Bạn: Đã gửi hình ảnh"
+        : attachmentsToSend[0]?.kind === "VIDEO"
+        ? "🎬 Bạn: Đã gửi video"
+        : `📎 Bạn: Đã gửi tệp ${attachmentsToSend[0]?.name}`);
+
+    const newMediaItems = attachmentsToSend
+      .filter(a => a.kind === "IMAGE" || a.kind === "VIDEO")
+      .map(a => ({
+        id: a.id,
+        kind: a.kind as "IMAGE" | "VIDEO",
+        url: a.url,
+        title: a.name,
+      }));
+
+    broadcastAndSetConvList(prev =>
+      prev.map(c =>
+        c.id === targetConvId
+          ? {
+              ...c,
+              text: summaryText,
+              sharedMedia: [...newMediaItems, ...c.sharedMedia],
+              messages: [...c.messages, newMsg],
+            }
+          : c
+      )
+    );
+
+    setMessage("");
+    setStagedAttachments([]);
+    setShowSampleMediaPicker(false);
+
+    // Đồng bộ trạng thái "Đã nhận" -> "Đã xem" & phản hồi thời gian thực
+    window.setTimeout(() => {
+      broadcastAndSetConvList(prev =>
+        prev.map(c =>
+          c.id === targetConvId
+            ? {
+                ...c,
+                messages: c.messages.map(m => (m.id === msgId ? { ...m, status: "Đã xem" } : m)),
+              }
+            : c
+        )
+      );
+    }, 900);
+
+    // Mô phỏng thành viên trong nhóm đang nhập và trả lời thời gian thực
+    const responder = currentConv.members.find(m => m.user !== "@huynguyen") || {
+      name: "Lan Anh",
+      user: "@lananh",
+      avatar: photos.rain,
+      role: "MEMBER" as GroupMemberRole,
+      online: true,
+    };
+
+    window.setTimeout(() => {
+      setTypingUser(responder.nickname || responder.name);
+    }, 1100);
+
+    window.setTimeout(() => {
+      setTypingUser(null);
+      const replyText =
+        attachmentsToSend.some(a => a.kind === "VIDEO")
+          ? "Video nét căng luôn! Cảnh hành động đoạn này đỉnh thật sự 🔥"
+          : attachmentsToSend.some(a => a.kind === "IMAGE")
+          ? "Ảnh poster đẹp xuất sắc, mình lưu về bộ sưu tập liền đây ✨"
+          : attachmentsToSend.some(a => a.kind === "FILE")
+          ? `Cảm ơn cậu nhé, mình vừa tải tệp “${attachmentsToSend[0].name}” về máy rồi!`
+          : `Đồng ý luôn! Mình cũng đang theo dõi sát bộ này cùng mọi người trong ${currentConv.name}.`;
+
+      const replyMsg: ChatMessageItem = {
+        id: `reply-${Date.now()}`,
+        senderName: responder.name,
+        senderUser: responder.user,
+        senderAvatar: responder.avatar,
+        isMe: false,
+        time: nowTimeStr(),
+        text: replyText,
+      };
+
+      broadcastAndSetConvList(prev =>
+        prev.map(c =>
+          c.id === targetConvId
+            ? {
+                ...c,
+                text: `${responder.nickname || responder.name}: ${replyText}`,
+                messages: [...c.messages, replyMsg],
+              }
+            : c
+        )
+      );
+    }, 2600);
+  };
+
+  // Thu hồi tin nhắn theo thời gian thực
+  const revokeMessage = (msgId: string) => {
+    updateCurrentConv(c => ({
+      ...c,
+      text: "Bạn đã thu hồi một tin nhắn",
+      messages: c.messages.map(m => (m.id === msgId ? { ...m, revoked: true, text: undefined, attachments: undefined } : m)),
+    }));
+    notifyChat("Đã thu hồi tin nhắn theo thời gian thực.");
+  };
+
+  // Đổi tên nhóm thời gian thực
+  const handleConfirmRenameGroup = () => {
+    if (!renameInput.trim()) return;
+    const newName = renameInput.trim();
+    const convId = currentConv.id;
+    updateCurrentConv(c => ({ ...c, name: newName }));
+    appendSystemEvent(convId, `✏️ Huy Nguyễn đã đổi tên nhóm thành “${newName}”.`);
+    setShowRenameModal(false);
+    notifyChat(`Đã đổi tên nhóm thành “${newName}” (đồng bộ thời gian thực).`);
+  };
+
+  // Đổi ảnh đại diện nhóm thời gian thực
+  const handleConfirmChangeAvatar = (newImgUrl: string) => {
+    if (!newImgUrl) return;
+    const convId = currentConv.id;
+    updateCurrentConv(c => ({
+      ...c,
+      img: newImgUrl,
+      sharedMedia: [{ id: `av-${Date.now()}`, kind: "IMAGE", url: newImgUrl, title: "Ảnh đại diện nhóm mới" }, ...c.sharedMedia],
+    }));
+    appendSystemEvent(convId, "🖼️ Huy Nguyễn đã cập nhật ảnh đại diện nhóm mới.");
+    setShowAvatarModal(false);
+    setCustomAvatarUrl("");
+    notifyChat("Đã cập nhật ảnh đại diện nhóm theo thời gian thực!");
+  };
+
+  // Đặt biệt danh & Phân quyền thành viên nhóm thời gian thực
+  const handleSaveMemberSettings = () => {
+    if (!editingMemberTarget) return;
+    const targetUser = editingMemberTarget.user;
+    const trimmedNick = nicknameInput.trim();
+    const nextRole = roleInput;
+    const convId = currentConv.id;
+
+    updateCurrentConv(c => ({
+      ...c,
+      members: c.members.map(m => {
+        if (m.user === targetUser) {
+          return { ...m, nickname: trimmedNick, role: nextRole };
+        }
+        // Nếu chuyển quyền Trưởng nhóm (LEADER) cho người khác thì hạ Trưởng nhóm cũ xuống ADMIN
+        if (nextRole === "LEADER" && m.role === "LEADER" && m.user !== targetUser) {
+          return { ...m, role: "ADMIN" };
+        }
+        return m;
+      }),
+    }));
+
+    const roleLabel = nextRole === "LEADER" ? "Trưởng nhóm 👑" : nextRole === "ADMIN" ? "Phó nhóm 🛡️" : "Thành viên";
+    appendSystemEvent(
+      convId,
+      `🏷️ Đã cập nhật ${editingMemberTarget.name}: Biệt danh “${trimmedNick || "Mặc định"}” · Quyền hạn: ${roleLabel}.`
+    );
+    setEditingMemberTarget(null);
+    notifyChat(`Đã đồng bộ biệt danh & quyền hạn cho ${editingMemberTarget.name}!`);
+  };
+
+  // Xóa thành viên khỏi nhóm
+  const handleRemoveMemberFromGroup = (member: GroupMember) => {
+    const convId = currentConv.id;
+    updateCurrentConv(c => ({
+      ...c,
+      members: c.members.filter(m => m.user !== member.user),
+    }));
+    appendSystemEvent(convId, `👋 ${member.name} (${member.user}) đã được mời ra khỏi nhóm.`);
+    setEditingMemberTarget(null);
+    notifyChat(`Đã xóa ${member.name} khỏi nhóm.`);
+  };
+
+  // Thêm thành viên mới vào nhóm (Trực tiếp hoặc đưa vào danh sách Chờ phê duyệt)
+  const handleAddSelectedMembers = () => {
+    if (selectedToAdd.length === 0) return;
+    const convId = currentConv.id;
+    const usersToAdd = allDirectoryUsers.filter(u => selectedToAdd.includes(u.name));
+
+    if (addAsPendingMode && currentConv.requireApproval) {
+      const newPendings: PendingGroupMember[] = usersToAdd.map(u => ({
+        name: u.name,
+        user: u.user,
+        avatar: u.img,
+        invitedBy: "Thành viên nhóm",
+        requestedAt: "Vừa xong",
+      }));
+      updateCurrentConv(c => ({
+        ...c,
+        pendingMembers: [
+          ...c.pendingMembers,
+          ...newPendings.filter(np => !c.pendingMembers.some(ep => ep.user === np.user)),
+        ],
+      }));
+      appendSystemEvent(convId, `⏳ ${usersToAdd.map(u => u.name).join(", ")} đang chờ Trưởng/Phó nhóm phê duyệt vào nhóm.`);
+      notifyChat(`Đã thêm ${usersToAdd.length} người vào danh sách chờ phê duyệt!`);
+    } else {
+      const newMembers: GroupMember[] = usersToAdd.map(u => ({
+        name: u.name,
+        user: u.user,
+        avatar: u.img,
+        role: "MEMBER",
+        nickname: "",
+        online: u.online,
+      }));
+      updateCurrentConv(c => ({
+        ...c,
+        members: [...c.members, ...newMembers.filter(nm => !c.members.some(em => em.user === nm.user))],
+      }));
+      appendSystemEvent(convId, `🎉 Huy Nguyễn đã thêm ${usersToAdd.map(u => u.name).join(", ")} vào nhóm.`);
+      notifyChat(`Đã thêm ${usersToAdd.length} thành viên mới vào nhóm theo thời gian thực!`);
+    }
+
+    setSelectedToAdd([]);
+    setShowAddMemberModal(false);
+  };
+
+  // Phê duyệt hoặc Từ chối thành viên đang chờ duyệt
+  const handleApprovePendingMember = (pending: PendingGroupMember) => {
+    const convId = currentConv.id;
+    updateCurrentConv(c => ({
+      ...c,
+      pendingMembers: c.pendingMembers.filter(p => p.user !== pending.user),
+      members: c.members.some(m => m.user === pending.user)
+        ? c.members
+        : [
+            ...c.members,
+            {
+              name: pending.name,
+              user: pending.user,
+              avatar: pending.avatar,
+              role: "MEMBER",
+              nickname: "",
+              online: true,
+            },
+          ],
+    }));
+    appendSystemEvent(convId, `✅ Đã phê duyệt ${pending.name} (${pending.user}) trở thành thành viên chính thức của nhóm.`);
+    notifyChat(`Đã phê duyệt ${pending.name} vào nhóm!`);
+  };
+
+  const handleRejectPendingMember = (pending: PendingGroupMember) => {
+    updateCurrentConv(c => ({
+      ...c,
+      pendingMembers: c.pendingMembers.filter(p => p.user !== pending.user),
+    }));
+    notifyChat(`Đã từ chối yêu cầu tham gia nhóm của ${pending.name}.`);
+  };
+
+  const handleApproveAllPending = () => {
+    if (currentConv.pendingMembers.length === 0) return;
+    const convId = currentConv.id;
+    const names = currentConv.pendingMembers.map(p => p.name).join(", ");
+    updateCurrentConv(c => ({
+      ...c,
+      members: [
+        ...c.members,
+        ...c.pendingMembers
+          .filter(p => !c.members.some(m => m.user === p.user))
+          .map(p => ({
+            name: p.name,
+            user: p.user,
+            avatar: p.avatar,
+            role: "MEMBER" as GroupMemberRole,
+            nickname: "",
+            online: true,
+          })),
+      ],
+      pendingMembers: [],
+    }));
+    appendSystemEvent(convId, `✅ Đã phê duyệt tất cả (${names}) vào nhóm.`);
+    notifyChat("Đã phê duyệt toàn bộ thành viên đang chờ!");
+  };
+
+  // Bắt đầu & Kết thúc Chat Video Nhóm / 1-1
+  const startCall = (mode: "VIDEO" | "AUDIO") => {
+    setActiveCall({
+      mode,
+      isGroup: currentConv.group,
+      title: currentConv.name,
+      seconds: 0,
+      micOn: true,
+      camOn: mode === "VIDEO",
+      screenShare: false,
+      participants: currentConv.members,
+    });
+    appendSystemEvent(
+      currentConv.id,
+      `${mode === "VIDEO" ? "📹" : "📞"} Huy Nguyễn đã bắt đầu cuộc gọi ${mode === "VIDEO" ? "Video" : "Thoại"} ${
+        currentConv.group ? "nhóm" : "1-1"
+      }.`
+    );
+  };
+
+  const endCall = () => {
+    if (!activeCall) return;
+    const mins = String(Math.floor(activeCall.seconds / 60)).padStart(2, "0");
+    const secs = String(activeCall.seconds % 60).padStart(2, "0");
+    appendSystemEvent(
+      currentConv.id,
+      `${activeCall.mode === "VIDEO" ? "📹" : "📞"} Cuộc gọi ${activeCall.mode === "VIDEO" ? "Video" : "Thoại"} ${
+        activeCall.isGroup ? "nhóm" : "1-1"
+      } đã kết thúc · Thời lượng ${mins}:${secs}.`
+    );
+    setActiveCall(null);
+    notifyChat(`Đã kết thúc cuộc gọi (${mins}:${secs}).`);
   };
 
   const startDirectChatWith = (personName: string, avatarImg: string) => {
@@ -2058,8 +2796,23 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
     if (existingIdx >= 0) {
       setActive(existingIdx);
     } else {
-      const newConv = { name: personName, text: "Bắt đầu cuộc trò chuyện mới", img: avatarImg, count: 0, group: false };
-      setConvList([newConv, ...convList]);
+      const newConv: ConversationState = {
+        id: `conv-${Date.now()}`,
+        name: personName,
+        text: "Bắt đầu cuộc trò chuyện 1-1 mới",
+        img: avatarImg,
+        count: 0,
+        group: false,
+        requireApproval: false,
+        members: [
+          { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", online: true },
+          { name: personName, user: `@${personName.toLowerCase().replace(/\s+/g, "")}`, avatar: avatarImg, role: "MEMBER", online: true },
+        ],
+        pendingMembers: [],
+        sharedMedia: [],
+        messages: [],
+      };
+      broadcastAndSetConvList(prev => [newConv, ...prev]);
       setActive(0);
     }
     setShowFriendsModal(false);
@@ -2093,14 +2846,44 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
 
   const createNewGroupChat = () => {
     if (!newGroupName.trim()) return;
-    const created = {
+    const pickedMembers: GroupMember[] = [
+      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", nickname: "Trưởng nhóm", online: true },
+      ...allDirectoryUsers
+        .filter(u => newGroupMembers.includes(u.name))
+        .map(u => ({
+          name: u.name,
+          user: u.user,
+          avatar: u.img,
+          role: "MEMBER" as GroupMemberRole,
+          nickname: "",
+          online: u.online,
+        })),
+    ];
+    const created: ConversationState = {
+      id: `group-${Date.now()}`,
       name: newGroupName.trim(),
-      text: `Nhóm mới tạo · ${newGroupMembers.length + 1} thành viên`,
+      text: `Nhóm mới tạo · ${pickedMembers.length} thành viên`,
       img: photos.city,
       count: 0,
       group: true,
+      requireApproval: true,
+      members: pickedMembers,
+      pendingMembers: [],
+      sharedMedia: [],
+      messages: [
+        {
+          id: `sys-init-${Date.now()}`,
+          senderName: "Hệ thống",
+          senderUser: "@system",
+          senderAvatar: photos.red,
+          isMe: false,
+          time: nowTimeStr(),
+          text: `🎉 Nhóm “${newGroupName.trim()}” đã được tạo với ${pickedMembers.length} thành viên.`,
+          systemEvent: true,
+        },
+      ],
     };
-    setConvList([created, ...convList]);
+    broadcastAndSetConvList(prev => [created, ...prev]);
     setActive(0);
     setNewGroupName("");
     setShowCreateGroup(false);
@@ -2116,6 +2899,7 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
     ...friendData,
     { name: "Hoàng Nam", user: "@hoangnam", bio: "Fan cứng Sci-Fi & Cyberpunk.", img: photos.alley, online: true },
     { name: "Khánh Linh", user: "@khanhlinh", bio: "Thích đọc manhwa lãng mạn, giả tưởng.", img: photos.red, online: false },
+    { name: "Bảo Ngọc", user: "@baongoc", bio: "Sưu tầm artbook & nhạc phim Ghibli.", img: photos.lantern, online: true },
   ];
 
   const filteredDirectory = allDirectoryUsers.filter(u =>
@@ -2123,13 +2907,30 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
     (!onlineOnly || u.online)
   );
 
-  const currentConv = convList[active] || convList[0];
+  // Tìm biệt danh & vai trò thực tế của người gửi trong nhóm hiện tại
+  const resolveSenderDisplay = (senderName: string, senderUser: string) => {
+    const found = currentConv.members.find(m => m.user === senderUser || m.name === senderName);
+    if (!found) return { displayName: senderName, role: "MEMBER" as GroupMemberRole, realName: senderName };
+    return {
+      displayName: found.nickname ? `${found.nickname} (${found.name})` : found.name,
+      role: found.role,
+      realName: found.name,
+    };
+  };
+
+  const visibleMessages = currentConv.messages.filter(m =>
+    !inChatSearch.trim() ||
+    (m.text && m.text.toLowerCase().includes(inChatSearch.toLowerCase())) ||
+    m.senderName.toLowerCase().includes(inChatSearch.toLowerCase())
+  );
+
+  const onlineMembersCount = currentConv.members.filter(m => m.online).length;
 
   return <main className="chat-page">
     <aside className="chat-left">
       <div className="chat-profile">
         <div className="avatar"><img src={photos.red} alt="" /><i /></div>
-        <div><b>Tin nhắn</b><span>{friends.length} bạn bè · 12 đang hoạt động</span></div>
+        <div><b>Tin nhắn</b><span>{friends.length} bạn bè · Đồng bộ Realtime ●</span></div>
         <button
           className={`icon-btn ${showFriendsModal ? "active" : ""}`}
           title="Danh sách bạn bè, lời mời kết bạn & tìm kiếm người dùng"
@@ -2154,86 +2955,945 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
       </div>
 
       <div className="conversation-list">
-        {filteredConversations.map((c) => {
-          const realIndex = convList.findIndex(item => item.name === c.name);
-          return <button className={active === realIndex ? "active" : ""} onClick={() => setActive(realIndex)} key={c.name}>
-            <div className="conv-avatar"><img src={c.img} alt="" /><i /></div>
-            <div><b>{c.name}</b><p>{c.text}</p></div>
-            <aside><time>20:2{realIndex}</time>{c.count > 0 && <span>{c.count}</span>}</aside>
-          </button>;
+        {filteredConversations.map(c => {
+          const realIndex = convList.findIndex(item => item.id === c.id);
+          return (
+            <button
+              className={active === realIndex ? "active" : ""}
+              onClick={() => {
+                setActive(realIndex);
+                broadcastAndSetConvList(prev => prev.map((item, idx) => (idx === realIndex ? { ...item, count: 0 } : item)));
+              }}
+              key={c.id}
+            >
+              <div className="conv-avatar"><img src={c.img} alt="" /><i /></div>
+              <div>
+                <b>{c.name}</b>
+                <p>{c.text}</p>
+              </div>
+              <aside>
+                <time>{c.messages[c.messages.length - 1]?.time || "20:20"}</time>
+                {c.count > 0 && <span>{c.count}</span>}
+              </aside>
+            </button>
+          );
         })}
       </div>
     </aside>
 
     <section className="chat-center">
       <header>
-        <div className="conv-avatar"><img src={currentConv.img} alt="" /><i /></div>
+        <div className="conv-avatar" style={{ cursor: "pointer" }} onClick={() => currentConv.group && setShowAvatarModal(true)}>
+          <img src={currentConv.img} alt="" />
+          <i />
+        </div>
         <div>
-          <b>{currentConv.name}</b>
-          <span><i /> {currentConv.group ? "24 thành viên · 8 đang hoạt động" : "Đang hoạt động · Trò chuyện 1-1"}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <b>{currentConv.name}</b>
+            {currentConv.group && (
+              <button
+                type="button"
+                className="inline-rename-trigger"
+                title="Đổi tên nhóm"
+                onClick={() => {
+                  setRenameInput(currentConv.name);
+                  setShowRenameModal(true);
+                }}
+              >
+                <Icon name="edit" size={13} />
+              </button>
+            )}
+            <span className="realtime-pill">● Realtime</span>
+          </div>
+          <span>
+            <i />{" "}
+            {currentConv.group
+              ? `${currentConv.members.length} thành viên · ${onlineMembersCount} đang online${
+                  currentConv.pendingMembers.length > 0 ? ` · ${currentConv.pendingMembers.length} chờ duyệt` : ""
+                }`
+              : "Đang hoạt động · Trò chuyện 1-1"}
+          </span>
         </div>
         <div className="chat-head-actions">
           <button
-            className="icon-btn"
-            title="Quản lý bạn bè & Lời mời kết bạn"
-            onClick={() => setShowFriendsModal(true)}
+            className="call-action-btn audio"
+            title={currentConv.group ? "Gọi thoại nhóm" : "Gọi thoại 1-1"}
+            onClick={() => startCall("AUDIO")}
           >
-            <Icon name="users" size={17} />
-            {receivedRequests.length > 0 && <span className="friend-req-badge">{receivedRequests.length}</span>}
+            📞 <span>Gọi thoại</span>
           </button>
-          <button className="icon-btn" title="Tìm kiếm trong hội thoại"><Icon name="search" /></button>
-          <button className="icon-btn" title="Tùy chọn hội thoại"><Icon name="more" /></button>
+          <button
+            className="call-action-btn video"
+            title={currentConv.group ? "Chat Video Nhóm" : "Chat Video 1-1"}
+            onClick={() => startCall("VIDEO")}
+          >
+            📹 <span>Video Call</span>
+          </button>
+          {currentConv.group && (
+            <button
+              className="icon-btn"
+              title="Thêm thành viên vào nhóm"
+              onClick={() => setShowAddMemberModal(true)}
+            >
+              <Icon name="users" size={17} />
+              {currentConv.pendingMembers.length > 0 && (
+                <span className="friend-req-badge">{currentConv.pendingMembers.length}</span>
+              )}
+            </button>
+          )}
+          <button
+            className={`icon-btn ${showInChatSearch ? "active" : ""}`}
+            title="Tìm kiếm tin nhắn trong hội thoại"
+            onClick={() => setShowInChatSearch(!showInChatSearch)}
+          >
+            <Icon name="search" />
+          </button>
         </div>
       </header>
 
+      {showInChatSearch && (
+        <div className="in-chat-search-bar">
+          <Icon name="search" size={15} />
+          <input
+            value={inChatSearch}
+            onChange={e => setInChatSearch(e.target.value)}
+            placeholder="Nhập từ khóa để lọc tin nhắn trong cuộc trò chuyện này..."
+          />
+          {inChatSearch && <button onClick={() => setInChatSearch("")}>Xóa</button>}
+        </div>
+      )}
+
       <div className="message-stream">
-        {chatToast && <div className="success-banner" style={{ marginBottom: "12px" }}><Icon name="check" /> {chatToast}<button onClick={() => setChatToast("")}>×</button></div>}
-        <div className="day-line"><span>HÔM NAY</span></div>
-        <div className="msg other"><img src={photos.rain} alt="" /><div><span>Lan Anh · 20:14</span><p>Mọi người đã đọc chap 10.5 của Nightfall City chưa?</p></div></div>
-        <div className="msg me"><div><span>Bạn · 20:16</span><p>Vừa đọc xong luôn. Cái kết bất ngờ thật!</p><small>Đã xem</small></div></div>
-        <div className="msg other"><img src={photos.city} alt="" /><div><span>Minh Trần · 20:18</span><p className="revoked">⊘ &nbsp; Tin nhắn đã bị thu hồi</p></div></div>
-        <div className="msg other"><img src={photos.rain} alt="" /><div><span>Lan Anh · 20:20</span><p>Phim này cũng có vibe khá giống đó, để mình chia sẻ nhé.</p>
-          <div className="shared-card"><img src={photos.lantern} alt="" /><div><small>PHIM · 2024</small><b>Thành Phố Không Ngủ</b><div className="mini-rating">★ 4.7 / 5</div><p>Một kiến trúc sư truy tìm những mảnh ký ức bị thất lạc giữa đô thị tương lai.</p><div><Button variant="secondary" onClick={() => setPage("detail")}>Xem chi tiết</Button><Button icon="plus">Lưu vào thư viện</Button></div></div></div>
-        </div></div>
-        <div className="private-card"><Icon name="lock" /><div><b>Nội dung riêng tư chưa được cấp quyền</b><p>Yêu cầu chủ sở hữu cấp quyền để xem nội dung này.</p></div><button onClick={() => notifyChat("Đã gửi yêu cầu cấp quyền truy cập cho chủ sở hữu.")}>Gửi yêu cầu</button></div>
-        {messages.map((m, i) => <div className="msg me" key={i}><div><span>Bạn · vừa xong</span><p>{m}</p><small>Đã gửi</small></div></div>)}
+        {chatToast && (
+          <div className="success-banner" style={{ marginBottom: "12px" }}>
+            <Icon name="check" /> {chatToast}
+            <button onClick={() => setChatToast("")}>×</button>
+          </div>
+        )}
+        <div className="day-line"><span>HÔM NAY · ĐỒNG BỘ THỜI GIAN THỰC</span></div>
+
+        {visibleMessages.map(m => {
+          if (m.systemEvent) {
+            return (
+              <div className="chat-system-event" key={m.id}>
+                <span>{m.text} · <time>{m.time}</time></span>
+              </div>
+            );
+          }
+
+          const senderInfo = resolveSenderDisplay(m.senderName, m.senderUser);
+          const roleBadge =
+            currentConv.group && senderInfo.role === "LEADER"
+              ? "👑 Trưởng nhóm"
+              : currentConv.group && senderInfo.role === "ADMIN"
+              ? "🛡️ Phó nhóm"
+              : "";
+
+          return (
+            <div className={`msg ${m.isMe ? "me" : "other"}`} key={m.id}>
+              {!m.isMe && (
+                <img
+                  src={m.senderAvatar}
+                  alt={m.senderName}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => onOpenPublicProfile?.(m.senderUser)}
+                />
+              )}
+              <div>
+                <span>
+                  {m.isMe ? `Bạn (${senderInfo.displayName})` : senderInfo.displayName}
+                  {roleBadge && <em className={`msg-role-tag ${senderInfo.role.toLowerCase()}`}>{roleBadge}</em>}
+                  {" · "}
+                  {m.time}
+                  {m.isMe && !m.revoked && (
+                    <button
+                      type="button"
+                      className="revoke-inline-btn"
+                      title="Thu hồi tin nhắn"
+                      onClick={() => revokeMessage(m.id)}
+                    >
+                      Thu hồi
+                    </button>
+                  )}
+                </span>
+
+                {m.revoked ? (
+                  <p className="revoked">⊘ &nbsp; Tin nhắn đã bị thu hồi</p>
+                ) : (
+                  <>
+                    {m.text && <p>{m.text}</p>}
+
+                    {/* Hiển thị tệp / hình ảnh / video đính kèm */}
+                    {m.attachments && m.attachments.length > 0 && (
+                      <div className="msg-attachments">
+                        {m.attachments.map(att => {
+                          if (att.kind === "IMAGE") {
+                            return (
+                              <div className="att-image-card" key={att.id} onClick={() => setLightboxImage(att.url)}>
+                                <img src={att.url} alt={att.name} />
+                                <span>🔍 {att.name} ({att.sizeLabel})</span>
+                              </div>
+                            );
+                          }
+                          if (att.kind === "VIDEO") {
+                            return (
+                              <div className="att-video-card" key={att.id}>
+                                <video src={att.url} controls preload="metadata" />
+                                <span>🎬 {att.name} ({att.sizeLabel})</span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="att-file-card" key={att.id}>
+                              <div className="att-file-icon">📄</div>
+                              <div className="att-file-meta">
+                                <b>{att.name}</b>
+                                <small>{att.sizeLabel}</small>
+                              </div>
+                              <a
+                                href={att.url}
+                                download={att.name}
+                                className="btn btn-secondary"
+                                onClick={e => {
+                                  if (att.url === "#") {
+                                    e.preventDefault();
+                                    notifyChat(`Đã bắt đầu tải xuống tệp “${att.name}”!`);
+                                  }
+                                }}
+                              >
+                                Tải xuống
+                              </a>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Hiển thị thẻ chia sẻ truyện/phim */}
+                    {m.sharedContent && (
+                      <div className="shared-card">
+                        <img src={m.sharedContent.img} alt={m.sharedContent.title} />
+                        <div>
+                          <small>{m.sharedContent.typeLabel}</small>
+                          <b>{m.sharedContent.title}</b>
+                          <div className="mini-rating">★ {m.sharedContent.score} / 5</div>
+                          <p>{m.sharedContent.desc}</p>
+                          <div>
+                            <Button variant="secondary" onClick={() => setPage("detail")}>Xem chi tiết</Button>
+                            <Button
+                              icon="plus"
+                              onClick={() => {
+                                onSaveSharedToLibrary?.({
+                                  title: m.sharedContent!.title,
+                                  sub: m.sharedContent!.typeLabel,
+                                  img: m.sharedContent!.img,
+                                  status: "Muốn đọc / xem",
+                                  score: m.sharedContent!.score,
+                                  type: m.sharedContent!.typeLabel.includes("PHIM") ? "Phim" : "Truyện",
+                                  genres: ["Sci-Fi", "Mystery"],
+                                  sharedFrom: {
+                                    name: m.senderName,
+                                    user: m.senderUser,
+                                    sharedAt: `Lưu từ nhóm ${currentConv.name}`,
+                                  },
+                                });
+                                notifyChat(`Đã lưu “${m.sharedContent!.title}” (chia sẻ bởi ${m.senderName}) vào Thư viện của tôi!`);
+                              }}
+                            >
+                              Lưu vào thư viện
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {m.isMe && <small>{m.status || "Đã gửi"}</small>}
+              </div>
+            </div>
+          );
+        })}
+
+        <div className="private-card">
+          <Icon name="lock" />
+          <div>
+            <b>Nội dung riêng tư chưa được cấp quyền</b>
+            <p>Yêu cầu chủ sở hữu cấp quyền để xem nội dung này.</p>
+          </div>
+          <button onClick={() => notifyChat("Đã gửi yêu cầu cấp quyền truy cập cho chủ sở hữu.")}>Gửi yêu cầu</button>
+        </div>
+
+        {typingUser && (
+          <div className="typing-indicator-row">
+            <span className="typing-dots"><i /><i /><i /></span>
+            <b>{typingUser}</b> đang soạn tin nhắn...
+          </div>
+        )}
       </div>
+
+      {/* Thanh xem trước tệp / ảnh / video đính kèm trước khi gửi */}
+      {stagedAttachments.length > 0 && (
+        <div className="staged-attachments-bar">
+          {stagedAttachments.map(att => (
+            <div className="staged-chip" key={att.id}>
+              <span>{att.kind === "IMAGE" ? "🖼️" : att.kind === "VIDEO" ? "🎬" : "📎"}</span>
+              <b>{att.name}</b>
+              <small>({att.sizeLabel})</small>
+              <button
+                type="button"
+                onClick={() => setStagedAttachments(prev => prev.filter(x => x.id !== att.id))}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button type="button" className="clear-staged-btn" onClick={() => setStagedAttachments([])}>
+            Xóa tất cả
+          </button>
+        </div>
+      )}
+
+      {/* Menu chọn nhanh Ảnh / Video / Tệp mẫu nếu không muốn mở hộp thoại File máy tính */}
+      {showSampleMediaPicker && (
+        <div className="sample-media-popover">
+          <div className="sample-media-head">
+            <b>Gửi nhanh Tệp / Hình ảnh / Video</b>
+            <button type="button" onClick={() => setShowSampleMediaPicker(false)}>×</button>
+          </div>
+          <div className="sample-media-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setStagedAttachments(prev => [
+                  ...prev,
+                  {
+                    id: `img-${Date.now()}`,
+                    kind: "IMAGE",
+                    name: "Poster_Cyberpunk_2026.jpg",
+                    url: photos.city,
+                    sizeLabel: "1.2 MB · ẢNH",
+                  },
+                ]);
+                setShowSampleMediaPicker(false);
+              }}
+            >
+              🖼️ Đính kèm Ảnh Poster mẫu
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStagedAttachments(prev => [
+                  ...prev,
+                  {
+                    id: `vid-${Date.now()}`,
+                    kind: "VIDEO",
+                    name: "Trailer_Nightfall_City_Official.mp4",
+                    url: SAMPLE_VIDEO_URL,
+                    sizeLabel: "8.4 MB · VIDEO MP4",
+                  },
+                ]);
+                setShowSampleMediaPicker(false);
+              }}
+            >
+              🎬 Đính kèm Video Trailer mẫu
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStagedAttachments(prev => [
+                  ...prev,
+                  {
+                    id: `file-${Date.now()}`,
+                    kind: "FILE",
+                    name: "Danh_Sach_Truyen_De_Cu_2026.pdf",
+                    url: "#",
+                    sizeLabel: "1.8 MB · PDF",
+                  },
+                ]);
+                setShowSampleMediaPicker(false);
+              }}
+            >
+              📄 Đính kèm Tệp PDF mẫu
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="composer">
         <div className="composer-tools">
-          <button title="Chia sẻ truyện/phim từ thư viện vào khung chat" onClick={() => onOpenShareToChat ? onOpenShareToChat() : setMessages([...messages, "📚 Đã chia sẻ tác phẩm: Nightfall City (★ 4.9/5)"])}>＋</button>
-          <button title="Gửi nhãn dán GIF" onClick={() => setMessages([...messages, "🎬 [GIF] Tuyệt vời quá!"])}>GIF</button>
-          <button title="Thả cảm xúc nhanh" onClick={() => setMessages([...messages, "❤️ Bộ này hay xuất sắc luôn!"])}>♡</button>
+          <button
+            type="button"
+            title="Chia sẻ truyện/phim từ thư viện vào khung chat"
+            onClick={() => (onOpenShareToChat ? onOpenShareToChat() : null)}
+          >
+            ＋
+          </button>
+          <label className="composer-upload-btn" title="Tải lên Hình ảnh, Video hoặc Tệp đính kèm từ máy tính">
+            📎
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*,.pdf,.doc,.docx,.zip,.txt"
+              onChange={e => handleFileUpload(e.target.files)}
+            />
+          </label>
+          <button
+            type="button"
+            title="Chọn nhanh Hình ảnh / Video / Tệp mẫu"
+            onClick={() => setShowSampleMediaPicker(!showSampleMediaPicker)}
+          >
+            🎬
+          </button>
+          <button
+            type="button"
+            title="Gửi nhãn dán GIF"
+            onClick={() => {
+              setMessage("🎬 [GIF] Tuyệt vời quá!");
+            }}
+          >
+            GIF
+          </button>
+          <button
+            type="button"
+            title="Thả cảm xúc nhanh"
+            onClick={() => {
+              setMessage("❤️ Bộ này hay xuất sắc luôn!");
+            }}
+          >
+            ♡
+          </button>
         </div>
         <div className="composer-input">
           <textarea
             value={message}
             onChange={e => setMessage(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder={`Nhập tin nhắn tới ${currentConv.name}...`}
+            onKeyDown={e => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder={`Nhập tin nhắn, gửi ảnh/video/tệp tới ${currentConv.name}...`}
           />
           <span>Enter để gửi</span>
         </div>
-        <button className="send-btn" onClick={send} title="Gửi tin nhắn"><Icon name="send" size={16} /></button>
+        <button className="send-btn" onClick={send} title="Gửi tin nhắn">
+          <Icon name="send" size={16} />
+        </button>
       </div>
     </section>
 
     <aside className="chat-right">
       <div className="group-info">
-        <div className="large-group-avatar"><img src={currentConv.img} alt="" /><button><Icon name="edit" size={15} /></button></div>
+        <div
+          className="large-group-avatar"
+          style={{ cursor: "pointer" }}
+          title="Nhấn để đổi ảnh đại diện nhóm"
+          onClick={() => setShowAvatarModal(true)}
+        >
+          <img src={currentConv.img} alt={currentConv.name} />
+          <button type="button" onClick={e => { e.stopPropagation(); setShowAvatarModal(true); }}>
+            <Icon name="edit" size={15} />
+          </button>
+        </div>
         <h2>{currentConv.name}</h2>
-        <p>{currentConv.group ? "24 thành viên" : "Trò chuyện cá nhân 1-1"}</p>
-        <Button variant="secondary" icon="edit" onClick={() => { if (!currentConv.group) onOpenPublicProfile?.("@lananh"); }}>{currentConv.group ? "Đổi tên nhóm" : "Xem trang cá nhân"}</Button>
+        <p>{currentConv.group ? `${currentConv.members.length} thành viên · Nhóm thảo luận` : "Trò chuyện cá nhân 1-1"}</p>
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "center" }}>
+          {currentConv.group ? (
+            <>
+              <Button
+                variant="secondary"
+                icon="edit"
+                onClick={() => {
+                  setRenameInput(currentConv.name);
+                  setShowRenameModal(true);
+                }}
+              >
+                Đổi tên nhóm
+              </Button>
+              <Button variant="ghost" onClick={() => setShowAvatarModal(true)}>
+                Đổi ảnh nhóm
+              </Button>
+            </>
+          ) : (
+            <Button variant="secondary" icon="users" onClick={() => onOpenPublicProfile?.("@lananh")}>
+              Xem trang cá nhân
+            </Button>
+          )}
+        </div>
       </div>
-      <div className="info-block"><button><span>Ảnh, poster & liên kết đã chia sẻ</span><Icon name="chevron" /></button><div className="media-row"><img src={photos.red} alt="" /><img src={photos.rain} alt="" /><img src={photos.lantern} alt="" /></div></div>
+
+      {/* Khu vực Phê duyệt thành viên nhóm (Chỉ hiển thị cho Nhóm) */}
+      {currentConv.group && (
+        <div className="group-approval-box">
+          <div className="approval-head">
+            <div>
+              <b>Phê duyệt thành viên</b>
+              <small>{currentConv.requireApproval ? "Đang bật kiểm duyệt" : "Vào nhóm tự do"}</small>
+            </div>
+            <Toggle
+              on={currentConv.requireApproval}
+              setOn={val => {
+                updateCurrentConv(c => ({ ...c, requireApproval: val }));
+                appendSystemEvent(
+                  currentConv.id,
+                  `🛡️ Chế độ phê duyệt thành viên mới đã được ${val ? "BẬT" : "TẮT"}.`
+                );
+              }}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="pending-approval-trigger"
+            onClick={() => setShowApprovalModal(true)}
+          >
+            <span>Danh sách chờ phê duyệt</span>
+            <b className={currentConv.pendingMembers.length > 0 ? "has-pending" : ""}>
+              {currentConv.pendingMembers.length} yêu cầu
+            </b>
+          </button>
+        </div>
+      )}
+
+      {/* Ảnh, poster & video đã chia sẻ (tự động cập nhật khi gửi ảnh/video) */}
+      <div className="info-block">
+        <button type="button">
+          <span>Ảnh, video & tệp đã chia sẻ ({currentConv.sharedMedia.length})</span>
+          <Icon name="chevron" />
+        </button>
+        <div className="media-row">
+          {currentConv.sharedMedia.slice(0, 6).map(med => (
+            <img
+              key={med.id}
+              src={med.kind === "VIDEO" ? photos.city : med.url}
+              alt={med.title}
+              title={med.title}
+              style={{ cursor: "pointer" }}
+              onClick={() => setLightboxImage(med.kind === "VIDEO" ? photos.city : med.url)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Danh sách thành viên nhóm kèm Biệt danh & Phân quyền */}
       <div className="members">
-        <div><span>THÀNH VIÊN · 24</span><button onClick={() => setShowFriendsModal(true)}>+ Thêm</button></div>
-        {[["Huy Nguyễn", "Trưởng nhóm", photos.red], ["Lan Anh", "Thành viên", photos.rain], ["Minh Trần", "Thành viên", photos.city], ["Thu Hà", "Thành viên", photos.lantern]].map((m, i) => <div className="member" key={m[0]}><div className="conv-avatar"><img src={m[2]} alt="" /><i /></div><div><b>{m[0]}</b><span className={i === 0 ? "leader" : ""}>{m[1]}</span></div><button><Icon name="more" size={16} /></button></div>)}
+        <div>
+          <span>THÀNH VIÊN · {currentConv.members.length}</span>
+          {currentConv.group && (
+            <button type="button" onClick={() => setShowAddMemberModal(true)}>
+              + Thêm
+            </button>
+          )}
+        </div>
+        {currentConv.members.map(m => (
+          <div className="member" key={m.user}>
+            <div className="conv-avatar" style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(m.user)}>
+              <img src={m.avatar} alt={m.name} />
+              <i style={{ background: m.online ? "#36d092" : "#625b6b" }} />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <b style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {m.nickname ? `${m.nickname}` : m.name}
+              </b>
+              <span className={m.role === "LEADER" ? "leader" : m.role === "ADMIN" ? "deputy-role" : ""}>
+                {m.role === "LEADER" ? "👑 Trưởng nhóm" : m.role === "ADMIN" ? "🛡️ Phó nhóm" : "Thành viên"}
+                {m.nickname ? ` · ${m.name}` : ""}
+              </span>
+            </div>
+            <button
+              type="button"
+              title="Đặt biệt danh & Phân quyền thành viên"
+              onClick={() => {
+                setEditingMemberTarget(m);
+                setNicknameInput(m.nickname || "");
+                setRoleInput(m.role);
+              }}
+            >
+              <Icon name="more" size={16} />
+            </button>
+          </div>
+        ))}
       </div>
-      <button className="leave-group">{currentConv.group ? "Rời khỏi nhóm" : "Xóa lịch sử trò chuyện"}</button>
+
+      <button
+        className="leave-group"
+        onClick={() => {
+          if (currentConv.group) {
+            notifyChat(`Bạn đã rời khỏi nhóm “${currentConv.name}”.`);
+          } else {
+            updateCurrentConv(c => ({ ...c, messages: [] }));
+            notifyChat("Đã xóa lịch sử trò chuyện.");
+          }
+        }}
+      >
+        {currentConv.group ? "Rời khỏi nhóm" : "Xóa lịch sử trò chuyện"}
+      </button>
     </aside>
 
-    {/* MODAL DANH SÁCH BẠN BÈ, LỜI MỜI ĐÃ NHẬN / ĐÃ GỬI & TÌM KIẾM THEO TÊN (MỞ KHI NHẤN ICON NGƯỜI + DẤU CỘNG) */}
+    {/* MODAL 1: ĐỔI TÊN NHÓM THỜI GIAN THỰC */}
+    {showRenameModal && (
+      <div className="modal-backdrop" onMouseDown={() => setShowRenameModal(false)}>
+        <div className="share-modal admin-modal" style={{ maxWidth: "440px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>CÀI ĐẶT NHÓM</span>
+              <h2>Đổi tên nhóm trò chuyện</h2>
+              <p>Tên mới sẽ được cập nhật đồng bộ theo thời gian thực cho toàn bộ thành viên.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setShowRenameModal(false)}><Icon name="x" /></button>
+          </div>
+          <label className="admin-field">
+            <span>Tên nhóm mới *</span>
+            <input
+              value={renameInput}
+              onChange={e => setRenameInput(e.target.value)}
+              placeholder="Nhập tên nhóm mới..."
+              autoFocus
+            />
+          </label>
+          <div className="modal-actions">
+            <div />
+            <div>
+              <Button variant="ghost" onClick={() => setShowRenameModal(false)}>Hủy</Button>
+              <Button icon="check" onClick={handleConfirmRenameGroup}>Lưu tên nhóm</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL 2: ĐỔI ẢNH ĐẠI DIỆN NHÓM THỜI GIAN THỰC */}
+    {showAvatarModal && (
+      <div className="modal-backdrop" onMouseDown={() => setShowAvatarModal(false)}>
+        <div className="share-modal admin-modal" style={{ maxWidth: "480px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>ẢNH ĐẠI DIỆN NHÓM</span>
+              <h2>Đổi ảnh đại diện “{currentConv.name}”</h2>
+              <p>Tải ảnh từ máy tính hoặc chọn nhanh từ bộ sưu tập chủ đề Anime & Điện ảnh.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setShowAvatarModal(false)}><Icon name="x" /></button>
+          </div>
+
+          <div className="avatar-preset-grid">
+            {[photos.city, photos.red, photos.rain, photos.lantern, photos.alley, photos.street, photos.hero].map((pUrl, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className={`avatar-preset-item ${currentConv.img === pUrl ? "active" : ""}`}
+                onClick={() => handleConfirmChangeAvatar(pUrl)}
+              >
+                <img src={pUrl} alt={`Preset ${idx + 1}`} />
+              </button>
+            ))}
+          </div>
+
+          <label className="admin-field" style={{ marginTop: "12px" }}>
+            <span>Hoặc tải ảnh lên từ thiết bị của bạn</span>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => handleConfirmChangeAvatar(String(reader.result));
+                reader.readAsDataURL(file);
+              }}
+            />
+          </label>
+
+          <label className="admin-field" style={{ marginTop: "8px" }}>
+            <span>Hoặc dán đường dẫn URL hình ảnh</span>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                value={customAvatarUrl}
+                onChange={e => setCustomAvatarUrl(e.target.value)}
+                placeholder="https://..."
+                style={{ flex: 1 }}
+              />
+              <Button onClick={() => handleConfirmChangeAvatar(customAvatarUrl)}>Áp dụng</Button>
+            </div>
+          </label>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL 3: ĐẶT BIỆT DANH & PHÂN QUYỀN THÀNH VIÊN NHÓM */}
+    {editingMemberTarget && (
+      <div className="modal-backdrop" onMouseDown={() => setEditingMemberTarget(null)}>
+        <div className="share-modal admin-modal" style={{ maxWidth: "460px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>BIỆT DANH & PHÂN QUYỀN NHÓM</span>
+              <h2>{editingMemberTarget.name} ({editingMemberTarget.user})</h2>
+              <p>Chỉnh sửa biệt danh hiển thị trong nhóm và cấp quyền quản trị viên nhóm.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setEditingMemberTarget(null)}><Icon name="x" /></button>
+          </div>
+
+          <label className="admin-field">
+            <span>Biệt danh trong nhóm (Nickname)</span>
+            <input
+              value={nicknameInput}
+              onChange={e => setNicknameInput(e.target.value)}
+              placeholder={`Mặc định: ${editingMemberTarget.name}`}
+            />
+          </label>
+
+          <label className="admin-field" style={{ marginTop: "10px" }}>
+            <span>Phân quyền trong nhóm</span>
+            <select value={roleInput} onChange={e => setRoleInput(e.target.value as GroupMemberRole)}>
+              <option value="LEADER">👑 Trưởng nhóm (Toàn quyền quản lý nhóm)</option>
+              <option value="ADMIN">🛡️ Phó nhóm / Quản trị viên (Duyệt & thêm thành viên, đổi thông tin nhóm)</option>
+              <option value="MEMBER">👤 Thành viên (Gửi tin nhắn, ảnh, video, gọi nhóm)</option>
+            </select>
+          </label>
+
+          <div className="modal-actions" style={{ marginTop: "14px" }}>
+            {editingMemberTarget.user !== "@huynguyen" ? (
+              <Button variant="danger" onClick={() => handleRemoveMemberFromGroup(editingMemberTarget)}>
+                Mời ra khỏi nhóm
+              </Button>
+            ) : <div />}
+            <div>
+              <Button variant="ghost" onClick={() => setEditingMemberTarget(null)}>Hủy</Button>
+              <Button icon="check" onClick={handleSaveMemberSettings}>Lưu thay đổi</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL 4: THÊM THÀNH VIÊN VÀO NHÓM */}
+    {showAddMemberModal && (
+      <div className="modal-backdrop" onMouseDown={() => setShowAddMemberModal(false)}>
+        <div className="share-modal admin-modal" style={{ maxWidth: "500px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>THÀNH VIÊN NHÓM</span>
+              <h2>Thêm thành viên vào “{currentConv.name}”</h2>
+              <p>Chọn bạn bè hoặc tìm kiếm người dùng để mời vào nhóm trò chuyện.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setShowAddMemberModal(false)}><Icon name="x" /></button>
+          </div>
+
+          <label className="admin-field">
+            <span>Tìm kiếm người dùng theo tên hoặc @username</span>
+            <input
+              value={addMemberQuery}
+              onChange={e => setAddMemberQuery(e.target.value)}
+              placeholder="Nhập tên bạn bè..."
+            />
+          </label>
+
+          <div className="assign-list">
+            {allDirectoryUsers
+              .filter(u => `${u.name} ${u.user}`.toLowerCase().includes(addMemberQuery.toLowerCase()))
+              .map(u => {
+                const alreadyInGroup = currentConv.members.some(m => m.user === u.user || m.name === u.name);
+                const alreadyPending = currentConv.pendingMembers.some(p => p.user === u.user || p.name === u.name);
+                const picked = selectedToAdd.includes(u.name);
+                return (
+                  <div className={`assign-row ${picked ? "assigned" : ""}`} key={u.user}>
+                    <div className="assign-row-left">
+                      <img src={u.img} alt={u.name} style={{ width: "36px", height: "36px", borderRadius: "50%" }} />
+                      <div>
+                        <b>{u.name} <small style={{ color: "#9c70f8" }}>{u.user}</small></b>
+                        <span>{u.bio}</span>
+                      </div>
+                    </div>
+                    {alreadyInGroup ? (
+                      <span className="badge-pill active">Đã trong nhóm</span>
+                    ) : alreadyPending ? (
+                      <span className="badge-pill pending">Đang chờ duyệt</span>
+                    ) : (
+                      <Button
+                        variant={picked ? "primary" : "secondary"}
+                        icon={picked ? "check" : "plus"}
+                        onClick={() =>
+                          setSelectedToAdd(prev =>
+                            prev.includes(u.name) ? prev.filter(x => x !== u.name) : [...prev, u.name]
+                          )
+                        }
+                      >
+                        {picked ? "Đã chọn" : "Chọn"}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+
+          {currentConv.requireApproval && (
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "10px", color: "#b7acc7", marginTop: "6px" }}>
+              <input
+                type="checkbox"
+                checked={addAsPendingMode}
+                onChange={e => setAddAsPendingMode(e.target.checked)}
+              />
+              Đưa vào danh sách <b>Chờ phê duyệt</b> (mô phỏng lời mời từ thành viên thường)
+            </label>
+          )}
+
+          <div className="modal-actions">
+            <span style={{ fontSize: "10px", color: "#9e93ad" }}>Đã chọn {selectedToAdd.length} người</span>
+            <div>
+              <Button variant="ghost" onClick={() => setShowAddMemberModal(false)}>Hủy</Button>
+              <Button icon="plus" onClick={handleAddSelectedMembers}>
+                {addAsPendingMode && currentConv.requireApproval ? "Gửi yêu cầu duyệt" : "Thêm vào nhóm ngay"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL 5: PHÊ DUYỆT THÀNH VIÊN NHÓM */}
+    {showApprovalModal && (
+      <div className="modal-backdrop" onMouseDown={() => setShowApprovalModal(false)}>
+        <div className="share-modal admin-modal" style={{ maxWidth: "520px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>KIỂM DUYỆT THÀNH VIÊN</span>
+              <h2>Phê duyệt thành viên ({currentConv.pendingMembers.length})</h2>
+              <p>Chỉ Trưởng nhóm và Phó nhóm mới có quyền duyệt hoặc từ chối yêu cầu tham gia.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setShowApprovalModal(false)}><Icon name="x" /></button>
+          </div>
+
+          {currentConv.pendingMembers.length === 0 ? (
+            <div className="empty-results" style={{ height: "150px" }}>
+              <Icon name="check" size={26} />
+              <b>Không có yêu cầu nào đang chờ phê duyệt</b>
+              <p>Tất cả yêu cầu tham gia nhóm “{currentConv.name}” đã được xử lý.</p>
+            </div>
+          ) : (
+            <div className="assign-list">
+              {currentConv.pendingMembers.map(p => (
+                <div className="assign-row" key={p.user}>
+                  <div className="assign-row-left">
+                    <img src={p.avatar} alt={p.name} style={{ width: "38px", height: "38px", borderRadius: "50%" }} />
+                    <div>
+                      <b>{p.name} <small style={{ color: "#9c70f8" }}>{p.user}</small></b>
+                      <span>Được mời bởi {p.invitedBy} · {p.requestedAt}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <Button icon="check" onClick={() => handleApprovePendingMember(p)}>Duyệt</Button>
+                    <Button variant="danger" onClick={() => handleRejectPendingMember(p)}>Từ chối</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="modal-actions">
+            {currentConv.pendingMembers.length > 0 ? (
+              <Button variant="secondary" icon="check" onClick={handleApproveAllPending}>
+                Duyệt tất cả ({currentConv.pendingMembers.length})
+              </Button>
+            ) : <div />}
+            <Button onClick={() => setShowApprovalModal(false)}>Đóng</Button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL 6: CHAT VIDEO NHÓM / 1-1 THỜI GIAN THỰC */}
+    {activeCall && (
+      <div className="modal-backdrop">
+        <div className="video-call-modal" onMouseDown={e => e.stopPropagation()}>
+          <div className="video-call-header">
+            <div>
+              <span className="live-call-badge">● TRỰC TIẾP · {activeCall.isGroup ? "CUỘC GỌI NHÓM" : "CUỘC GỌI 1-1"}</span>
+              <h3>{activeCall.title}</h3>
+            </div>
+            <div className="call-timer">
+              {String(Math.floor(activeCall.seconds / 60)).padStart(2, "0")}:
+              {String(activeCall.seconds % 60).padStart(2, "0")}
+            </div>
+          </div>
+
+          <div className={`video-call-grid ${activeCall.isGroup ? "group-grid" : "one-on-one-grid"}`}>
+            {activeCall.participants.map((part, idx) => {
+              const isSelf = part.user === "@huynguyen";
+              return (
+                <div className={`video-participant-tile ${idx === 0 ? "speaking" : ""}`} key={part.user}>
+                  {activeCall.camOn || !isSelf ? (
+                    <img className="video-feed-sim" src={part.avatar} alt={part.name} />
+                  ) : (
+                    <div className="camera-off-placeholder">
+                      <img src={part.avatar} alt={part.name} />
+                      <span>Đã tắt Camera</span>
+                    </div>
+                  )}
+                  {activeCall.screenShare && isSelf && (
+                    <div className="screen-share-overlay">🖥️ Đang chia sẻ màn hình xem phim/truyện chung</div>
+                  )}
+                  <div className="participant-label">
+                    <b>{part.nickname || part.name} {isSelf && "(Bạn)"}</b>
+                    <span>{part.role === "LEADER" ? "👑" : part.role === "ADMIN" ? "🛡️" : ""} {isSelf && !activeCall.micOn ? "🔇 Đã tắt Mic" : "🎙️ Đang nói"}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="video-call-controls">
+            <button
+              type="button"
+              className={`call-ctrl-btn ${!activeCall.micOn ? "muted" : ""}`}
+              onClick={() => setActiveCall({ ...activeCall, micOn: !activeCall.micOn })}
+            >
+              {activeCall.micOn ? "🎤 Tắt Mic" : "🔇 Bật Mic"}
+            </button>
+            <button
+              type="button"
+              className={`call-ctrl-btn ${!activeCall.camOn ? "muted" : ""}`}
+              onClick={() => setActiveCall({ ...activeCall, camOn: !activeCall.camOn })}
+            >
+              {activeCall.camOn ? "📹 Tắt Camera" : "🚫 Bật Camera"}
+            </button>
+            <button
+              type="button"
+              className={`call-ctrl-btn ${activeCall.screenShare ? "active-share" : ""}`}
+              onClick={() => setActiveCall({ ...activeCall, screenShare: !activeCall.screenShare })}
+            >
+              🖥️ {activeCall.screenShare ? "Dừng chia sẻ màn hình" : "Chia sẻ màn hình"}
+            </button>
+            {activeCall.isGroup && (
+              <button
+                type="button"
+                className="call-ctrl-btn"
+                onClick={() => setShowAddMemberModal(true)}
+              >
+                ➕ Mời thêm người
+              </button>
+            )}
+            <button type="button" className="call-ctrl-btn hangup" onClick={endCall}>
+              📞 Kết thúc cuộc gọi
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* LIGHTBOX XEM ẢNH PHÓNG TO */}
+    {lightboxImage && (
+      <div className="modal-backdrop" onMouseDown={() => setLightboxImage(null)}>
+        <div className="lightbox-box" onMouseDown={e => e.stopPropagation()}>
+          <img src={lightboxImage} alt="Xem phóng to" />
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "10px" }}>
+            <Button variant="secondary" onClick={() => setLightboxImage(null)}>Đóng</Button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL DANH SÁCH BẠN BÈ, LỜI MỜI ĐÃ NHẬN / ĐÃ GỬI & TÌM KIẾM THEO TÊN */}
     {showFriendsModal && <div className="modal-backdrop" onMouseDown={() => setShowFriendsModal(false)}>
       <div className="chat-friends-modal" onMouseDown={e => e.stopPropagation()}>
         <div className="modal-head" style={{ marginBottom: "12px" }}>
@@ -2247,7 +3907,6 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
 
         {chatToast && <div className="success-banner" style={{ marginBottom: "10px" }}><Icon name="check" /> {chatToast}<button onClick={() => setChatToast("")}>×</button></div>}
 
-        {/* Thanh tìm kiếm theo tên hoặc @username */}
         <div className="find-toolbar" style={{ marginBottom: "10px" }}>
           <label className="friend-search">
             <Icon name="search" size={16} />
@@ -2263,7 +3922,6 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
           </label>
         </div>
 
-        {/* Các tab: Danh sách bạn bè | Lời mời đã nhận | Lời mời đã gửi | Tìm kiếm cộng đồng */}
         <div className="chat-friends-tabs">
           <button className={friendModalTab === "friends" ? "active" : ""} onClick={() => setFriendModalTab("friends")}>
             Danh sách bạn bè <span>{friends.length}</span>
@@ -2279,7 +3937,6 @@ function ChatPage({ setPage, onOpenShareToChat, onOpenPublicProfile }: { setPage
           </button>
         </div>
 
-        {/* Nội dung danh sách theo từng tab */}
         <div className="chat-friends-body">
           {friendModalTab === "friends" && <>
             {filteredDirectory.filter(u => friends.includes(u.name)).map(u => <div className="chat-friend-item" key={u.name}>
@@ -3371,7 +5028,7 @@ function ShareToChatModal({
   onSharedSuccess: (targetChat: string, item: ContentItem) => void;
 }) {
   const [selectedTitle, setSelectedTitle] = useState(initialItem?.title || items[0]?.title || "Nightfall City");
-  const [selectedConv, setSelectedConv] = useState(conversations[0].name);
+  const [selectedConv, setSelectedConv] = useState(initialConversationStates[0].name);
   const [note, setNote] = useState("Bộ này cuốn lắm, cậu thử xem nhé!");
   const [permissionMode, setPermissionMode] = useState<"VIEW_ONLY" | "ALLOW_COPY">("ALLOW_COPY");
 
@@ -3409,7 +5066,7 @@ function ShareToChatModal({
         <label className="admin-field">
           <span>Gửi đến cuộc trò chuyện (1-1 / Nhóm)</span>
           <select value={selectedConv} onChange={e => setSelectedConv(e.target.value)}>
-            {conversations.map(c => <option key={c.name} value={c.name}>{c.group ? "👥 Nhóm: " : "👤 Bạn bè: "}{c.name}</option>)}
+            {initialConversationStates.map(c => <option key={c.name} value={c.name}>{c.group ? "👥 Nhóm: " : "👤 Bạn bè: "}{c.name}</option>)}
           </select>
         </label>
         <label className="admin-field">
@@ -3700,6 +5357,15 @@ export default function App() {
         setPage={navigate}
         onOpenShareToChat={item => setShareModalItem(item ?? null)}
         onOpenPublicProfile={openPublicProfile}
+        onSaveSharedToLibrary={item => {
+          setAllContents(prev => {
+            const exists = prev.some(x => x.title === item.title);
+            if (exists) {
+              return prev.map(x => (x.title === item.title ? { ...x, sharedFrom: item.sharedFrom ?? x.sharedFrom } : x));
+            }
+            return [item, ...prev];
+          });
+        }}
       />
     )}
     {page === "account" && <AccountPage setPage={navigate} />}
