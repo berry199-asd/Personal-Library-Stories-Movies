@@ -40,6 +40,26 @@ public class Message {
     @Column(name = "message_text", columnDefinition = "TEXT")
     private String messageText;
 
+    @Builder.Default
+    @Column(name = "is_encrypted", nullable = false)
+    private Boolean isEncrypted = true;
+
+    @Builder.Default
+    @Column(name = "encryption_algorithm", length = 40)
+    private String encryptionAlgorithm = "E2EE-AES-256-GCM";
+
+    @Column(name = "cipher_text", columnDefinition = "TEXT")
+    private String cipherText;
+
+    @Column(name = "encryption_iv", length = 64)
+    private String encryptionIv;
+
+    @Column(name = "key_fingerprint", length = 128)
+    private String keyFingerprint;
+
+    @Column(name = "sha256_hash", length = 128)
+    private String sha256Hash;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shared_content_id")
     private Content sharedContent;

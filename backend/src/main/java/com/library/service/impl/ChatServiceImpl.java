@@ -13,6 +13,7 @@ import com.library.enums.MessageType;
 import com.library.exception.BadRequestException;
 import com.library.exception.ResourceNotFoundException;
 import com.library.repository.*;
+import com.library.security.Aes256CryptoUtil;
 import com.library.service.ChatService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,6 +33,7 @@ public class ChatServiceImpl implements ChatService {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final ContentRepository contentRepository;
+    private final Aes256CryptoUtil aes256CryptoUtil;
 
     @Override
     @Transactional(readOnly = true)
@@ -69,7 +71,7 @@ public class ChatServiceImpl implements ChatService {
         ConversationMember ownerMember = ConversationMember.builder()
                 .conversation(saved)
                 .user(creator)
-                .memberRole(MemberRole.OWNER)
+                .memberRole(MemberRole.LEADER)
                 .build();
         saved.getMembers().add(memberRepository.save(ownerMember));
 
@@ -122,11 +124,27 @@ public class ChatServiceImpl implements ChatService {
                 ? request.getMessageType()
                 : (sharedContent != null ? MessageType.CONTENT_SHARE : MessageType.TEXT);
 
+        String cipherText = request.getCipherText();
+        String iv = request.getEncryptionIv();
+        String sha256 = request.getSha256Hash();
+        if ((cipherText == null || cipherText.isBlank()) && request.getMessageText() != null) {
+            Aes256CryptoUtil.EncryptedPayload encrypted = aes256CryptoUtil.encrypt(request.getMessageText());
+            cipherText = encrypted.cipherText();
+            iv = encrypted.iv();
+            sha256 = encrypted.sha256Hash();
+        }
+
         Message message = Message.builder()
                 .conversation(conversation)
                 .sender(sender)
                 .messageType(type)
                 .messageText(request.getMessageText())
+                .isEncrypted(request.getIsEncrypted() != null ? request.getIsEncrypted() : true)
+                .encryptionAlgorithm(request.getEncryptionAlgorithm() != null ? request.getEncryptionAlgorithm() : "E2EE-AES-256-GCM")
+                .cipherText(cipherText)
+                .encryptionIv(iv)
+                .keyFingerprint(request.getKeyFingerprint())
+                .sha256Hash(sha256)
                 .sharedContent(sharedContent)
                 .status(MessageStatus.SENT)
                 .isRevoked(false)

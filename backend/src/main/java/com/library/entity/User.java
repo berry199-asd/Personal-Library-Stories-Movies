@@ -50,6 +50,20 @@ public class User {
     @Column(nullable = false, length = 20)
     private UserStatus status = UserStatus.ACTIVE;
 
+    @Builder.Default
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = false;
+
+    @Builder.Default
+    @Column(name = "two_factor_enabled", nullable = false)
+    private Boolean twoFactorEnabled = false;
+
+    @Column(name = "e2ee_public_key", columnDefinition = "TEXT")
+    private String e2eePublicKey;
+
+    @Column(name = "e2ee_key_fingerprint", length = 128)
+    private String e2eeKeyFingerprint;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
