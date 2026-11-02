@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode, type CSSProperties } from "react";
+import { useState, useEffect, useMemo, type ReactNode, type CSSProperties } from "react";
 
 const photos = {
   hero: "https://images.unsplash.com/photo-1501769752-a59efa2298ce?auto=format&fit=crop&w=1800&q=85",
@@ -238,13 +238,152 @@ const defaultChaptersFor = (_title: string, _isMovie: boolean): PublishedChapter
 // Không tạo sẵn dữ liệu giả — người dùng sẽ tự thêm truyện/phim và tự kiểm tra
 const libraryItems: ContentItem[] = [];
 
-type CustomCategoryItem = {
+export type UserProfile = {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  password?: string;
+  avatar: string;
+  role: "USER" | "ADMIN";
+  bio?: string;
+  joinedDate?: string;
+  userId?: string;
+};
+
+const CURRENT_USER_STORAGE_KEY = "pl_current_user_v2";
+const REGISTERED_ACCOUNTS_KEY = "pl_registered_accounts_v2";
+
+export function loadSavedCurrentUser(): UserProfile {
+  try {
+    const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.username && parsed.name) {
+        if (
+          (parsed.email && parsed.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
+          (parsed.username && parsed.username.toLowerCase().includes("lechauanh")) ||
+          (parsed.name && parsed.name.toLowerCase().includes("lechauanh")) ||
+          (parsed.username && parsed.username.toLowerCase().includes("anhquyphi")) ||
+          (parsed.name && parsed.name.toLowerCase().includes("anh quý phi"))
+        ) {
+          parsed.name = "Anh Quý Phi";
+          parsed.username = "@anhquyphi";
+          parsed.role = "ADMIN";
+        }
+        return parsed;
+      }
+    }
+  } catch {}
+  return {
+    id: "usr-" + Date.now().toString(36),
+    name: "Anh Quý Phi",
+    username: "@anhquyphi",
+    email: "lechauanh.12a5.tnd@gmail.com",
+    password: "doraemon1234@",
+    avatar: photos.red,
+    role: "ADMIN",
+    bio: "Quản trị viên hệ thống Mê Truyện Stories Unbound.",
+    joinedDate: "Hôm nay",
+    userId: "USR-3604",
+  };
+}
+
+export function saveCurrentUserToStorage(user: UserProfile) {
+  try {
+    window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(user));
+  } catch {}
+}
+
+export function loadSavedAccounts(): UserProfile[] {
+  try {
+    const raw = window.localStorage.getItem(REGISTERED_ACCOUNTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map(acc => {
+          if (
+            (acc.email && acc.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
+            (acc.username && acc.username.toLowerCase().includes("lechauanh")) ||
+            (acc.username && acc.username.toLowerCase().includes("anhquyphi")) ||
+            (acc.name && acc.name.toLowerCase().includes("anh quý phi"))
+          ) {
+            return { ...acc, name: "Anh Quý Phi", username: "@anhquyphi", role: "ADMIN" };
+          }
+          return acc;
+        });
+      }
+    }
+  } catch {}
+  return [];
+}
+
+export function saveAccountToStorage(acc: UserProfile) {
+  try {
+    const list = loadSavedAccounts().filter(
+      a => a.email.toLowerCase() !== acc.email.toLowerCase() &&
+           a.username.toLowerCase() !== acc.username.toLowerCase()
+    );
+    list.push(acc);
+    window.localStorage.setItem(REGISTERED_ACCOUNTS_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+let activeCurrentUserProfile: UserProfile = loadSavedCurrentUser();
+
+export function getActiveUser(): UserProfile {
+  return activeCurrentUserProfile;
+}
+
+export function setActiveCurrentUserProfile(user: UserProfile) {
+  activeCurrentUserProfile = user;
+  saveCurrentUserToStorage(user);
+}
+
+export function getCurrentUserHandle(): string {
+  const p = getActiveUser();
+  return "@" + (p?.username ? p.username.replace(/^@/, '') : "anhquyphi");
+}
+
+export function getCurrentUserName(): string {
+  return getActiveUser()?.name || "Anh Quý Phi";
+}
+
+export const CURRENT_USER_HANDLE = "@anhquyphi";
+export const CURRENT_USER_NAME = "Anh Quý Phi";
+
+export function isUserItemOwner(item: ContentItem, user?: UserProfile): boolean {
+  const u = user || getActiveUser();
+  if (!u || !item.createdBy) return false;
+  const creatorUser = (item.createdBy.user || "").trim().toLowerCase().replace(/^@/, '');
+  const myUser = (u.username || "").trim().toLowerCase().replace(/^@/, '');
+  if (!creatorUser || !myUser) return false;
+  return creatorUser === myUser;
+}
+
+export function canManagePublishedContent(
+  item: ContentItem,
+  userRole: "USER" | "ADMIN",
+  user?: UserProfile
+): boolean {
+  if (userRole === "ADMIN") return true;
+  return isUserItemOwner(item, user);
+}
+
+export function getUserStorageKey(prefix: string, user?: UserProfile): string {
+  const u = user || getActiveUser();
+  const rawKey = u?.username || u?.email || "guest";
+  const cleanKey = rawKey.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  return `${prefix}_${cleanKey}`;
+}
+
+export type CustomCategoryItem = {
   name: string;
   icon: string;
   description: string;
 };
 
-type PersonalItemMeta = {
+export type PersonalItemMeta = {
   note: string;
   rating: number;
   readingStatus: string;
@@ -252,42 +391,134 @@ type PersonalItemMeta = {
   privacy: "PRIVATE" | "SHARED" | "PEOPLE";
 };
 
-function loadSavedCategories(): CustomCategoryItem[] {
+export function loadUserSavedTitles(user?: UserProfile): string[] {
   try {
-    const raw = window.localStorage.getItem("pl_custom_categories_v1");
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+    const key = getUserStorageKey("pl_user_lib", user);
+    const raw = window.localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  const u = user || getActiveUser();
+  const isMain = (u.email && u.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
+                 (u.username && u.username.toLowerCase().includes("anhquyphi"));
+  if (isMain) {
+    return ["PAST KISS", "Bạn Trai Thế Này Thì Có Vấn Đề Gì Sao?", "Cẩn thận thú dữ"];
   }
+  return [];
+}
+
+export function saveUserSavedTitles(titles: string[], user?: UserProfile) {
+  try {
+    const key = getUserStorageKey("pl_user_lib", user);
+    window.localStorage.setItem(key, JSON.stringify(titles));
+  } catch {}
+}
+
+export function loadUserProgress(user?: UserProfile): Record<string, number> {
+  try {
+    const key = getUserStorageKey("pl_user_prog", user);
+    const raw = window.localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch {}
+  return {};
+}
+
+export function saveUserProgress(prog: Record<string, number>, user?: UserProfile) {
+  try {
+    const key = getUserStorageKey("pl_user_prog", user);
+    window.localStorage.setItem(key, JSON.stringify(prog));
+  } catch {}
+}
+
+export function loadUserFavorites(user?: UserProfile): string[] {
+  try {
+    const key = getUserStorageKey("pl_user_fav", user);
+    const raw = window.localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  const u = user || getActiveUser();
+  const isMain = (u.email && u.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
+                 (u.username && u.username.toLowerCase().includes("anhquyphi"));
+  if (isMain) {
+    try {
+      const oldRaw = window.localStorage.getItem("pl_favorites_v1");
+      if (oldRaw) {
+        const parsed = JSON.parse(oldRaw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return ["PAST KISS"];
+  }
+  return [];
+}
+
+export function saveUserFavorites(favs: string[], user?: UserProfile) {
+  try {
+    const key = getUserStorageKey("pl_user_fav", user);
+    window.localStorage.setItem(key, JSON.stringify(favs));
+  } catch {}
+}
+
+export function loadUserCategories(user?: UserProfile): CustomCategoryItem[] {
+  try {
+    const key = getUserStorageKey("pl_user_cats", user);
+    const raw = window.localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function saveUserCategories(cats: CustomCategoryItem[], user?: UserProfile) {
+  try {
+    const key = getUserStorageKey("pl_user_cats", user);
+    window.localStorage.setItem(key, JSON.stringify(cats));
+  } catch {}
+}
+
+export function loadUserPersonalMeta(user?: UserProfile): Record<string, PersonalItemMeta> {
+  try {
+    const key = getUserStorageKey("pl_user_meta", user);
+    const raw = window.localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch {}
+  return {};
+}
+
+export function saveUserPersonalMeta(meta: Record<string, PersonalItemMeta>, user?: UserProfile) {
+  try {
+    const key = getUserStorageKey("pl_user_meta", user);
+    window.localStorage.setItem(key, JSON.stringify(meta));
+  } catch {}
+}
+
+function loadSavedCategories(): CustomCategoryItem[] {
+  return loadUserCategories();
 }
 
 function saveCustomCategories(list: CustomCategoryItem[]) {
-  try {
-    window.localStorage.setItem("pl_custom_categories_v1", JSON.stringify(list));
-  } catch {
-    // ignore
-  }
+  saveUserCategories(list);
 }
 
 function loadSavedPersonalMeta(): Record<string, PersonalItemMeta> {
-  try {
-    const raw = window.localStorage.getItem("pl_personal_meta_v1");
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  return loadUserPersonalMeta();
 }
 
 function savePersonalMetaToStorage(meta: Record<string, PersonalItemMeta>) {
-  try {
-    window.localStorage.setItem("pl_personal_meta_v1", JSON.stringify(meta));
-  } catch {
-    // ignore
-  }
+  saveUserPersonalMeta(meta);
 }
 
 const mangaGenres = ["BL", "BG", "GL", "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Psychological", "Romance", "School Life", "Slice of Life", "Supernatural", "Thriller", "Martial Arts", "Isekai", "Sci-Fi", "Sports", "Shounen", "Shoujo", "Seinen", "Josei"];
@@ -312,6 +543,7 @@ function FilterCollection({
   compact = false,
   search = "",
   savedItems = libraryItems,
+  catalogItems: propCatalogItems,
   onSelectContent,
   onToggleLibraryItem,
 }: {
@@ -322,6 +554,7 @@ function FilterCollection({
   compact?: boolean;
   search?: string;
   savedItems?: ContentItem[];
+  catalogItems?: ContentItem[];
   onSelectContent?: (item: ContentItem) => void;
   onToggleLibraryItem?: (item: ContentItem) => void;
 }) {
@@ -329,7 +562,10 @@ function FilterCollection({
   const [status, setStatus] = useState("Tất cả");
   const [genres, setGenres] = useState<string[]>([]);
   const availableGenres = type === "Truyện" ? mangaGenres : type === "Phim" ? movieGenres : allGenres;
-  const sourcePool = Array.from(new Map([...savedItems, ...catalogItems].map(item => [item.title, item])).values());
+  const pool = propCatalogItems && propCatalogItems.length > 0 ? propCatalogItems : catalogItems;
+  const sourcePool = compact
+    ? savedItems
+    : Array.from(new Map([...pool, ...savedItems].map(item => [item.title, item])).values());
   const filtered = sourcePool.filter(
     item =>
       item.title.toLocaleLowerCase("vi").includes(search.toLocaleLowerCase("vi")) &&
@@ -398,15 +634,26 @@ function FilterCollection({
     })}</div> : (
       <div className="empty-results">
         <Icon name="book" size={28} />
-        <b>{sourcePool.length === 0 ? "Chưa có truyện hoặc bộ phim nào được đăng tải" : "Không tìm thấy tác phẩm phù hợp"}</b>
+        <b>{compact ? "Bộ sưu tập cá nhân của bạn hiện đang trống" : sourcePool.length === 0 ? "Chưa có truyện hoặc bộ phim nào được đăng tải" : "Không tìm thấy tác phẩm phù hợp"}</b>
         <p>
-          {sourcePool.length === 0
+          {compact
+            ? "Bạn chưa lưu tác phẩm nào vào bộ sưu tập. Hãy khám phá và lưu truyện / phim yêu thích từ danh mục!"
+            : sourcePool.length === 0
             ? "Hãy nhấn nút bên dưới để tự đăng tải truyện hoặc phim của bạn và kiểm tra toàn bộ tính năng."
             : "Hãy thử bỏ bớt thể loại hoặc đặt lại bộ lọc."}
         </p>
         <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
-          <Button icon="plus" onClick={() => setPage("publish")}>+ Đăng truyện / phim mới</Button>
-          {sourcePool.length > 0 && <Button variant="secondary" onClick={reset}>Đặt lại bộ lọc</Button>}
+          {compact ? (
+            <>
+              <Button icon="play" onClick={() => setPage("manga")}>Khám phá Truyện & Phim</Button>
+              <Button variant="secondary" icon="plus" onClick={() => setPage("publish")}>+ Đăng tác phẩm mới</Button>
+            </>
+          ) : (
+            <>
+              <Button icon="plus" onClick={() => setPage("publish")}>+ Đăng truyện / phim mới</Button>
+              {sourcePool.length > 0 && <Button variant="secondary" onClick={reset}>Đặt lại bộ lọc</Button>}
+            </>
+          )}
         </div>
       </div>
     )}
@@ -428,6 +675,9 @@ function HomePage({
   favorites,
   toggleFavorite,
   savedItems = libraryItems,
+  catalogItems = [],
+  progressMap = {},
+  onUpdateProgress,
   onSaveToLibrary,
   onRemoveFromLibrary,
   onSelectContent,
@@ -436,12 +686,16 @@ function HomePage({
   favorites: string[];
   toggleFavorite: (title: string) => void;
   savedItems?: ContentItem[];
+  catalogItems?: ContentItem[];
+  progressMap?: Record<string, number>;
+  onUpdateProgress?: (title: string, nextUnit: number, maxUnits: number) => void;
   onSaveToLibrary?: (item: ContentItem, options?: { status: string; category: string; note: string; favorite: boolean }) => void;
   onRemoveFromLibrary?: (title: string) => void;
   onSelectContent?: (item: ContentItem) => void;
 }) {
-  // Tạo Hero Slides trực tiếp từ các truyện/phim thật người dùng đã đăng
-  const heroSlides = savedItems.slice(0, 6).map(item => {
+  // Tạo Hero Slides từ các tác phẩm trong kho truyện/phim
+  const heroPool = catalogItems && catalogItems.length > 0 ? catalogItems : savedItems;
+  const heroSlides = heroPool.slice(0, 6).map(item => {
     const words = item.title.trim().split(/\s+/);
     const mid = Math.max(1, Math.ceil(words.length / 2));
     return {
@@ -459,24 +713,25 @@ function HomePage({
   const currentHero = heroSlides[safeHeroIndex];
   const isHeroInLibrary = currentHero ? savedItems.some(x => x.title === currentHero.item.title) : false;
 
-  // Tiến độ đọc/xem của từng truyện/phim thật do người dùng thêm
-  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
-
-  const continueList: ContinueEntry[] = savedItems.map(item => {
-    const chList = item.chaptersList || [];
-    const totalUnits = Math.max(1, chList.length);
-    const currentUnit = Math.min(totalUnits, progressMap[item.title] || 1);
-    const activeChap = chList[currentUnit - 1];
-    return {
-      item,
-      currentUnit,
-      totalUnits,
-      unitLabel: item.type === "Phim" ? "Tập" : "Chương",
-      chapterTitle: activeChap?.title || `${item.type === "Phim" ? "Tập" : "Chương"} ${currentUnit}`,
-      synopsis: item.shortDescription || item.description || "Chưa có mô tả.",
-      lastReadAt: item.updatedAt || "Vừa cập nhật",
-    };
-  });
+  // Tiến độ đọc/xem thật sự của người dùng này (chỉ hiển thị tác phẩm người dùng đã thực sự đọc/xem)
+  const continuePool = catalogItems && catalogItems.length > 0 ? catalogItems : savedItems;
+  const continueList: ContinueEntry[] = continuePool
+    .filter(item => progressMap[item.title] !== undefined && progressMap[item.title] > 0)
+    .map(item => {
+      const chList = item.chaptersList || [];
+      const totalUnits = Math.max(1, chList.length);
+      const currentUnit = Math.min(totalUnits, progressMap[item.title]);
+      const activeChap = chList[currentUnit - 1];
+      return {
+        item,
+        currentUnit,
+        totalUnits,
+        unitLabel: item.type === "Phim" ? "Tập" : "Chương",
+        chapterTitle: activeChap?.title || `${item.type === "Phim" ? "Tập" : "Chương"} ${currentUnit}`,
+        synopsis: item.shortDescription || item.description || "Chưa có mô tả.",
+        lastReadAt: item.updatedAt || "Vừa cập nhật",
+      };
+    });
 
   // Modal "Lưu vào thư viện"
   const userCustomCategories = loadSavedCategories();
@@ -529,7 +784,7 @@ function HomePage({
 
   const updateContinueProgress = (title: string, nextUnit: number, maxUnits: number) => {
     const clamped = Math.max(1, Math.min(maxUnits, nextUnit));
-    setProgressMap(prev => ({ ...prev, [title]: clamped }));
+    onUpdateProgress?.(title, clamped, maxUnits);
     if (activeContinue?.item.title === title) {
       const chList = activeContinue.item.chaptersList || [];
       const activeChap = chList[clamped - 1];
@@ -688,6 +943,7 @@ function HomePage({
           setPage={setPage}
           compact
           savedItems={savedItems}
+          catalogItems={catalogItems}
           onSelectContent={onSelectContent}
           onToggleLibraryItem={item => {
             const exists = savedItems.some(x => x.title === item.title);
@@ -903,6 +1159,7 @@ function ListingPage({
   favorites,
   toggleFavorite,
   savedItems = libraryItems,
+  catalogItems = [],
   onSelectContent,
   onToggleLibraryItem,
 }: {
@@ -911,6 +1168,7 @@ function ListingPage({
   favorites: string[];
   toggleFavorite: (title: string) => void;
   savedItems?: ContentItem[];
+  catalogItems?: ContentItem[];
   onSelectContent?: (item: ContentItem) => void;
   onToggleLibraryItem?: (item: ContentItem) => void;
 }) {
@@ -925,6 +1183,7 @@ function ListingPage({
       setPage={setPage}
       search={search}
       savedItems={savedItems}
+      catalogItems={catalogItems}
       onSelectContent={onSelectContent}
       onToggleLibraryItem={onToggleLibraryItem}
     />
@@ -970,133 +1229,6 @@ function ShareModal({ close }: { close: () => void }) {
   </div></div>;
 }
 
-export type UserProfile = {
-  id: string;
-  name: string;
-  username: string;
-  email: string;
-  password?: string;
-  avatar: string;
-  role: "USER" | "ADMIN";
-  bio?: string;
-  joinedDate?: string;
-  userId?: string;
-};
-
-const CURRENT_USER_STORAGE_KEY = "pl_current_user_v2";
-const REGISTERED_ACCOUNTS_KEY = "pl_registered_accounts_v2";
-
-export function loadSavedCurrentUser(): UserProfile {
-  try {
-    const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.username && parsed.name) {
-        // Tự động chuẩn hóa tên tài khoản và vai trò ADMIN đồng bộ với MySQL phpMyAdmin
-        if (
-          (parsed.email && parsed.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
-          (parsed.username && parsed.username.toLowerCase().includes("lechauanh")) ||
-          (parsed.name && parsed.name.toLowerCase().includes("lechauanh")) ||
-          (parsed.username && parsed.username.toLowerCase().includes("anhquyphi")) ||
-          (parsed.name && parsed.name.toLowerCase().includes("anh quý phi"))
-        ) {
-          parsed.name = "Anh Quý Phi";
-          parsed.username = "@anhquyphi";
-          parsed.role = "ADMIN";
-        }
-        return parsed;
-      }
-    }
-  } catch {}
-  return {
-    id: "usr-" + Date.now().toString(36),
-    name: "Anh Quý Phi",
-    username: "@anhquyphi",
-    email: "lechauanh.12a5.tnd@gmail.com",
-    password: "doraemon1234@",
-    avatar: photos.red,
-    role: "ADMIN",
-    bio: "Quản trị viên hệ thống Mê Truyện Stories Unbound.",
-    joinedDate: "Hôm nay",
-    userId: "USR-3604",
-  };
-}
-
-export function saveCurrentUserToStorage(user: UserProfile) {
-  try {
-    window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(user));
-  } catch {}
-}
-
-export function loadSavedAccounts(): UserProfile[] {
-  try {
-    const raw = window.localStorage.getItem(REGISTERED_ACCOUNTS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.map(acc => {
-          if (
-            (acc.email && acc.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
-            (acc.username && acc.username.toLowerCase().includes("lechauanh")) ||
-            (acc.username && acc.username.toLowerCase().includes("anhquyphi")) ||
-            (acc.name && acc.name.toLowerCase().includes("anh quý phi"))
-          ) {
-            return { ...acc, name: "Anh Quý Phi", username: "@anhquyphi", role: "ADMIN" };
-          }
-          return acc;
-        });
-      }
-    }
-  } catch {}
-  return [];
-}
-
-export function saveAccountToStorage(acc: UserProfile) {
-  try {
-    const list = loadSavedAccounts().filter(
-      a => a.email.toLowerCase() !== acc.email.toLowerCase() &&
-           a.username.toLowerCase() !== acc.username.toLowerCase()
-    );
-    list.push(acc);
-    window.localStorage.setItem(REGISTERED_ACCOUNTS_KEY, JSON.stringify(list));
-  } catch {}
-}
-
-let activeCurrentUserProfile: UserProfile = loadSavedCurrentUser();
-
-export function getActiveUser(): UserProfile {
-  return activeCurrentUserProfile;
-}
-
-export function setActiveCurrentUserProfile(user: UserProfile) {
-  activeCurrentUserProfile = user;
-  saveCurrentUserToStorage(user);
-}
-
-export function getCurrentUserHandle(): string {
-  const p = getActiveUser();
-  return "@" + (p?.username ? p.username.replace(/^@/, '') : "anhquyphi");
-}
-
-export function getCurrentUserName(): string {
-  return getActiveUser()?.name || "Anh Quý Phi";
-}
-
-export const CURRENT_USER_HANDLE = "@anhquyphi";
-export const CURRENT_USER_NAME = "Anh Quý Phi";
-
-function canManagePublishedContent(item: ContentItem, userRole: "USER" | "ADMIN", currentUsername = activeCurrentUserProfile.username): boolean {
-  if (userRole === "ADMIN") return true;
-  const activeUser = getActiveUser();
-  return (
-    item.createdBy?.user === currentUsername ||
-    item.createdBy?.user === activeUser.username ||
-    item.createdBy?.user === "@anhquyphi" ||
-    item.createdBy?.user === "@huynguyen" ||
-    item.createdBy?.name === "Anh Quý Phi" ||
-    item.createdBy?.name === "Nguyễn Huy"
-  );
-}
 
 function PublishedWorkEditorModal({
   initialItem,
@@ -1135,7 +1267,7 @@ function PublishedWorkEditorModal({
     chaptersList: initialItem.chaptersList || [],
   });
 
-  const isOwner = initialItem.createdBy?.user === CURRENT_USER_HANDLE;
+  const isOwner = isUserItemOwner(initialItem);
 
   const handleCoverUpload = (file?: File) => {
     if (!file) return;
@@ -1165,7 +1297,7 @@ function PublishedWorkEditorModal({
           <div>
             <span>
               {isOwner
-                ? `✍️ CHỈNH SỬA TRUYỆN / PHIM TÔI ĐĂNG (${CURRENT_USER_HANDLE})`
+                ? `✍️ CHỈNH SỬA TRUYỆN / PHIM TÔI ĐĂNG (${getCurrentUserHandle()})`
                 : `🛡️ QUYỀN QUẢN TRỊ VIÊN (${userRole}) · CHỈNH SỬA BÀI ĐĂNG CỦA ${initialItem.createdBy?.user || "@user"}`}
             </span>
             <h2>Chỉnh sửa & Cập nhật: {initialItem.title}</h2>
@@ -1428,7 +1560,7 @@ function PublishedChaptersModal({
   const [chapters, setChapters] = useState<PublishedChapterItem[]>(
     initialItem.chaptersList || []
   );
-  const isOwner = initialItem.createdBy?.user === CURRENT_USER_HANDLE;
+  const isOwner = isUserItemOwner(initialItem);
   const unitLabel = initialItem.type === "Truyện" ? "Chương" : "Tập";
 
   return (
@@ -1546,6 +1678,8 @@ function LibraryPage({
   toggleFavorite,
   items = libraryItems,
   userRole = "USER",
+  currentUser,
+  progressMap = {},
   onUpdatePublishedContent,
   onRemoveFromLibrary,
   onRestoreToLibrary,
@@ -1558,6 +1692,8 @@ function LibraryPage({
   toggleFavorite: (title: string) => void;
   items?: ContentItem[];
   userRole?: "USER" | "ADMIN";
+  currentUser?: UserProfile;
+  progressMap?: Record<string, number>;
   onUpdatePublishedContent?: (oldTitle: string, updated: ContentItem) => void;
   onRemoveFromLibrary?: (title: string) => void;
   onRestoreToLibrary?: (item: ContentItem) => void;
@@ -1565,6 +1701,7 @@ function LibraryPage({
   onOpenShareToChat?: (item: ContentItem) => void;
   onSelectContent?: (item: ContentItem) => void;
 }) {
+  const activeUser = currentUser || getActiveUser();
   const [tab, setTab] = useState("Tất cả");
   const [modal, setModal] = useState(false);
   const [view, setView] = useState("all");
@@ -1578,23 +1715,28 @@ function LibraryPage({
   const [editingPublishedItem, setEditingPublishedItem] = useState<ContentItem | null>(null);
   const [editingChaptersItem, setEditingChaptersItem] = useState<ContentItem | null>(null);
 
-  // Quản lý danh mục riêng (Không tạo sẵn danh mục giả — chỉ hiển thị danh mục do người dùng tự tạo)
-  const [categories, setCategories] = useState<CustomCategoryItem[]>(() => loadSavedCategories());
+  // Quản lý danh mục riêng cá nhân theo tài khoản
+  const [categories, setCategories] = useState<CustomCategoryItem[]>(() => loadUserCategories(activeUser));
   const [categoryModal, setCategoryModal] = useState<{ index: number | null; name: string; icon: string; description: string } | null>(null);
   const [assigningCategoryName, setAssigningCategoryName] = useState<string | null>(null);
   const [quickAssignItem, setQuickAssignItem] = useState<ContentItem | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<ContentItem | null>(null);
 
-  // Dữ liệu cá nhân độc lập cho từng bộ: Ghi chú, Điểm 1-5 sao, Trạng thái đọc/xem, Quyền riêng tư & Danh sách Danh mục riêng (không tạo sẵn dữ liệu giả)
-  const [personalMeta, setPersonalMeta] = useState<Record<string, PersonalItemMeta>>(() => loadSavedPersonalMeta());
+  // Dữ liệu cá nhân độc lập cho từng bộ: Ghi chú, Điểm 1-5 sao, Trạng thái đọc/xem, Quyền riêng tư & Danh sách Danh mục riêng
+  const [personalMeta, setPersonalMeta] = useState<Record<string, PersonalItemMeta>>(() => loadUserPersonalMeta(activeUser));
 
   useEffect(() => {
-    saveCustomCategories(categories);
-  }, [categories]);
+    setCategories(loadUserCategories(activeUser));
+    setPersonalMeta(loadUserPersonalMeta(activeUser));
+  }, [activeUser.username, activeUser.email]);
 
   useEffect(() => {
-    savePersonalMetaToStorage(personalMeta);
-  }, [personalMeta]);
+    saveUserCategories(categories, activeUser);
+  }, [categories, activeUser]);
+
+  useEffect(() => {
+    saveUserPersonalMeta(personalMeta, activeUser);
+  }, [personalMeta, activeUser]);
 
   const getItemMeta = (item: ContentItem): PersonalItemMeta => {
     return personalMeta[item.title] || {
@@ -1713,7 +1855,8 @@ function LibraryPage({
   const getCategoryCount = (catName: string) =>
     items.filter(item => getItemMeta(item).categories.includes(catName)).length;
 
-  const myPublishedItems = items.filter(item => item.createdBy?.user === CURRENT_USER_HANDLE);
+  const isMyPublishedItem = (item: ContentItem) => isUserItemOwner(item, activeUser);
+  const myPublishedItems = items.filter(isMyPublishedItem);
   const sharedFromOthersItems = items.filter(item => Boolean(item.sharedFrom));
   const activeReadingItems = items.filter(item => {
     const st = getItemMeta(item).readingStatus;
@@ -1734,12 +1877,12 @@ function LibraryPage({
   const filteredItems = items
     .filter(item => {
       const meta = getItemMeta(item);
-      if (view === "published" && item.createdBy?.user !== CURRENT_USER_HANDLE) return false;
+      if (view === "published" && !isMyPublishedItem(item)) return false;
       if (view === "favorites" && !favorites.includes(item.title)) return false;
       if (view === "shared" && !item.sharedFrom) return false;
       if (view === "active" && meta.readingStatus !== "Đang đọc / xem" && meta.readingStatus !== "Đang ra") return false;
 
-      if (tab === "Truyện tôi đăng") return item.createdBy?.user === CURRENT_USER_HANDLE;
+      if (tab === "Truyện tôi đăng") return isMyPublishedItem(item);
       if (tab === "Yêu thích") return favorites.includes(item.title);
       if (tab === "Lưu từ chia sẻ") return Boolean(item.sharedFrom);
       if (tab === "Đang đọc / xem") return meta.readingStatus === "Đang đọc / xem" || meta.readingStatus === "Đang ra";
@@ -1852,12 +1995,14 @@ function LibraryPage({
         ))}
       </div>
 
-      {items.length > 0 && (
+      {items.filter(item => (progressMap[item.title] || 0) > 0).length > 0 && tab === "Tất cả" && view === "all" && (
         <section className="recent-history">
           <SectionTitle eyebrow="HOẠT ĐỘNG GẦN ĐÂY" title="Lịch sử đọc / xem gần đây" />
           <div className="history-track">
-            {items.slice(0, 10).map((item) => {
+            {items.filter(item => (progressMap[item.title] || 0) > 0).slice(0, 10).map((item) => {
+              const currentProg = progressMap[item.title] || 1;
               const totalCh = (item.chaptersList || []).length;
+              const pct = totalCh > 0 ? Math.round((currentProg / totalCh) * 100) : 100;
               return (
                 <button
                   className="history-card"
@@ -1871,8 +2016,8 @@ function LibraryPage({
                   <div>
                     <span>{item.type === "Truyện" ? "MANGA" : "MOVIE"} · {item.updatedAt || "Vừa cập nhật"}</span>
                     <b>{item.title}</b>
-                    <p>{totalCh > 0 ? `${totalCh} ${item.type === "Truyện" ? "chương" : "tập"} đã đăng` : item.status}</p>
-                    <div className="progress"><i style={{ width: totalCh > 0 ? "100%" : "40%" }} /></div>
+                    <p>Đang đọc: {item.type === "Truyện" ? "Chương" : "Tập"} {currentProg}/{Math.max(1, totalCh)}</p>
+                    <div className="progress"><i style={{ width: `${pct}%` }} /></div>
                   </div>
                 </button>
               );
@@ -1970,21 +2115,29 @@ function LibraryPage({
       ) : shownItems.length === 0 ? (
         <div className="empty-results">
           <Icon name="book" size={28} />
-          <b>Chưa có tác phẩm nào trong mục “{tab}”</b>
+          <b>{items.length === 0 ? "Thư viện cá nhân của bạn hiện đang trống" : `Chưa có tác phẩm nào trong mục “${tab}”`}</b>
           <p>
-            {isCustomCategoryTab
+            {items.length === 0
+              ? "Bạn chưa lưu hoặc đăng tải tác phẩm nào. Hãy khám phá truyện / phim trên hệ thống hoặc tự đăng tác phẩm của bạn để thêm vào thư viện!"
+              : isCustomCategoryTab
               ? `Bạn có thể nhấn nút bên dưới để chọn thêm truyện hoặc phim từ thư viện vào danh mục “${tab}”.`
               : "Hãy thử đổi bộ lọc hoặc đăng tải tác phẩm mới của bạn."}
           </p>
           <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginTop: "10px" }}>
-            {isCustomCategoryTab && (
+            {items.length === 0 ? (
+              <>
+                <Button icon="play" onClick={() => setPage("manga")}>Khám phá Truyện & Phim</Button>
+                <Button variant="secondary" icon="plus" onClick={() => setPage("publish")}>+ Đăng truyện / phim mới</Button>
+              </>
+            ) : isCustomCategoryTab ? (
               <Button icon="plus" onClick={() => setAssigningCategoryName(tab)}>
                 + Thêm truyện/phim vào “{tab}”
               </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => { setTab("Tất cả"); setView("all"); setTypeFilter("Tất cả"); setLibSearch(""); }}>
+                Xem tất cả thư viện
+              </Button>
             )}
-            <Button variant="secondary" onClick={() => { setTab("Tất cả"); setView("all"); setTypeFilter("Tất cả"); setLibSearch(""); }}>
-              Xem tất cả thư viện
-            </Button>
           </div>
         </div>
       ) : (
@@ -1992,8 +2145,8 @@ function LibraryPage({
           {shownItems.map((item, i) => {
             const meta = getItemMeta(item);
             const stars = "★".repeat(meta.rating) + "☆".repeat(5 - meta.rating);
-            const isMyPublished = item.createdBy?.user === CURRENT_USER_HANDLE;
-            const canEditPublished = canManagePublishedContent(item, userRole);
+            const isMyPublished = isMyPublishedItem(item);
+            const canEditPublished = canManagePublishedContent(item, userRole, activeUser);
             const chCount = (item.chaptersList || defaultChaptersFor(item.title, item.type === "Phim")).length;
 
             return (
@@ -2067,7 +2220,7 @@ function LibraryPage({
                       <div className="published-owner-head">
                         <span>
                           {isMyPublished
-                            ? `✍️ Truyện/Phim tôi đăng (${CURRENT_USER_HANDLE})`
+                            ? `✍️ Truyện/Phim tôi đăng (${activeUser.username || getCurrentUserHandle()})`
                             : `🛡️ Quyền Admin · Đăng bởi ${item.createdBy?.user || "@user"}`}
                         </span>
                         <small>{item.updatedAt || "Đã xuất bản"}</small>
@@ -2433,9 +2586,12 @@ function LibraryPage({
 
 function DetailPage({
   publishedTitle = "",
+  allContents = [],
   savedItems = libraryItems,
   favorites = [],
   userRole = "USER",
+  currentUser,
+  onUpdateProgress,
   onUpdatePublishedContent,
   onDeletePublishedContent,
   onToggleLibrary,
@@ -2446,9 +2602,12 @@ function DetailPage({
   onNavigatePublish,
 }: {
   publishedTitle?: string;
+  allContents?: ContentItem[];
   savedItems?: ContentItem[];
   favorites?: string[];
   userRole?: "USER" | "ADMIN";
+  currentUser?: UserProfile;
+  onUpdateProgress?: (title: string, nextUnit: number, maxUnits: number) => void;
   onUpdatePublishedContent?: (oldTitle: string, updated: ContentItem) => void;
   onDeletePublishedContent?: (title: string) => void;
   onToggleLibrary?: (item: ContentItem) => void;
@@ -2458,6 +2617,7 @@ function DetailPage({
   onOpenPublicProfile?: (username: string) => void;
   onNavigatePublish?: () => void;
 }) {
+  const activeUser = currentUser || getActiveUser();
   const [season, setSeason] = useState("Mùa 1");
   const [reviewTab, setReviewTab] = useState("Bình luận chung");
   const [readChapters, setReadChapters] = useState<number[]>([]);
@@ -2470,9 +2630,10 @@ function DetailPage({
   const [editingChaptersModal, setEditingChaptersModal] = useState(false);
 
   const matchedItem =
-    [...savedItems, ...catalogItems].find(x => x.title === publishedTitle) ||
-    savedItems[0] ||
-    catalogItems[0];
+    allContents.find(x => x.title === publishedTitle) ||
+    savedItems.find(x => x.title === publishedTitle) ||
+    allContents[0] ||
+    savedItems[0];
 
   if (!matchedItem) {
     return (
@@ -2498,8 +2659,8 @@ function DetailPage({
 
   const inLibrary = savedItems.some(x => x.title === currentItem.title);
   const liked = favorites.includes(currentItem.title);
-  const isOwner = currentItem.createdBy?.user === CURRENT_USER_HANDLE;
-  const canEditWork = canManagePublishedContent(currentItem, userRole);
+  const isOwner = isUserItemOwner(currentItem, activeUser);
+  const canEditWork = canManagePublishedContent(currentItem, userRole, activeUser);
   const chapters = currentItem.chaptersList || [];
   const availableSeasons = Array.from(new Set(chapters.map(c => c.season || "Mùa 1")));
   const seasonList = availableSeasons.length > 0 ? availableSeasons : ["Mùa 1"];
@@ -2513,16 +2674,19 @@ function DetailPage({
       ? [{ platform: "Đường dẫn đọc / xem", url: currentItem.mainLink.trim(), note: "" }]
       : [];
 
-  const toggleChapterRead = (idx: number) =>
-    setReadChapters(prev => (prev.includes(idx) ? prev.filter(x => x !== idx) : [...prev, idx]));
+  const toggleChapterRead = (idx: number) => {
+    const nextRead = readChapters.includes(idx) ? readChapters.filter(x => x !== idx) : [...readChapters, idx];
+    setReadChapters(nextRead);
+    onUpdateProgress?.(currentItem.title, idx + 1, Math.max(1, chapters.length));
+  };
 
   const submitComment = () => {
     if (!commentText.trim()) return;
     const newComment: ContentCommentItem = {
       id: Date.now(),
-      author: CURRENT_USER_NAME,
-      username: CURRENT_USER_HANDLE,
-      avatar: photos.red,
+      author: activeUser.name || getCurrentUserName(),
+      username: activeUser.username || getCurrentUserHandle(),
+      avatar: activeUser.avatar || photos.red,
       time: "Vừa xong",
       rating: `${userRating}.0`,
       text: isSpoiler ? "Bình luận này có chứa nội dung tiết lộ cốt truyện." : commentText.trim(),
@@ -2573,7 +2737,7 @@ function DetailPage({
             </span>
             <b>
               {isOwner
-                ? `Bạn (${CURRENT_USER_HANDLE}) là người đăng tải “${currentItem.title}” — Bạn có toàn quyền chỉnh sửa nội dung và cập nhật chương/tập.`
+                ? `Bạn (${activeUser.username || getCurrentUserHandle()}) là người đăng tải “${currentItem.title}” — Bạn có toàn quyền chỉnh sửa nội dung và cập nhật chương/tập.`
                 : `Quản trị viên (ADMIN): Bạn có quyền chỉnh sửa & cập nhật bài đăng của ${currentItem.createdBy?.name || "Người dùng"} (${currentItem.createdBy?.user || "@user"}).`}
             </b>
           </div>
@@ -2611,7 +2775,7 @@ function DetailPage({
         </div>
         <h1>{currentItem.title}</h1>
         <p className="jp">
-          Đăng bởi {currentItem.createdBy?.name || CURRENT_USER_NAME} ({currentItem.createdBy?.user || CURRENT_USER_HANDLE}) · {currentItem.updatedAt || "Vừa đăng"}
+          Đăng bởi {currentItem.createdBy?.name || "Người dùng"} ({currentItem.createdBy?.user || "@user"}) · {currentItem.updatedAt || "Vừa đăng"}
         </p>
 
         {/* Hiển thị đầy đủ Tác giả, Họa sĩ, Đạo diễn, Diễn viên, Năm xuất bản, Ngôn ngữ đồng bộ 100% với UI Đăng truyện */}
@@ -3022,7 +3186,7 @@ function DetailPage({
                 <p>{c.text}</p>
                 <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                   <button onClick={() => setCommentText(`@${c.author} `)}>Trả lời</button>
-                  {(c.username === CURRENT_USER_HANDLE || userRole === "ADMIN") && (
+                  {(c.username === activeUser.username || c.username === getCurrentUserHandle() || userRole === "ADMIN") && (
                     <button style={{ color: "#f87171" }} onClick={() => deleteComment(c.id)}>Xóa bình luận</button>
                   )}
                   <button style={{ color: "#f87171" }} onClick={() => onOpenReport?.("COMMENT", `Bình luận của ${c.author}`)}>Báo cáo vi phạm</button>
@@ -3972,15 +4136,14 @@ function AuthPage({
       }
     }
 
-    // Ở chế độ Đăng ký: Kiểm tra xem email đã được đăng ký chưa
+    // Ở chế độ Đăng ký: Nếu tài khoản từng được lưu trong máy, vẫn cho phép gửi OTP và ghi đè lại tài khoản
     if (mode === "register") {
       const savedAccounts = loadSavedAccounts();
       const alreadyExists = savedAccounts.some(
         a => a.email.toLowerCase() === targetEmail.toLowerCase()
       );
       if (alreadyExists) {
-        setError(`❌ Email “${targetEmail}” đã tồn tại trong hệ thống! Vui lòng chuyển sang tab Đăng nhập.`);
-        return;
+        setOtpNotice(`ℹ️ Email “${targetEmail}” từng được lưu trên máy. Bạn có thể nhập mã OTP để tiếp tục đăng ký lại.`);
       }
     }
 
@@ -4073,6 +4236,15 @@ function AuthPage({
     setOtpNotice("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
   };
 
+  const handleClearAccountsCache = () => {
+    try {
+      window.localStorage.removeItem(REGISTERED_ACCOUNTS_KEY);
+      setError("");
+      setSuccess("");
+      setOtpNotice("✅ Đã làm mới bộ nhớ đệm tài khoản! Danh sách tài khoản đã được đồng bộ lại với phpMyAdmin.");
+    } catch {}
+  };
+
   const submit = async () => {
     setError("");
     setSuccess("");
@@ -4113,16 +4285,7 @@ function AuthPage({
       const cleanUser = usernameInput.trim()
         ? (usernameInput.trim().startsWith("@") ? usernameInput.trim() : "@" + usernameInput.trim())
         : "@" + inputEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
-      const savedAccounts = loadSavedAccounts();
-      const isExisted = savedAccounts.some(
-        a => a.email.toLowerCase() === inputEmail ||
-             a.username.toLowerCase() === cleanUser.toLowerCase()
-      );
-      if (isExisted) {
-        setLoading(false);
-        setError(`❌ Email “${inputEmail}” hoặc Tên người dùng “${cleanUser}” đã được đăng ký trước đó! Vui lòng chuyển sang tab Đăng nhập.`);
-        return;
-      }
+      // Cho phép đăng ký lại / cập nhật tài khoản (kể cả khi đã xóa trong MySQL phpMyAdmin)
 
       const isLeChauAnh = inputEmail.includes("lechauanh") || usernameInput.toLowerCase().includes("anhquyphi");
       const cleanName = displayName.trim() || (isLeChauAnh ? "Anh Quý Phi" : cleanUser.replace(/^@/, ""));
@@ -4507,6 +4670,24 @@ function AuthPage({
               {mode === "login" ? "Đăng ký ngay" : "Đăng nhập"}
             </button>
           </div>
+
+          <div style={{ marginTop: "14px", textAlign: "center", borderTop: "1px dashed rgba(255,255,255,0.08)", paddingTop: "10px" }}>
+            <button
+              type="button"
+              onClick={handleClearAccountsCache}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#a78bfa",
+                fontSize: "11px",
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+              title="Nhấn vào đây nếu bạn vừa xóa dữ liệu trên phpMyAdmin để trình duyệt đồng bộ ngay lập tức"
+            >
+              🔄 Xóa bộ nhớ đệm tài khoản (Đồng bộ khi vừa sửa trên phpMyAdmin)
+            </button>
+          </div>
         </div>
       </section>
     </main>
@@ -4612,7 +4793,7 @@ function PublishPage({ setPage, onPublish }: { setPage: (page: string) => void; 
       score: "—",
       type,
       genres: genres.length ? genres : [],
-      createdBy: { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
+      createdBy: { name: getCurrentUserName(), user: getCurrentUserHandle() },
       shortDescription: shortDescription.trim(),
       description: description.trim(),
       author: author.trim(),
@@ -6473,7 +6654,7 @@ function ChatPage({
               icon="users"
               onClick={() =>
                 onOpenPublicProfile?.(
-                  currentConv.members.find(m => m.user !== CURRENT_USER_HANDLE)?.user || CURRENT_USER_HANDLE
+                  currentConv.members.find(m => m.user !== getCurrentUserHandle())?.user || getCurrentUserHandle()
                 )
               }
             >
@@ -7331,7 +7512,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
         c.chaptersList && c.chaptersList.length > 0
           ? c.chaptersList
           : [{ id: 1, season: "Mùa 1", number: "1", title: c.type === "Phim" ? "Tập 1" : "Chương 1", url: "", note: "" }],
-      createdBy: c.createdBy || { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
+      createdBy: c.createdBy || { name: getCurrentUserName(), user: getCurrentUserHandle() },
       publishedAt: c.publishedAt,
       updatedAt: c.updatedAt,
     }))
@@ -7393,7 +7574,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
         personalNote: item.personalNote,
         allowComments: item.allowComments,
         chaptersList: item.chapters,
-        createdBy: item.createdBy || (existing?.createdBy || { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE }),
+        createdBy: item.createdBy || (existing?.createdBy || { name: getCurrentUserName(), user: getCurrentUserHandle() }),
         publishedAt: item.publishedAt || existing?.publishedAt,
         updatedAt: item.updatedAt || "Vừa cập nhật",
       };
@@ -7580,7 +7761,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           allowComments: true,
           genres: [],
           chapters: [{ id: Date.now(), season: "Mùa 1", number: "1", title: "Chương 1", url: "", note: "" }],
-          createdBy: { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
+          createdBy: { name: getCurrentUserName(), user: getCurrentUserHandle() },
           publishedAt: "Hôm nay",
         })}>+ Thêm Truyện / Phim</Button>
       </div>}
@@ -8928,7 +9109,9 @@ export default function App() {
     if (isMain) return "ADMIN";
     return u.role || "USER";
   });
-  const [favorites, setFavorites] = useState<string[]>(() => loadSavedFavorites());
+  const [favorites, setFavorites] = useState<string[]>(() => loadUserFavorites(currentUser));
+  const [userSavedTitles, setUserSavedTitles] = useState<string[]>(() => loadUserSavedTitles(currentUser));
+  const [userProgress, setUserProgress] = useState<Record<string, number>>(() => loadUserProgress(currentUser));
   const [allContents, setAllContents] = useState<ContentItem[]>(() => loadSavedContents());
   const [publishedTitle, setPublishedTitle] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
@@ -8937,6 +9120,12 @@ export default function App() {
   const [shareModalItem, setShareModalItem] = useState<ContentItem | null | undefined>(undefined);
   const [reportTarget, setReportTarget] = useState<{ type: "CONTENT" | "COMMENT"; name: string } | null>(null);
   const [globalToast, setGlobalToast] = useState("");
+
+  const userLibraryItems = useMemo(() => {
+    return allContents.filter(item =>
+      isUserItemOwner(item, currentUser) || userSavedTitles.includes(item.title)
+    );
+  }, [allContents, currentUser, userSavedTitles]);
 
   useEffect(() => {
     const isMain = currentUser.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
@@ -8950,6 +9139,9 @@ export default function App() {
     setActiveCurrentUserProfile(profileToSave);
     saveCurrentUserToStorage(profileToSave);
     saveAccountToStorage(profileToSave);
+    setUserSavedTitles(loadUserSavedTitles(profileToSave));
+    setFavorites(loadUserFavorites(profileToSave));
+    setUserProgress(loadUserProgress(profileToSave));
   }, [currentUser]);
 
   useEffect(() => {
@@ -8961,12 +9153,8 @@ export default function App() {
   }, [allContents]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
-    } catch {
-      // ignore storage errors
-    }
-  }, [favorites]);
+    saveUserFavorites(favorites, currentUser);
+  }, [favorites, currentUser]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -8984,7 +9172,58 @@ export default function App() {
     window.setTimeout(() => setGlobalToast(""), 3500);
   };
 
-  const toggleFavorite = (title: string) => setFavorites(current => current.includes(title) ? current.filter(x => x !== title) : [...current, title]);
+  const toggleFavorite = (title: string) => {
+    setFavorites(current => {
+      const next = current.includes(title) ? current.filter(x => x !== title) : [...current, title];
+      saveUserFavorites(next, currentUser);
+      return next;
+    });
+  };
+
+  const handleToggleSavedLibrary = (item: ContentItem) => {
+    setUserSavedTitles(prev => {
+      const exists = prev.includes(item.title);
+      const next = exists ? prev.filter(t => t !== item.title) : [...prev, item.title];
+      saveUserSavedTitles(next, currentUser);
+      showGlobalToast(exists ? `Đã gỡ “${item.title}” khỏi Thư viện của tôi.` : `Đã lưu “${item.title}” vào Thư viện của tôi!`);
+      return next;
+    });
+  };
+
+  const handleSaveToLibraryWithOptions = (item: ContentItem, options?: { status?: string; category?: string; note?: string; favorite?: boolean }) => {
+    setUserSavedTitles(prev => {
+      const exists = prev.includes(item.title);
+      const next = exists ? prev : [...prev, item.title];
+      saveUserSavedTitles(next, currentUser);
+      return next;
+    });
+    if (options?.favorite !== undefined) {
+      setFavorites(prev => {
+        const next = options.favorite
+          ? (prev.includes(item.title) ? prev : [...prev, item.title])
+          : prev.filter(t => t !== item.title);
+        saveUserFavorites(next, currentUser);
+        return next;
+      });
+    }
+  };
+
+  const handleRemoveFromLibrary = (title: string) => {
+    setUserSavedTitles(prev => {
+      const next = prev.filter(t => t !== title);
+      saveUserSavedTitles(next, currentUser);
+      return next;
+    });
+    showGlobalToast(`Đã gỡ “${title}” khỏi Thư viện của tôi.`);
+  };
+
+  const handleUpdateProgress = (title: string, nextUnit: number) => {
+    setUserProgress(prev => {
+      const next = { ...prev, [title]: nextUnit };
+      saveUserProgress(next, currentUser);
+      return next;
+    });
+  };
 
   const handleUpdatePublishedContent = (oldTitle: string, updated: ContentItem) => {
     setAllContents(prev => prev.map(x => (x.title === oldTitle ? updated : x)));
@@ -9046,6 +9285,9 @@ export default function App() {
             setUserRole(role);
             setCurrentUser(profile);
             setActiveCurrentUserProfile(profile);
+            setUserSavedTitles(loadUserSavedTitles(profile));
+            setFavorites(loadUserFavorites(profile));
+            setUserProgress(loadUserProgress(profile));
             setAuthenticated(true);
           }}
         />
@@ -9074,23 +9316,13 @@ export default function App() {
         setPage={navigate}
         favorites={favorites}
         toggleFavorite={toggleFavorite}
-        savedItems={allContents}
+        savedItems={userLibraryItems}
+        catalogItems={allContents}
+        progressMap={userProgress}
+        onUpdateProgress={handleUpdateProgress}
         onSelectContent={item => setPublishedTitle(item.title)}
-        onSaveToLibrary={(item, options) => {
-          setAllContents(prev => {
-            const exists = prev.some(x => x.title === item.title);
-            if (exists) {
-              return prev.map(x => (x.title === item.title ? { ...x, status: item.status } : x));
-            }
-            return [item, ...prev];
-          });
-          if (options?.favorite && !favorites.includes(item.title)) {
-            setFavorites(prev => [...prev, item.title]);
-          } else if (options && !options.favorite && favorites.includes(item.title)) {
-            setFavorites(prev => prev.filter(x => x !== item.title));
-          }
-        }}
-        onRemoveFromLibrary={title => setAllContents(prev => prev.filter(x => x.title !== title))}
+        onSaveToLibrary={handleSaveToLibraryWithOptions}
+        onRemoveFromLibrary={handleRemoveFromLibrary}
       />
     )}
     {page === "manga" && (
@@ -9099,19 +9331,10 @@ export default function App() {
         setPage={navigate}
         favorites={favorites}
         toggleFavorite={toggleFavorite}
-        savedItems={allContents}
+        savedItems={userLibraryItems}
+        catalogItems={allContents}
         onSelectContent={item => setPublishedTitle(item.title)}
-        onToggleLibraryItem={item => {
-          setAllContents(prev => {
-            const exists = prev.some(x => x.title === item.title);
-            if (exists) {
-              showGlobalToast(`Đã gỡ “${item.title}” khỏi Thư viện của tôi.`);
-              return prev.filter(x => x.title !== item.title);
-            }
-            showGlobalToast(`Đã lưu “${item.title}” vào Thư viện của tôi!`);
-            return [item, ...prev];
-          });
-        }}
+        onToggleLibraryItem={handleToggleSavedLibrary}
       />
     )}
     {page === "movies" && (
@@ -9120,19 +9343,10 @@ export default function App() {
         setPage={navigate}
         favorites={favorites}
         toggleFavorite={toggleFavorite}
-        savedItems={allContents}
+        savedItems={userLibraryItems}
+        catalogItems={allContents}
         onSelectContent={item => setPublishedTitle(item.title)}
-        onToggleLibraryItem={item => {
-          setAllContents(prev => {
-            const exists = prev.some(x => x.title === item.title);
-            if (exists) {
-              showGlobalToast(`Đã gỡ “${item.title}” khỏi Thư viện của tôi.`);
-              return prev.filter(x => x.title !== item.title);
-            }
-            showGlobalToast(`Đã lưu “${item.title}” vào Thư viện của tôi!`);
-            return [item, ...prev];
-          });
-        }}
+        onToggleLibraryItem={handleToggleSavedLibrary}
       />
     )}
     {page === "library" && (
@@ -9140,12 +9354,14 @@ export default function App() {
         setPage={navigate}
         favorites={favorites}
         toggleFavorite={toggleFavorite}
-        items={allContents}
+        items={userLibraryItems}
         userRole={userRole}
+        currentUser={currentUser}
+        progressMap={userProgress}
         onOpenPublicProfile={openPublicProfile}
         onOpenShareToChat={item => setShareModalItem(item)}
-        onRemoveFromLibrary={title => setAllContents(prev => prev.filter(x => x.title !== title))}
-        onRestoreToLibrary={item => setAllContents(prev => (prev.some(x => x.title === item.title) ? prev : [item, ...prev]))}
+        onRemoveFromLibrary={handleRemoveFromLibrary}
+        onRestoreToLibrary={item => handleToggleSavedLibrary(item)}
         onUpdatePublishedContent={handleUpdatePublishedContent}
         onSelectContent={item => setPublishedTitle(item.title)}
       />
@@ -9153,16 +9369,13 @@ export default function App() {
     {page === "detail" && (
       <DetailPage
         publishedTitle={publishedTitle}
-        savedItems={allContents}
+        allContents={allContents}
+        savedItems={userLibraryItems}
         favorites={favorites}
         userRole={userRole}
-        onToggleLibrary={item => {
-          setAllContents(prev =>
-            prev.some(x => x.title === item.title)
-              ? prev.filter(x => x.title !== item.title)
-              : [item, ...prev]
-          );
-        }}
+        currentUser={currentUser}
+        onUpdateProgress={handleUpdateProgress}
+        onToggleLibrary={handleToggleSavedLibrary}
         onToggleFavorite={toggleFavorite}
         onOpenShareToChat={item => setShareModalItem(item)}
         onOpenReport={(type, name) => setReportTarget({ type, name })}
@@ -9170,6 +9383,7 @@ export default function App() {
         onUpdatePublishedContent={handleUpdatePublishedContent}
         onDeletePublishedContent={title => {
           setAllContents(prev => prev.filter(x => x.title !== title));
+          handleRemoveFromLibrary(title);
           showGlobalToast(`Đã xóa vĩnh viễn tác phẩm “${title}” khỏi hệ thống!`);
           navigate("library");
         }}
@@ -9190,6 +9404,7 @@ export default function App() {
             }
             return [item, ...prev];
           });
+          handleToggleSavedLibrary(item);
         }}
       />
     )}
@@ -9232,7 +9447,21 @@ export default function App() {
       />
     )}
     {page === "admin" && userRole === "ADMIN" && <AdminPage setPage={navigate} contents={allContents} setContents={setAllContents} />}
-    {page === "publish" && <PublishPage setPage={navigate} onPublish={item => { setAllContents(current => [item, ...current]); setPublishedTitle(item.title); navigate("detail"); }} />}
+    {page === "publish" && (
+      <PublishPage
+        setPage={navigate}
+        onPublish={item => {
+          setAllContents(current => [item, ...current]);
+          setUserSavedTitles(prev => {
+            const next = prev.includes(item.title) ? prev : [item.title, ...prev];
+            saveUserSavedTitles(next, currentUser);
+            return next;
+          });
+          setPublishedTitle(item.title);
+          navigate("detail");
+        }}
+      />
+    )}
 
     {searchOpen && (
       <CommandPaletteModal
