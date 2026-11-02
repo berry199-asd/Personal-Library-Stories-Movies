@@ -27,4 +27,11 @@ public class RegisterRequest {
 
     @Size(max = 100, message = "Tên hiển thị không được vượt quá 100 ký tự")
     private String displayName;
+
+    @Size(min = 6, max = 6, message = "Mã OTP xác thực email phải gồm 6 chữ số")
+    private String otpCode;
+
+    private String e2eePublicKey;
+
+    private String e2eeKeyFingerprint;
 }
