@@ -146,10 +146,10 @@ function Navbar({
             <img src={photos.red} alt="" />
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <b>{userRole === "ADMIN" ? "Nguyễn Huy" : "Lan Anh"}</b>
+                <b>{CURRENT_USER_NAME}</b>
                 <span className={`badge-pill ${userRole === "ADMIN" ? "role-admin" : "active"}`}>{userRole}</span>
               </div>
-              <span>{userRole === "ADMIN" ? "@admin_huy" : "@lananh"}</span>
+              <span>{CURRENT_USER_HANDLE}</span>
             </div>
           </div>
           <button onClick={() => { setPage("account"); setAccountOpen(false); }}><Icon name="users" size={16} />Thông tin tài khoản</button>
@@ -186,6 +186,24 @@ type PublishedChapterItem = {
   note: string;
 };
 
+type ExternalLinkItem = {
+  platform: string;
+  url: string;
+  note: string;
+};
+
+type ContentCommentItem = {
+  id: number;
+  author: string;
+  username: string;
+  avatar: string;
+  time: string;
+  rating: string;
+  text: string;
+  spoiler?: string;
+  chapterLabel?: string;
+};
+
 type ContentItem = {
   title: string;
   sub: string;
@@ -194,166 +212,87 @@ type ContentItem = {
   score: string;
   type: "Truyện" | "Phim";
   genres: string[];
+  shortDescription?: string;
+  description?: string;
+  author?: string;
+  artist?: string;
+  director?: string;
+  cast?: string;
+  releaseYear?: string;
+  language?: string;
+  movieMode?: "Phim lẻ" | "Series";
+  singleMovieUrl?: string;
+  externalLinks?: ExternalLinkItem[];
+  mainLink?: string;
+  sourceRef?: string;
+  extraTags?: string;
+  personalNote?: string;
+  allowComments?: boolean;
   sharedFrom?: { name: string; user: string; sharedAt?: string };
   createdBy?: { name: string; user: string };
-  description?: string;
-  mainLink?: string;
   visibility?: "PUBLIC" | "SHARED" | "PRIVATE";
+  sharedWithUsers?: string[];
   updatedAt?: string;
   chaptersList?: PublishedChapterItem[];
+  commentsList?: ContentCommentItem[];
 };
 
-const defaultChaptersFor = (title: string, isMovie: boolean): PublishedChapterItem[] => [
-  { id: 1, season: "Mùa 1", number: "1", title: isMovie ? `Tập 1: Mở màn ${title}` : "Chương 1: Khởi đầu hành trình", url: isMovie ? "https://www.netflix.com" : "https://mangadex.org", note: "Bản chính thức" },
-  { id: 2, season: "Mùa 1", number: "2", title: isMovie ? "Tập 2: Dấu vết trong mưa" : "Chương 2: Bí mật trong đêm", url: isMovie ? "https://www.netflix.com" : "https://mangadex.org", note: "Đã cập nhật link" },
-  { id: 3, season: "Mùa 1", number: isMovie ? "3" : "10.5", title: isMovie ? "Tập 3: Cao trào" : "Chương 10.5: Màn đêm buông xuống", url: isMovie ? "https://www.netflix.com" : "https://mangadex.org", note: "Mới cập nhật" },
-];
+const defaultChaptersFor = (_title: string, _isMovie: boolean): PublishedChapterItem[] => [];
 
-const libraryItems: ContentItem[] = [
-  {
-    title: "Nightfall City",
-    sub: "S. Kuroda",
-    img: photos.red,
-    status: "Đang đọc / xem",
-    score: "4.9",
-    type: "Truyện",
-    genres: ["Action", "Mystery", "Sci-Fi"],
-    createdBy: { name: "Nguyễn Huy", user: "@huynguyen" },
-    visibility: "PUBLIC",
-    mainLink: "https://mangadex.org",
-    updatedAt: "Hôm nay",
-    description: "Trong một Tokyo tương lai nơi ký ức được mã hóa và mua bán, thám tử Rei Nakamura tỉnh dậy mà không còn quá khứ.",
-    chaptersList: defaultChaptersFor("Nightfall City", false),
-  },
-  {
-    title: "Thành Phố Mưa",
-    sub: "Anime Series",
-    img: photos.rain,
-    status: "Đang ra",
-    score: "4.7",
-    type: "Phim",
-    genres: ["Animation", "Drama", "Romance"],
-    createdBy: { name: "Nguyễn Huy", user: "@huynguyen" },
-    visibility: "PUBLIC",
-    mainLink: "https://www.netflix.com",
-    updatedAt: "2 giờ trước",
-    description: "Bộ anime chữa lành kể về những cuộc gặp gỡ tình cờ dưới hiên ga tàu mỗi chiều mưa tầm tã.",
-    chaptersList: defaultChaptersFor("Thành Phố Mưa", true),
-  },
-  {
-    title: "Lồng Đèn Đỏ",
-    sub: "Yuki Nakama",
-    img: photos.lantern,
-    status: "Hoàn thành",
-    score: "4.8",
-    type: "Truyện",
-    genres: ["Historical", "Mystery", "Supernatural"],
-    sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "Hôm qua" },
-    createdBy: { name: "Lan Anh", user: "@lananh" },
-    visibility: "PUBLIC",
-  },
-  {
-    title: "Ký Ức Ngõ Hẻm",
-    sub: "Movie · 2024",
-    img: photos.alley,
-    status: "Đang ra",
-    score: "4.6",
-    type: "Phim",
-    genres: ["Crime", "Psychological", "Thriller"],
-    sharedFrom: { name: "Minh Trần", user: "@minhtran", sharedAt: "2 ngày trước" },
-    createdBy: { name: "Minh Trần", user: "@minhtran" },
-    visibility: "PUBLIC",
-  },
-  {
-    title: "Ngày Ta Gặp Lại",
-    sub: "M. Tanaka",
-    img: photos.street,
-    status: "Hoàn thành",
-    score: "4.9",
-    type: "Truyện",
-    genres: ["Romance", "Slice of Life", "Josei"],
-    sharedFrom: { name: "Thu Hà", user: "@hanguyen", sharedAt: "3 ngày trước" },
-    createdBy: { name: "Thu Hà", user: "@hanguyen" },
-    visibility: "PUBLIC",
-  },
-  {
-    title: "Ánh Sáng Cuối Hè",
-    sub: "Movie · 2023",
-    img: photos.city,
-    status: "Drop",
-    score: "4.3",
-    type: "Phim",
-    genres: ["Drama", "Family"],
-    createdBy: { name: "Tuấn Minh", user: "@tuanminh" },
-    visibility: "PUBLIC",
-  },
-  {
-    title: "Võ Đài Linh Hồn",
-    sub: "K. Yamato",
-    img: photos.hero,
-    status: "Đang ra",
-    score: "4.5",
-    type: "Truyện",
-    genres: ["Action", "Martial Arts", "Shounen"],
-    createdBy: { name: "Nguyễn Huy", user: "@huynguyen" },
-    visibility: "PUBLIC",
-    mainLink: "https://mangadex.org",
-    updatedAt: "Hôm qua",
-    description: "Hành trình vươn tới đỉnh cao võ đạo của thiếu niên mang trong mình linh hồn hộ vệ cổ đại.",
-    chaptersList: defaultChaptersFor("Võ Đài Linh Hồn", false),
-  },
-  {
-    title: "Phía Sau Hoàng Hôn",
-    sub: "Movie · 2025",
-    img: photos.lantern,
-    status: "Đang đọc / xem",
-    score: "4.7",
-    type: "Phim",
-    genres: ["Mystery", "Sci-Fi"],
-    sharedFrom: { name: "Tuấn Minh", user: "@tuanminh", sharedAt: "5 ngày trước" },
-    createdBy: { name: "Tuấn Minh", user: "@tuanminh" },
-    visibility: "SHARED",
-  },
-  {
-    title: "Học Viện Ánh Trăng",
-    sub: "A. Mori",
-    img: photos.rain,
-    status: "Đang ra",
-    score: "4.4",
-    type: "Truyện",
-    genres: ["School Life", "Fantasy", "Shoujo"],
-    createdBy: { name: "Nguyễn Huy", user: "@huynguyen" },
-    visibility: "SHARED",
-    mainLink: "https://mangadex.org",
-    updatedAt: "3 ngày trước",
-    description: "Ngôi trường phép thuật chỉ mở cổng khi trăng tròn, nơi các học viên nắm giữ sức mạnh tinh tú.",
-    chaptersList: defaultChaptersFor("Học Viện Ánh Trăng", false),
-  },
-  {
-    title: "Bản Giao Hưởng Cuối",
-    sub: "Movie · 2022",
-    img: photos.street,
-    status: "Hoàn thành",
-    score: "4.8",
-    type: "Phim",
-    genres: ["Musical", "Romance"],
-    sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "1 tuần trước" },
-    createdBy: { name: "Lan Anh", user: "@lananh" },
-    visibility: "PUBLIC",
-  },
-  {
-    title: "Thành Phố Không Ngủ",
-    sub: "Movie · 2024",
-    img: photos.lantern,
-    status: "Muốn đọc / xem",
-    score: "4.7",
-    type: "Phim",
-    genres: ["Sci-Fi", "Mystery", "Drama"],
-    sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "Lưu từ khung Chat" },
-    createdBy: { name: "Lan Anh", user: "@lananh" },
-    visibility: "PUBLIC",
-  },
-];
+// Không tạo sẵn dữ liệu giả — người dùng sẽ tự thêm truyện/phim và tự kiểm tra
+const libraryItems: ContentItem[] = [];
+
+type CustomCategoryItem = {
+  name: string;
+  icon: string;
+  description: string;
+};
+
+type PersonalItemMeta = {
+  note: string;
+  rating: number;
+  readingStatus: string;
+  categories: string[];
+  privacy: "PRIVATE" | "SHARED" | "PEOPLE";
+};
+
+function loadSavedCategories(): CustomCategoryItem[] {
+  try {
+    const raw = window.localStorage.getItem("pl_custom_categories_v1");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomCategories(list: CustomCategoryItem[]) {
+  try {
+    window.localStorage.setItem("pl_custom_categories_v1", JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+}
+
+function loadSavedPersonalMeta(): Record<string, PersonalItemMeta> {
+  try {
+    const raw = window.localStorage.getItem("pl_personal_meta_v1");
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePersonalMetaToStorage(meta: Record<string, PersonalItemMeta>) {
+  try {
+    window.localStorage.setItem("pl_personal_meta_v1", JSON.stringify(meta));
+  } catch {
+    // ignore
+  }
+}
 
 const mangaGenres = ["BL", "BG", "GL", "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Psychological", "Romance", "School Life", "Slice of Life", "Supernatural", "Thriller", "Martial Arts", "Isekai", "Sci-Fi", "Sports", "Shounen", "Shoujo", "Seinen", "Josei"];
 const movieGenres = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Musical", "Romance", "Sci-Fi", "Thriller", "War", "Western", "Family", "Psychological", "Supernatural"];
@@ -367,12 +306,7 @@ function FavoriteButton({ active, toggle }: { active: boolean; toggle: () => voi
   return <button className={`favorite-btn ${active ? "active" : ""}`} onClick={e => { e.stopPropagation(); toggle(); }} aria-label={active ? "Bỏ yêu thích" : "Thêm yêu thích"}><Icon name="heart" size={17} /></button>;
 }
 
-const catalogItems: ContentItem[] = [
-  ...libraryItems,
-  { title: "Hành Tinh Ánh Sáng", sub: "Movie · 2025", img: photos.city, status: "Đang ra", score: "4.9", type: "Phim", genres: ["Sci-Fi", "Adventure", "Drama"] },
-  { title: "Khúc Nhạc Đêm Mưa", sub: "R. Shinkai", img: photos.rain, status: "Muốn đọc / xem", score: "4.8", type: "Truyện", genres: ["Romance", "Slice of Life", "Drama"] },
-  { title: "Bóng Ma Đường Tàu", sub: "H. Sato", img: photos.alley, status: "Đang ra", score: "4.7", type: "Truyện", genres: ["Mystery", "Supernatural", "Thriller"] },
-];
+const catalogItems: ContentItem[] = [];
 
 function FilterCollection({
   initialType = "Tất cả",
@@ -444,7 +378,7 @@ function FilterCollection({
           <div className="poster-copy">
             <div className="content-type">{item.type === "Truyện" ? "MANGA" : "MOVIE"}</div>
             <h3>{item.title}</h3>
-            <div className="card-genres">{item.genres.slice(0, 2).map(g => <span key={g}>{g}</span>)}</div>
+            <div className="card-genres">{item.genres.slice(0, 3).map(g => <span key={g}>{g}</span>)}</div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px", marginTop: "4px" }}>
               <Rating value={item.score} />
               {onToggleLibraryItem && (
@@ -465,7 +399,21 @@ function FilterCollection({
           </div>
         </article>
       );
-    })}</div> : <div className="empty-results"><Icon name="search" size={28} /><b>Không tìm thấy tác phẩm phù hợp</b><p>Hãy thử bỏ bớt thể loại hoặc đặt lại bộ lọc.</p><Button variant="secondary" onClick={reset}>Đặt lại bộ lọc</Button></div>}
+    })}</div> : (
+      <div className="empty-results">
+        <Icon name="book" size={28} />
+        <b>{sourcePool.length === 0 ? "Chưa có truyện hoặc bộ phim nào được đăng tải" : "Không tìm thấy tác phẩm phù hợp"}</b>
+        <p>
+          {sourcePool.length === 0
+            ? "Hãy nhấn nút bên dưới để tự đăng tải truyện hoặc phim của bạn và kiểm tra toàn bộ tính năng."
+            : "Hãy thử bỏ bớt thể loại hoặc đặt lại bộ lọc."}
+        </p>
+        <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+          <Button icon="plus" onClick={() => setPage("publish")}>+ Đăng truyện / phim mới</Button>
+          {sourcePool.length > 0 && <Button variant="secondary" onClick={reset}>Đặt lại bộ lọc</Button>}
+        </div>
+      </div>
+    )}
   </div>;
 }
 
@@ -496,96 +444,49 @@ function HomePage({
   onRemoveFromLibrary?: (title: string) => void;
   onSelectContent?: (item: ContentItem) => void;
 }) {
-  const heroSlides: Array<{
-    titleLine1: string;
-    titleLine2: string;
-    eyebrow: string;
-    desc: string;
-    bg: string;
-    item: ContentItem;
-  }> = [
-    {
-      titleLine1: "NIGHTFALL",
-      titleLine2: "CITY",
-      eyebrow: "Đề xuất cho bạn",
-      desc: "Trong một Tokyo nơi ký ức được mua bán như tiền tệ, một thám tử trẻ phải lần theo dấu vết của quá khứ đã bị đánh cắp trước khi thành phố chìm vào bóng tối.",
-      bg: photos.hero,
-      item: libraryItems[0],
-    },
-    {
-      titleLine1: "HÀNH TINH",
-      titleLine2: "ÁNH SÁNG",
-      eyebrow: "Phim mới thịnh hành",
-      desc: "Một chuyến tàu xuyên ngân hà chở theo những ký ức cuối cùng của Trái Đất, nơi hai kẻ xa lạ phát hiện ra tần số bí ẩn nối liền hai thế giới.",
-      bg: photos.city,
-      item: catalogItems[libraryItems.length],
-    },
-    {
-      titleLine1: "LỒNG ĐÈN",
-      titleLine2: "ĐỎ",
-      eyebrow: "Tác phẩm được chia sẻ nhiều nhất",
-      desc: "Giữa phố cổ Kyoto ngập tràn ánh đèn lồng đỏ, tiệm trà nhỏ chỉ mở cửa vào lúc nửa đêm để lắng nghe tâm sự của những linh hồn chưa thể siêu thoát.",
-      bg: photos.lantern,
-      item: libraryItems[2],
-    },
-    {
-      titleLine1: "KHÚC NHẠC",
-      titleLine2: "ĐÊM MƯA",
-      eyebrow: "Góc chữa lành cuối tuần",
-      desc: "Cơn mưa đầu mùa vô tình giữ chân hai tâm hồn cô đơn dưới mái hiên ga tàu cũ, mở ra một mùa hè ngập tràn giai điệu dương cầm và những lời hẹn ước.",
-      bg: photos.rain,
-      item: catalogItems[libraryItems.length + 1],
-    },
-  ];
+  // Tạo Hero Slides trực tiếp từ các truyện/phim thật người dùng đã đăng
+  const heroSlides = savedItems.slice(0, 6).map(item => {
+    const words = item.title.trim().split(/\s+/);
+    const mid = Math.max(1, Math.ceil(words.length / 2));
+    return {
+      titleLine1: words.slice(0, mid).join(" ").toUpperCase(),
+      titleLine2: words.slice(mid).join(" ").toUpperCase(),
+      eyebrow: `${item.type} · ${item.status}`,
+      desc: item.shortDescription || item.description || `Tác phẩm ${item.type.toLowerCase()} do ${item.author || item.director || item.sub} sáng tác.`,
+      bg: item.img || photos.hero,
+      item,
+    };
+  });
 
   const [heroIndex, setHeroIndex] = useState(0);
-  const currentHero = heroSlides[heroIndex];
-  const isHeroInLibrary = savedItems.some(x => x.title === currentHero.item.title);
+  const safeHeroIndex = heroSlides.length > 0 ? Math.min(heroIndex, heroSlides.length - 1) : 0;
+  const currentHero = heroSlides[safeHeroIndex];
+  const isHeroInLibrary = currentHero ? savedItems.some(x => x.title === currentHero.item.title) : false;
 
-  // State cho danh sách "Đang tiếp tục đọc / xem"
-  const [continueList, setContinueList] = useState<ContinueEntry[]>([
-    {
-      item: libraryItems[0],
-      currentUnit: 85,
-      totalUnits: 100,
-      unitLabel: "Chương",
-      chapterTitle: "Màn đêm buông xuống tại Quận 9",
-      synopsis: "Rei xâm nhập vào kho lưu trữ ký ức ngầm dưới tháp Shinjuku và phát hiện ra đoạn băng ghi hình từ 10 năm trước.",
-      lastReadAt: "15 phút trước",
-    },
-    {
-      item: libraryItems[1],
-      currentUnit: 9,
-      totalUnits: 12,
-      unitLabel: "Tập",
-      chapterTitle: "Tiếng mưa bên hiên nhà cũ",
-      synopsis: "Cơn bão bất ngờ khiến chuyến tàu cuối ngày bị hoãn, buộc Aoi và Haruto phải đối diện với bức thư chưa từng gửi.",
-      lastReadAt: "2 giờ trước",
-    },
-    {
-      item: libraryItems[2],
-      currentUnit: 71,
-      totalUnits: 100,
-      unitLabel: "Chương",
-      chapterTitle: "Chiếc đèn lồng thứ bảy",
-      synopsis: "Vị khách thứ bảy bước vào tiệm trà cùng chiếc đồng hồ quả quýt đã ngừng chạy từ một thế kỷ trước.",
-      lastReadAt: "Hôm qua",
-    },
-    {
-      item: libraryItems[3],
-      currentUnit: 11,
-      totalUnits: 12,
-      unitLabel: "Tập",
-      chapterTitle: "Bản ghi âm lúc 0 giờ",
-      synopsis: "Manh mối cuối cùng trong con hẻm nhỏ dẫn thám tử Kenji tới căn phòng nơi mọi bí mật bắt đầu.",
-      lastReadAt: "2 ngày trước",
-    },
-  ]);
+  // Tiến độ đọc/xem của từng truyện/phim thật do người dùng thêm
+  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
+
+  const continueList: ContinueEntry[] = savedItems.map(item => {
+    const chList = item.chaptersList || [];
+    const totalUnits = Math.max(1, chList.length);
+    const currentUnit = Math.min(totalUnits, progressMap[item.title] || 1);
+    const activeChap = chList[currentUnit - 1];
+    return {
+      item,
+      currentUnit,
+      totalUnits,
+      unitLabel: item.type === "Phim" ? "Tập" : "Chương",
+      chapterTitle: activeChap?.title || `${item.type === "Phim" ? "Tập" : "Chương"} ${currentUnit}`,
+      synopsis: item.shortDescription || item.description || "Chưa có mô tả.",
+      lastReadAt: item.updatedAt || "Vừa cập nhật",
+    };
+  });
 
   // Modal "Lưu vào thư viện"
+  const userCustomCategories = loadSavedCategories();
   const [saveModalItem, setSaveModalItem] = useState<ContentItem | null>(null);
   const [saveStatus, setSaveStatus] = useState("Đang đọc / xem");
-  const [saveCategory, setSaveCategory] = useState("Kệ đêm mưa");
+  const [saveCategory, setSaveCategory] = useState("");
   const [savePrivacy, setSavePrivacy] = useState("PRIVATE");
   const [saveFavorite, setSaveFavorite] = useState(true);
   const [saveNote, setSaveNote] = useState("");
@@ -597,89 +498,119 @@ function HomePage({
   const openSaveModal = (item: ContentItem) => {
     setSaveModalItem(item);
     setSaveStatus(item.status || "Đang đọc / xem");
-    setSaveCategory(item.type === "Truyện" ? "Đọc cuối tuần" : "Kệ đêm mưa");
+    setSaveCategory(userCustomCategories[0]?.name || "");
     setSavePrivacy("PRIVATE");
     setSaveFavorite(favorites.includes(item.title));
-    setSaveNote(`Đã lưu từ Trang chủ (${new Date().toLocaleDateString("vi-VN")}).`);
+    setSaveNote(item.personalNote || "");
   };
 
   const handleConfirmSaveToLibrary = () => {
     if (!saveModalItem) return;
+    if (saveCategory) {
+      const currentMeta = loadSavedPersonalMeta();
+      const prevEntry = currentMeta[saveModalItem.title];
+      const nextCats = prevEntry
+        ? Array.from(new Set([...prevEntry.categories, saveCategory]))
+        : [saveCategory];
+      currentMeta[saveModalItem.title] = {
+        note: saveNote || prevEntry?.note || "Chưa có ghi chú cá nhân.",
+        rating: prevEntry?.rating || 5,
+        readingStatus: saveStatus,
+        categories: nextCats,
+        privacy: savePrivacy as "PRIVATE" | "SHARED" | "PEOPLE",
+      };
+      savePersonalMetaToStorage(currentMeta);
+    }
     onSaveToLibrary?.(
-      { ...saveModalItem, status: saveStatus },
+      { ...saveModalItem, status: saveStatus, personalNote: saveNote },
       { status: saveStatus, category: saveCategory, note: saveNote, favorite: saveFavorite }
     );
-    setHomeToast(`Đã lưu “${saveModalItem.title}” (${saveStatus} · #${saveCategory}) vào Thư viện của tôi!`);
+    setHomeToast(
+      `Đã lưu “${saveModalItem.title}” (${saveStatus}${saveCategory ? ` · #${saveCategory}` : ""}) vào Thư viện của tôi!`
+    );
     setSaveModalItem(null);
   };
 
-  const updateContinueProgress = (title: string, nextUnit: number) => {
-    setContinueList(prev =>
-      prev.map(entry => {
-        if (entry.item.title !== title) return entry;
-        const clamped = Math.max(1, Math.min(entry.totalUnits, nextUnit));
-        const updated = {
-          ...entry,
-          currentUnit: clamped,
-          lastReadAt: "Vừa đọc / xem",
-        };
-        if (activeContinue?.item.title === title) {
-          setActiveContinue(updated);
-        }
-        return updated;
-      })
-    );
+  const updateContinueProgress = (title: string, nextUnit: number, maxUnits: number) => {
+    const clamped = Math.max(1, Math.min(maxUnits, nextUnit));
+    setProgressMap(prev => ({ ...prev, [title]: clamped }));
+    if (activeContinue?.item.title === title) {
+      const chList = activeContinue.item.chaptersList || [];
+      const activeChap = chList[clamped - 1];
+      setActiveContinue({
+        ...activeContinue,
+        currentUnit: clamped,
+        chapterTitle: activeChap?.title || `${activeContinue.unitLabel} ${clamped}`,
+        lastReadAt: "Vừa đọc / xem",
+      });
+    }
   };
 
   return <main>
-    <section className="hero">
-      <img className="hero-bg" src={currentHero.bg} alt="" />
-      <div className="hero-fade" />
-      <div className="hero-copy">
-        <div className="eyebrow"><i /> {currentHero.eyebrow}</div>
-        <h1>{currentHero.titleLine1}<br /><em>{currentHero.titleLine2}</em></h1>
-        <div className="hero-meta">
-          {currentHero.item.genres.slice(0, 3).map(g => <span key={g}>{g}</span>)}
-          <Rating value={currentHero.item.score} />
+    {currentHero ? (
+      <section className="hero">
+        <img className="hero-bg" src={currentHero.bg} alt="" />
+        <div className="hero-fade" />
+        <div className="hero-copy">
+          <div className="eyebrow"><i /> {currentHero.eyebrow}</div>
+          <h1>{currentHero.titleLine1}{currentHero.titleLine2 && <><br /><em>{currentHero.titleLine2}</em></>}</h1>
+          <div className="hero-meta">
+            {currentHero.item.genres.slice(0, 4).map(g => <span key={g}>{g}</span>)}
+            <Rating value={currentHero.item.score} />
+          </div>
+          <p>{currentHero.desc}</p>
+          <div className="hero-buttons">
+            <Button
+              icon="play"
+              onClick={() => {
+                onSelectContent?.(currentHero.item);
+                setPage("detail");
+              }}
+            >
+              Xem chi tiết
+            </Button>
+            <Button
+              variant={isHeroInLibrary ? "primary" : "secondary"}
+              icon={isHeroInLibrary ? "check" : "plus"}
+              onClick={() => openSaveModal(currentHero.item)}
+            >
+              {isHeroInLibrary ? "Đã lưu trong thư viện · Tuỳ chỉnh" : "Lưu vào thư viện"}
+            </Button>
+          </div>
+          {heroSlides.length > 1 && (
+            <div className="slider-dots">
+              {heroSlides.map((slide, idx) => (
+                <i
+                  key={slide.item.title}
+                  className={idx === safeHeroIndex ? "active" : ""}
+                  style={{ cursor: "pointer" }}
+                  title={slide.item.title}
+                  onClick={() => setHeroIndex(idx)}
+                />
+              ))}
+              <span>{`0${safeHeroIndex + 1} / 0${heroSlides.length}`}</span>
+            </div>
+          )}
         </div>
-        <p>{currentHero.desc}</p>
-        <div className="hero-buttons">
-          <Button
-            icon="play"
-            onClick={() => {
-              onSelectContent?.(currentHero.item);
-              setPage("detail");
-            }}
-          >
-            Xem chi tiết
-          </Button>
-          <Button
-            variant={isHeroInLibrary ? "primary" : "secondary"}
-            icon={isHeroInLibrary ? "check" : "plus"}
-            onClick={() => openSaveModal(currentHero.item)}
-          >
-            {isHeroInLibrary ? "Đã lưu trong thư viện · Tuỳ chỉnh" : "Lưu vào thư viện"}
-          </Button>
+        <div className="hero-poster" onClick={() => { onSelectContent?.(currentHero.item); setPage("detail"); }} style={{ cursor: "pointer" }}>
+          <img src={currentHero.item.img} alt={currentHero.item.title} />
+          <div className="poster-glow" />
         </div>
-        <div className="slider-dots">
-          {heroSlides.map((slide, idx) => (
-            <i
-              key={slide.item.title}
-              className={idx === heroIndex ? "active" : ""}
-              style={{ cursor: "pointer" }}
-              title={slide.item.title}
-              onClick={() => setHeroIndex(idx)}
-            />
-          ))}
-          <span>{`0${heroIndex + 1} / 0${heroSlides.length}`}</span>
+        <div className="scroll-hint">CUỘN ĐỂ KHÁM PHÁ <span /></div>
+      </section>
+    ) : (
+      <div className="page-shell" style={{ paddingTop: "32px" }}>
+        <div className="empty-results" style={{ height: "auto", padding: "42px 24px" }}>
+          <Icon name="book" size={32} />
+          <b>Thư viện hiện đang trống — Chưa có dữ liệu truyện / phim nào</b>
+          <p>Toàn bộ dữ liệu mẫu giả đã được gỡ bỏ. Hãy tự đăng truyện hoặc bộ phim của bạn để kiểm tra giao diện và tính năng đồng bộ.</p>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "8px" }}>
+            <Button icon="plus" onClick={() => setPage("publish")}>+ Đăng truyện / phim mới</Button>
+            <Button variant="secondary" onClick={() => setPage("library")}>Mở Thư viện của tôi</Button>
+          </div>
         </div>
       </div>
-      <div className="hero-poster" onClick={() => { onSelectContent?.(currentHero.item); setPage("detail"); }} style={{ cursor: "pointer" }}>
-        <img src={currentHero.item.img} alt={currentHero.item.title} />
-        <div className="poster-glow" />
-      </div>
-      <div className="scroll-hint">CUỘN ĐỂ KHÁM PHÁ <span /></div>
-    </section>
+    )}
 
     <div className="page-shell">
       {homeToast && (
@@ -691,68 +622,70 @@ function HomePage({
         </div>
       )}
 
-      <section>
-        <SectionTitle
-          eyebrow="TIẾP NỐI HÀNH TRÌNH"
-          title="Đang tiếp tục đọc / xem"
-          action="Xem tất cả"
-          onAction={() => setPage("library")}
-        />
-        <div className="continue-grid">
-          {continueList.map(entry => {
-            const pct = Math.round((entry.currentUnit / entry.totalUnits) * 100);
-            const isMovie = entry.item.type === "Phim";
-            return (
-              <article className="continue-card" key={entry.item.title}>
-                <img
-                  src={entry.item.img}
-                  alt={entry.item.title}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => {
-                    onSelectContent?.(entry.item);
-                    setPage("detail");
-                  }}
-                />
-                <div className="continue-info">
-                  <div className="type">{isMovie ? "PHIM" : "MANGA"} · <span style={{ color: "#a69bb5", fontWeight: 500 }}>{entry.lastReadAt}</span></div>
-                  <h3
+      {continueList.length > 0 && (
+        <section>
+          <SectionTitle
+            eyebrow="TIẾP NỐI HÀNH TRÌNH"
+            title="Đang tiếp tục đọc / xem"
+            action="Xem tất cả"
+            onAction={() => setPage("library")}
+          />
+          <div className="continue-grid">
+            {continueList.map(entry => {
+              const pct = Math.round((entry.currentUnit / entry.totalUnits) * 100);
+              const isMovie = entry.item.type === "Phim";
+              return (
+                <article className="continue-card" key={entry.item.title}>
+                  <img
+                    src={entry.item.img}
+                    alt={entry.item.title}
                     style={{ cursor: "pointer" }}
                     onClick={() => {
                       onSelectContent?.(entry.item);
                       setPage("detail");
                     }}
-                  >
-                    {entry.item.title}
-                  </h3>
-                  <p>{entry.unitLabel} {entry.currentUnit}/{entry.totalUnits} ({pct}%)</p>
-                  <div className="progress"><i style={{ width: `${pct}%` }} /></div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-                    <button type="button" onClick={() => setActiveContinue(entry)}>
-                      {isMovie ? "Xem tiếp" : "Đọc tiếp"} <Icon name="arrow" size={14} />
-                    </button>
-                    {entry.currentUnit < entry.totalUnits && (
-                      <button
-                        type="button"
-                        className="continue-plus-btn"
-                        title={`Tăng nhanh +1 ${entry.unitLabel}`}
-                        onClick={() => {
-                          updateContinueProgress(entry.item.title, entry.currentUnit + 1);
-                          setHomeToast(`Đã cập nhật tiến độ “${entry.item.title}” lên ${entry.unitLabel} ${entry.currentUnit + 1}/${entry.totalUnits}!`);
-                        }}
-                      >
-                        +1 {entry.unitLabel}
+                  />
+                  <div className="continue-info">
+                    <div className="type">{isMovie ? "PHIM" : "MANGA"} · <span style={{ color: "#a69bb5", fontWeight: 500 }}>{entry.lastReadAt}</span></div>
+                    <h3
+                      style={{ cursor: "pointer" }}
+                      onClick={() => {
+                        onSelectContent?.(entry.item);
+                        setPage("detail");
+                      }}
+                    >
+                      {entry.item.title}
+                    </h3>
+                    <p>{entry.unitLabel} {entry.currentUnit}/{entry.totalUnits} ({pct}%)</p>
+                    <div className="progress"><i style={{ width: `${pct}%` }} /></div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                      <button type="button" onClick={() => setActiveContinue(entry)}>
+                        {isMovie ? "Xem tiếp" : "Đọc tiếp"} <Icon name="arrow" size={14} />
                       </button>
-                    )}
+                      {entry.currentUnit < entry.totalUnits && (
+                        <button
+                          type="button"
+                          className="continue-plus-btn"
+                          title={`Tăng nhanh +1 ${entry.unitLabel}`}
+                          onClick={() => {
+                            updateContinueProgress(entry.item.title, entry.currentUnit + 1, entry.totalUnits);
+                            setHomeToast(`Đã cập nhật tiến độ “${entry.item.title}” lên ${entry.unitLabel} ${entry.currentUnit + 1}/${entry.totalUnits}!`);
+                          }}
+                        >
+                          +1 {entry.unitLabel}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="explore">
-        <SectionTitle eyebrow="BỘ SƯU TẬP NỔI BẬT" title="Dành riêng cho bạn" />
+        <SectionTitle eyebrow="BỘ SƯU TẬP CỦA BẠN" title="Tác phẩm đã đăng & lưu" />
         <FilterCollection
           favorites={favorites}
           toggleFavorite={toggleFavorite}
@@ -808,12 +741,12 @@ function HomePage({
             <label className="admin-field">
               <span>Xếp vào Danh mục cá nhân</span>
               <select value={saveCategory} onChange={e => setSaveCategory(e.target.value)}>
-                <option value="Kệ đêm mưa">☾ Kệ đêm mưa</option>
-                <option value="Cyberpunk">◇ Cyberpunk</option>
-                <option value="Đọc cuối tuần">◫ Đọc cuối tuần</option>
-                <option value="Phim chữa lành">✦ Phim chữa lành</option>
-                <option value="Trinh thám">⌕ Trinh thám</option>
-                <option value="Xem cùng bạn">♙ Xem cùng bạn</option>
+                <option value="">— Chưa chọn danh mục (Có thể tạo tại Thư viện) —</option>
+                {userCustomCategories.map(cat => (
+                  <option key={cat.name} value={cat.name}>
+                    {cat.icon} {cat.name}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="admin-field">
@@ -898,7 +831,7 @@ function HomePage({
                   type="button"
                   className="btn secondary"
                   disabled={activeContinue.currentUnit <= 1}
-                  onClick={() => updateContinueProgress(activeContinue.item.title, activeContinue.currentUnit - 1)}
+                  onClick={() => updateContinueProgress(activeContinue.item.title, activeContinue.currentUnit - 1, activeContinue.totalUnits)}
                 >
                   ← {activeContinue.unitLabel} trước
                 </button>
@@ -907,13 +840,13 @@ function HomePage({
                   min={1}
                   max={activeContinue.totalUnits}
                   value={activeContinue.currentUnit}
-                  onChange={e => updateContinueProgress(activeContinue.item.title, Number(e.target.value))}
+                  onChange={e => updateContinueProgress(activeContinue.item.title, Number(e.target.value), activeContinue.totalUnits)}
                 />
                 <button
                   type="button"
                   className="btn primary"
                   disabled={activeContinue.currentUnit >= activeContinue.totalUnits}
-                  onClick={() => updateContinueProgress(activeContinue.item.title, activeContinue.currentUnit + 1)}
+                  onClick={() => updateContinueProgress(activeContinue.item.title, activeContinue.currentUnit + 1, activeContinue.totalUnits)}
                 >
                   {activeContinue.unitLabel} tiếp (+1) →
                 </button>
@@ -927,25 +860,25 @@ function HomePage({
                 variant="secondary"
                 icon="check"
                 onClick={() => {
-                  updateContinueProgress(activeContinue.item.title, activeContinue.totalUnits);
+                  updateContinueProgress(activeContinue.item.title, activeContinue.totalUnits, activeContinue.totalUnits);
                   setHomeToast(`Chúc mừng! Bạn đã hoàn thành 100% “${activeContinue.item.title}”.`);
                 }}
               >
                 Đánh dấu Hoàn thành (100%)
               </Button>
-              <Button
-                variant="ghost"
-                icon="arrow"
-                onClick={() =>
-                  window.open(
-                    activeContinue.item.type === "Phim" ? "https://www.netflix.com" : "https://mangadex.org",
-                    "_blank",
-                    "noopener,noreferrer"
-                  )
-                }
-              >
-                {activeContinue.item.type === "Phim" ? "Mở trên Netflix" : "Đọc trên MangaDex"}
-              </Button>
+              {(() => {
+                const activeCh = (activeContinue.item.chaptersList || [])[activeContinue.currentUnit - 1];
+                const targetUrl = activeCh?.url || activeContinue.item.externalLinks?.[0]?.url || activeContinue.item.mainLink;
+                return targetUrl ? (
+                  <Button
+                    variant="ghost"
+                    icon="arrow"
+                    onClick={() => window.open(targetUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    Mở link đọc / xem ↗
+                  </Button>
+                ) : null;
+              })()}
             </div>
             <div>
               <Button variant="ghost" onClick={() => setActiveContinue(null)}>Đóng</Button>
@@ -1004,12 +937,40 @@ function ListingPage({
 
 function ShareModal({ close }: { close: () => void }) {
   const [choice, setChoice] = useState("all");
+  const [shareUserInput, setShareUserInput] = useState("");
+  const [sharedUsers, setSharedUsers] = useState<string[]>([]);
   return <div className="modal-backdrop" onMouseDown={close}><div className="share-modal" onMouseDown={e => e.stopPropagation()}>
-    <div className="modal-head"><div><span>QUYỀN RIÊNG TƯ</span><h2>Cài đặt chia sẻ</h2><p>“Nightfall City”</p></div><button className="icon-btn" onClick={close}><Icon name="x" /></button></div>
+    <div className="modal-head"><div><span>QUYỀN RIÊNG TƯ</span><h2>Cài đặt chia sẻ</h2><p>Chọn phạm vi hiển thị cho bản lưu này</p></div><button className="icon-btn" onClick={close}><Icon name="x" /></button></div>
     <div className={`share-option ${choice === "all" ? "chosen" : ""}`} onClick={() => setChoice("all")}><div className="share-radio">{choice === "all" && <i />}</div><div className="option-icon globe">◎</div><div><b>Chia sẻ với cộng đồng</b><p>Mọi người đều có thể xem ghi chú và đánh giá của bạn.</p></div></div>
     <div className={`share-option ${choice === "people" ? "chosen" : ""}`} onClick={() => setChoice("people")}><div className="share-radio">{choice === "people" && <i />}</div><div className="option-icon"><Icon name="users" /></div><div><b>Chia sẻ với người cụ thể</b><p>Chỉ những người bạn chọn mới có quyền truy cập.</p></div></div>
-    {choice === "people" && <div className="user-picker"><label><Icon name="search" size={16} /><input placeholder="Tìm theo tên hoặc @username" /></label><div><span><img src={photos.rain} alt="" />@lananh <button>×</button></span><span><img src={photos.city} alt="" />@minhthu <button>×</button></span></div></div>}
-    <div className="modal-actions"><Button variant="danger" icon="lock">Thu hồi quyền chia sẻ</Button><div><Button variant="ghost" onClick={close}>Hủy</Button><Button onClick={close}>Lưu thay đổi</Button></div></div>
+    {choice === "people" && (
+      <div className="user-picker">
+        <label>
+          <Icon name="search" size={16} />
+          <input
+            value={shareUserInput}
+            onChange={e => setShareUserInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" && shareUserInput.trim()) {
+                e.preventDefault();
+                const u = shareUserInput.trim().startsWith("@") ? shareUserInput.trim() : `@${shareUserInput.trim()}`;
+                if (!sharedUsers.includes(u)) setSharedUsers([...sharedUsers, u]);
+                setShareUserInput("");
+              }
+            }}
+            placeholder="Nhập @username và nhấn Enter..."
+          />
+        </label>
+        <div>
+          {sharedUsers.map(u => (
+            <span key={u}>
+              {u} <button onClick={() => setSharedUsers(sharedUsers.filter(x => x !== u))}>×</button>
+            </span>
+          ))}
+        </div>
+      </div>
+    )}
+    <div className="modal-actions"><Button variant="danger" icon="lock" onClick={close}>Thu hồi quyền chia sẻ</Button><div><Button variant="ghost" onClick={close}>Hủy</Button><Button onClick={close}>Lưu thay đổi</Button></div></div>
   </div></div>;
 }
 
@@ -1036,12 +997,26 @@ function PublishedWorkEditorModal({
 }) {
   const [draft, setDraft] = useState<ContentItem>({
     ...initialItem,
-    description:
-      initialItem.description ||
-      `Mô tả chi tiết cho tác phẩm “${initialItem.title}” (${initialItem.sub}).`,
-    mainLink: initialItem.mainLink || (initialItem.type === "Truyện" ? "https://mangadex.org" : "https://www.netflix.com"),
+    shortDescription: initialItem.shortDescription || "",
+    description: initialItem.description || "",
+    author: initialItem.author || "",
+    artist: initialItem.artist || "",
+    director: initialItem.director || "",
+    cast: initialItem.cast || "",
+    releaseYear: initialItem.releaseYear || "",
+    language: initialItem.language || "Tiếng Việt",
+    externalLinks:
+      initialItem.externalLinks && initialItem.externalLinks.length > 0
+        ? initialItem.externalLinks
+        : initialItem.mainLink
+        ? [{ platform: "Liên kết đọc/xem", url: initialItem.mainLink, note: "" }]
+        : [],
+    mainLink: initialItem.mainLink || "",
+    sourceRef: initialItem.sourceRef || "",
+    extraTags: initialItem.extraTags || "",
+    personalNote: initialItem.personalNote || "",
     visibility: initialItem.visibility || "PUBLIC",
-    chaptersList: initialItem.chaptersList || defaultChaptersFor(initialItem.title, initialItem.type === "Phim"),
+    chaptersList: initialItem.chaptersList || [],
   });
 
   const isOwner = initialItem.createdBy?.user === CURRENT_USER_HANDLE;
@@ -1053,18 +1028,32 @@ function PublishedWorkEditorModal({
     reader.readAsDataURL(file);
   };
 
+  const linksList = draft.externalLinks || [];
+  const updateLinkRow = (idx: number, patch: Partial<ExternalLinkItem>) => {
+    const next = linksList.map((l, i) => (i === idx ? { ...l, ...patch } : l));
+    setDraft({ ...draft, externalLinks: next, mainLink: next[0]?.url || "" });
+  };
+  const addLinkRow = () => {
+    const next = [...linksList, { platform: "", url: "", note: "" }];
+    setDraft({ ...draft, externalLinks: next });
+  };
+  const removeLinkRow = (idx: number) => {
+    const next = linksList.filter((_, i) => i !== idx);
+    setDraft({ ...draft, externalLinks: next, mainLink: next[0]?.url || "" });
+  };
+
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="admin-modal-wide" onMouseDown={e => e.stopPropagation()}>
+      <div className="admin-modal-wide" style={{ maxHeight: "90vh", overflowY: "auto" }} onMouseDown={e => e.stopPropagation()}>
         <div className="modal-head">
           <div>
             <span>
               {isOwner
-                ? "✍️ CHỈNH SỬA TRUYỆN / PHIM TÔI ĐĂNG (@huynguyen)"
+                ? `✍️ CHỈNH SỬA TRUYỆN / PHIM TÔI ĐĂNG (${CURRENT_USER_HANDLE})`
                 : `🛡️ QUYỀN QUẢN TRỊ VIÊN (${userRole}) · CHỈNH SỬA BÀI ĐĂNG CỦA ${initialItem.createdBy?.user || "@user"}`}
             </span>
             <h2>Chỉnh sửa & Cập nhật: {initialItem.title}</h2>
-            <p>Cập nhật thông tin gốc, ảnh bìa, trạng thái phát hành, quyền hiển thị và thể loại của tác phẩm.</p>
+            <p>Mọi thông tin bạn chỉnh sửa tại đây sẽ đồng bộ trực tiếp với Trang chi tiết và Thư viện.</p>
           </div>
           <button className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
@@ -1088,30 +1077,86 @@ function PublishedWorkEditorModal({
                 />
               </label>
               <label className="admin-field">
-                <span>Tác giả / Đạo diễn / Năm</span>
-                <input
-                  value={draft.sub}
-                  onChange={e => setDraft({ ...draft, sub: e.target.value })}
-                  placeholder="VD: S. Kuroda hoặc Movie · 2025"
-                />
-              </label>
-            </div>
-            <div className="admin-field-row">
-              <label className="admin-field">
                 <span>Loại nội dung</span>
                 <select value={draft.type} onChange={e => setDraft({ ...draft, type: e.target.value as "Truyện" | "Phim" })}>
-                  <option value="Truyện">Truyện (MANGA)</option>
-                  <option value="Phim">Phim (MOVIE)</option>
+                  <option value="Truyện">Truyện (MANGA / STORY)</option>
+                  <option value="Phim">Phim (MOVIE / SERIES)</option>
                 </select>
               </label>
+            </div>
+
+            {draft.type === "Truyện" ? (
+              <div className="admin-field-two">
+                <label className="admin-field">
+                  <span>Tác giả</span>
+                  <input
+                    value={draft.author || ""}
+                    onChange={e => setDraft({ ...draft, author: e.target.value })}
+                    placeholder="Tên tác giả..."
+                  />
+                </label>
+                <label className="admin-field">
+                  <span>Họa sĩ</span>
+                  <input
+                    value={draft.artist || ""}
+                    onChange={e => setDraft({ ...draft, artist: e.target.value })}
+                    placeholder="Tên họa sĩ (nếu có)..."
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="admin-field-two">
+                <label className="admin-field">
+                  <span>Đạo diễn</span>
+                  <input
+                    value={draft.director || ""}
+                    onChange={e => setDraft({ ...draft, director: e.target.value })}
+                    placeholder="Tên đạo diễn..."
+                  />
+                </label>
+                <label className="admin-field">
+                  <span>Diễn viên</span>
+                  <input
+                    value={draft.cast || ""}
+                    onChange={e => setDraft({ ...draft, cast: e.target.value })}
+                    placeholder="Danh sách diễn viên..."
+                  />
+                </label>
+              </div>
+            )}
+
+            <div className="admin-field-row">
               <label className="admin-field">
                 <span>Trạng thái phát hành</span>
                 <select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })}>
-                  <option value="Đang ra">Đang cập nhật (ONGOING)</option>
+                  <option value="Đang ra">Đang ra</option>
+                  <option value="Hoàn thành">Hoàn thành</option>
+                  <option value="Drop">Drop</option>
                   <option value="Đang đọc / xem">Đang đọc / xem</option>
-                  <option value="Hoàn thành">Đã hoàn thành (COMPLETED)</option>
-                  <option value="Drop">Tạm ngưng (HIATUS / DROP)</option>
                 </select>
+              </label>
+              <label className="admin-field">
+                <span>Ngôn ngữ</span>
+                <input
+                  value={draft.language || ""}
+                  onChange={e => setDraft({ ...draft, language: e.target.value })}
+                  placeholder="Tiếng Việt, Tiếng Anh..."
+                />
+              </label>
+              <label className="admin-field">
+                <span>Năm xuất bản / phát hành</span>
+                <input
+                  value={draft.releaseYear || ""}
+                  onChange={e => setDraft({ ...draft, releaseYear: e.target.value })}
+                  placeholder="VD: 2025"
+                />
+              </label>
+            </div>
+
+            <div className="admin-field-two">
+              <label className="admin-field">
+                <span>URL Ảnh bìa / Poster</span>
+                <input value={draft.img} onChange={e => setDraft({ ...draft, img: e.target.value })} />
               </label>
               <label className="admin-field">
                 <span>Quyền hiển thị bài đăng</span>
@@ -1119,42 +1164,85 @@ function PublishedWorkEditorModal({
                   value={draft.visibility || "PUBLIC"}
                   onChange={e => setDraft({ ...draft, visibility: e.target.value as "PUBLIC" | "SHARED" | "PRIVATE" })}
                 >
-                  <option value="PUBLIC">Công khai (PUBLIC)</option>
-                  <option value="SHARED">Chia sẻ cộng đồng (SHARED)</option>
+                  <option value="PUBLIC">Cộng đồng (PUBLIC)</option>
+                  <option value="SHARED">Chia sẻ riêng (SHARED)</option>
                   <option value="PRIVATE">Riêng tư (PRIVATE)</option>
                 </select>
-              </label>
-            </div>
-            <div className="admin-field-two">
-              <label className="admin-field">
-                <span>URL Ảnh bìa / Poster</span>
-                <input value={draft.img} onChange={e => setDraft({ ...draft, img: e.target.value })} />
-              </label>
-              <label className="admin-field">
-                <span>Đường dẫn đọc / xem chính</span>
-                <input
-                  value={draft.mainLink || ""}
-                  onChange={e => setDraft({ ...draft, mainLink: e.target.value })}
-                  placeholder="https://..."
-                />
               </label>
             </div>
           </div>
         </div>
 
         <label className="admin-field">
+          <span>Mô tả ngắn (Tên khác, tóm tắt nhanh...)</span>
+          <textarea
+            value={draft.shortDescription || ""}
+            onChange={e => setDraft({ ...draft, shortDescription: e.target.value })}
+            placeholder="Nhập mô tả ngắn hoặc tên khác của tác phẩm..."
+            style={{ minHeight: "56px" }}
+          />
+        </label>
+
+        <label className="admin-field">
           <span>Mô tả chi tiết tác phẩm</span>
           <textarea
             value={draft.description || ""}
             onChange={e => setDraft({ ...draft, description: e.target.value })}
-            placeholder="Nhập nội dung tóm tắt, giới thiệu chi tiết cho bộ truyện hoặc phim..."
+            placeholder="Nhập toàn bộ nội dung giới thiệu, cốt truyện chi tiết, hashtag..."
+            style={{ minHeight: "110px" }}
           />
         </label>
 
         <div className="admin-field">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+            <span>Đường dẫn đọc / xem ({linksList.length})</span>
+            <Button variant="secondary" icon="plus" onClick={addLinkRow}>+ Thêm đường dẫn</Button>
+          </div>
+          {linksList.map((lk, idx) => (
+            <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr 1fr auto", gap: "8px", marginBottom: "6px" }}>
+              <input
+                value={lk.platform}
+                onChange={e => updateLinkRow(idx, { platform: e.target.value })}
+                placeholder="Tên web / nhóm dịch (VD: Roads Team)"
+              />
+              <input
+                value={lk.url}
+                onChange={e => updateLinkRow(idx, { url: e.target.value })}
+                placeholder="https://..."
+              />
+              <input
+                value={lk.note}
+                onChange={e => updateLinkRow(idx, { note: e.target.value })}
+                placeholder="Ghi chú liên kết"
+              />
+              <Button variant="danger" onClick={() => removeLinkRow(idx)}>Xóa</Button>
+            </div>
+          ))}
+        </div>
+
+        <div className="admin-field-two">
+          <label className="admin-field">
+            <span>Nguồn / tham khảo</span>
+            <input
+              value={draft.sourceRef || ""}
+              onChange={e => setDraft({ ...draft, sourceRef: e.target.value })}
+              placeholder="Tên nguồn hoặc URL tham khảo"
+            />
+          </label>
+          <label className="admin-field">
+            <span>Thẻ bổ sung (Tags)</span>
+            <input
+              value={draft.extraTags || ""}
+              onChange={e => setDraft({ ...draft, extraTags: e.target.value })}
+              placeholder="VD: học đường, chữa lành, 19+..."
+            />
+          </label>
+        </div>
+
+        <div className="admin-field">
           <span>Thể loại ({draft.genres.length} đã chọn)</span>
           <div className="admin-genre-picks">
-            {allGenres.slice(0, 20).map(g => (
+            {(draft.type === "Truyện" ? mangaGenres : movieGenres).map(g => (
               <button
                 key={g}
                 type="button"
@@ -1184,9 +1272,17 @@ function PublishedWorkEditorModal({
               icon="check"
               onClick={() => {
                 if (!draft.title.trim()) return;
+                const cleanLinks = (draft.externalLinks || []).filter(l => l.platform.trim() || l.url.trim());
+                const creatorLabel =
+                  draft.type === "Truyện"
+                    ? [draft.author?.trim(), draft.artist?.trim()].filter(Boolean).join(" · ")
+                    : [draft.director?.trim(), draft.releaseYear?.trim()].filter(Boolean).join(" · ");
                 onSave(initialItem.title, {
                   ...draft,
                   title: draft.title.trim(),
+                  sub: creatorLabel || draft.sub || draft.type,
+                  externalLinks: cleanLinks,
+                  mainLink: cleanLinks[0]?.url || draft.mainLink || "",
                   updatedAt: "Vừa cập nhật",
                 });
               }}
@@ -1214,7 +1310,7 @@ function PublishedChaptersModal({
   onBackToInfoEditor?: (draft: ContentItem) => void;
 }) {
   const [chapters, setChapters] = useState<PublishedChapterItem[]>(
-    initialItem.chaptersList || defaultChaptersFor(initialItem.title, initialItem.type === "Phim")
+    initialItem.chaptersList || []
   );
   const isOwner = initialItem.createdBy?.user === CURRENT_USER_HANDLE;
   const unitLabel = initialItem.type === "Truyện" ? "Chương" : "Tập";
@@ -1248,9 +1344,9 @@ function PublishedChaptersModal({
                   id: Date.now(),
                   season: "Mùa 1",
                   number: nextNum,
-                  title: `${unitLabel} ${nextNum}: Nội dung mới`,
-                  url: initialItem.type === "Truyện" ? "https://mangadex.org" : "https://www.netflix.com",
-                  note: "Vừa đăng",
+                  title: "",
+                  url: "",
+                  note: "",
                 },
               ]);
             }}
@@ -1260,17 +1356,23 @@ function PublishedChaptersModal({
         </div>
 
         <div style={{ maxHeight: "340px", overflowY: "auto", paddingRight: "4px" }}>
+          {chapters.length === 0 && (
+            <div className="empty-results" style={{ height: "120px" }}>
+              <b>Chưa có {unitLabel.toLowerCase()} nào</b>
+              <p>Nhấn nút “+ Thêm {unitLabel.toLowerCase()} mới” để thêm đường dẫn từng {unitLabel.toLowerCase()}.</p>
+            </div>
+          )}
           {chapters.map((ch, idx) => (
             <div className="admin-chap-row" key={ch.id}>
               <input
                 value={ch.number}
                 onChange={e => setChapters(chapters.map((x, i) => (i === idx ? { ...x, number: e.target.value } : x)))}
-                placeholder="Số (1, 1.5)"
+                placeholder="Số (1, 2...)"
               />
               <input
                 value={ch.title}
                 onChange={e => setChapters(chapters.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)))}
-                placeholder={`Tiêu đề ${unitLabel.toLowerCase()}`}
+                placeholder={`Tiêu đề ${unitLabel.toLowerCase()} (tùy chọn)`}
               />
               <input
                 value={ch.url}
@@ -1360,50 +1462,35 @@ function LibraryPage({
   const [editingPublishedItem, setEditingPublishedItem] = useState<ContentItem | null>(null);
   const [editingChaptersItem, setEditingChaptersItem] = useState<ContentItem | null>(null);
 
-  // Quản lý danh mục riêng (Tạo mới, Chỉnh sửa, Xóa & Thêm truyện/phim vào danh mục)
-  const [categories, setCategories] = useState([
-    { name: "Kệ đêm mưa", icon: "☾", description: "Những câu chuyện dịu dàng cho ngày mưa." },
-    { name: "Cyberpunk", icon: "◇", description: "Tương lai, neon và những ký ức bị đánh cắp." },
-    { name: "Đọc cuối tuần", icon: "◫", description: "Danh sách để dành cho ngày nghỉ." },
-    { name: "Phim chữa lành", icon: "✦", description: "Nhẹ nhàng, ấm áp và đầy hy vọng." },
-    { name: "Trinh thám", icon: "⌕", description: "Bí ẩn cần được giải đáp." },
-    { name: "Xem cùng bạn", icon: "♙", description: "Bộ sưu tập được lưu & chia sẻ với bạn bè." },
-  ]);
+  // Quản lý danh mục riêng (Không tạo sẵn danh mục giả — chỉ hiển thị danh mục do người dùng tự tạo)
+  const [categories, setCategories] = useState<CustomCategoryItem[]>(() => loadSavedCategories());
   const [categoryModal, setCategoryModal] = useState<{ index: number | null; name: string; icon: string; description: string } | null>(null);
   const [assigningCategoryName, setAssigningCategoryName] = useState<string | null>(null);
   const [quickAssignItem, setQuickAssignItem] = useState<ContentItem | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<ContentItem | null>(null);
 
-  // Dữ liệu cá nhân độc lập cho từng bộ: Ghi chú, Điểm 1-5 sao, Trạng thái đọc/xem, Quyền riêng tư & Danh sách Danh mục riêng (hỗ trợ nhiều danh mục)
-  const [personalMeta, setPersonalMeta] = useState<Record<string, {
-    note: string;
-    rating: number;
-    readingStatus: string;
-    categories: string[];
-    privacy: "PRIVATE" | "SHARED" | "PEOPLE";
-  }>>({
-    "Nightfall City": { note: "Một thế giới lôi cuốn, càng đọc càng khó dứt ra...", rating: 5, readingStatus: "Đang đọc / xem", categories: ["Cyberpunk", "Trinh thám"], privacy: "SHARED" },
-    "Thành Phố Mưa": { note: "Phần hình ảnh rất đẹp, nhịp kể chậm nhưng cuốn hút...", rating: 4, readingStatus: "Đang đọc / xem", categories: ["Kệ đêm mưa", "Phim chữa lành"], privacy: "PRIVATE" },
-    "Lồng Đèn Đỏ": { note: "Lưu từ thư viện của @lananh — Bối cảnh cổ trang pha lẫn bí ẩn cực kỳ ấn tượng.", rating: 5, readingStatus: "Hoàn thành", categories: ["Trinh thám", "Xem cùng bạn"], privacy: "SHARED" },
-    "Ký Ức Ngõ Hẻm": { note: "Lưu từ chia sẻ của @minhtran — Phim trinh thám tâm lý đáng xem cuối tuần.", rating: 4, readingStatus: "Đang đọc / xem", categories: ["Trinh thám", "Đọc cuối tuần"], privacy: "PRIVATE" },
-    "Ngày Ta Gặp Lại": { note: "Lưu từ @hanguyen — Nhẹ nhàng, sâu lắng, đọc xong rất ấm lòng.", rating: 5, readingStatus: "Hoàn thành", categories: ["Kệ đêm mưa", "Đọc cuối tuần"], privacy: "SHARED" },
-    "Ánh Sáng Cuối Hè": { note: "Tạm dừng ở phút 45 để hôm sau xem tiếp.", rating: 4, readingStatus: "Drop", categories: ["Phim chữa lành"], privacy: "PRIVATE" },
-    "Võ Đài Linh Hồn": { note: "Các trận đấu mãn nhãn, nét vẽ cực kỳ có lực.", rating: 4, readingStatus: "Muốn đọc / xem", categories: ["Đọc cuối tuần"], privacy: "PRIVATE" },
-    "Phía Sau Hoàng Hôn": { note: "Lưu từ @tuanminh — Ý tưởng sci-fi rất độc đáo.", rating: 5, readingStatus: "Đang đọc / xem", categories: ["Cyberpunk", "Xem cùng bạn"], privacy: "PEOPLE" },
-    "Học Viện Ánh Trăng": { note: "Truyện phép thuật học đường giải trí nhẹ nhàng.", rating: 4, readingStatus: "Muốn đọc / xem", categories: ["Đọc cuối tuần"], privacy: "PRIVATE" },
-    "Bản Giao Hưởng Cuối": { note: "Lưu từ @lananh — Nhạc phim thực sự đỉnh cao.", rating: 5, readingStatus: "Hoàn thành", categories: ["Phim chữa lành", "Xem cùng bạn"], privacy: "SHARED" },
-    "Thành Phố Không Ngủ": { note: "Lưu từ thẻ chia sẻ trong nhóm Chat — Sẽ xem vào tối thứ 7.", rating: 5, readingStatus: "Muốn đọc / xem", categories: ["Cyberpunk", "Xem cùng bạn"], privacy: "SHARED" },
-  });
+  // Dữ liệu cá nhân độc lập cho từng bộ: Ghi chú, Điểm 1-5 sao, Trạng thái đọc/xem, Quyền riêng tư & Danh sách Danh mục riêng (không tạo sẵn dữ liệu giả)
+  const [personalMeta, setPersonalMeta] = useState<Record<string, PersonalItemMeta>>(() => loadSavedPersonalMeta());
 
-  const getItemMeta = (item: ContentItem) => {
+  useEffect(() => {
+    saveCustomCategories(categories);
+  }, [categories]);
+
+  useEffect(() => {
+    savePersonalMetaToStorage(personalMeta);
+  }, [personalMeta]);
+
+  const getItemMeta = (item: ContentItem): PersonalItemMeta => {
     return personalMeta[item.title] || {
-      note: item.sharedFrom
-        ? `Đã lưu từ chia sẻ của ${item.sharedFrom.name} (${item.sharedFrom.user}).`
-        : "Một tác phẩm đáng chú ý trong bộ sưu tập cá nhân của tôi.",
-      rating: 4,
+      note:
+        item.personalNote ||
+        (item.sharedFrom
+          ? `Đã lưu từ chia sẻ của ${item.sharedFrom.name} (${item.sharedFrom.user}).`
+          : "Chưa có ghi chú cá nhân."),
+      rating: 5,
       readingStatus: item.status === "Đang ra" ? "Đang đọc / xem" : item.status,
-      categories: item.sharedFrom ? ["Xem cùng bạn"] : ["Đọc cuối tuần"],
-      privacy: "PRIVATE" as const,
+      categories: [],
+      privacy: item.visibility === "PUBLIC" ? "SHARED" : item.visibility === "SHARED" ? "PEOPLE" : ("PRIVATE" as const),
     };
   };
 
@@ -1574,7 +1661,7 @@ function LibraryPage({
           <p>Quản lý truyện/phim của bạn, chỉnh sửa & cập nhật tác phẩm do bạn đăng tải, phân loại danh mục riêng và lưu giữ chia sẻ từ bạn bè.</p>
         </div>
         <div>
-          <Button variant="secondary" icon="share" onClick={() => onOpenPublicProfile?.("@lananh")}>Khám phá thư viện bạn bè</Button>
+          <Button variant="secondary" icon="share" onClick={() => onOpenPublicProfile?.("@huynguyen")}>Khám phá thư viện bạn bè</Button>
           <Button variant="secondary" icon="plus" onClick={() => setCategoryModal({ index: null, name: "", icon: "☾", description: "" })}>Tạo danh mục riêng</Button>
           <Button variant="secondary" icon="plus" onClick={() => setPage("manga")}>Thêm từ kho chung</Button>
           <Button icon="plus" onClick={() => setPage("publish")}>Đăng truyện / phim</Button>
@@ -1649,29 +1736,34 @@ function LibraryPage({
         ))}
       </div>
 
-      <section className="recent-history">
-        <SectionTitle eyebrow="HOẠT ĐỘNG GẦN ĐÂY" title="Lịch sử đọc / xem gần đây" action="Xem toàn bộ" />
-        <div className="history-track">
-          {items.slice(0, 10).map((item, i) => (
-            <button
-              className="history-card"
-              key={item.title}
-              onClick={() => {
-                onSelectContent?.(item);
-                setPage("detail");
-              }}
-            >
-              <img src={item.img} alt={item.title} />
-              <div>
-                <span>{item.type === "Truyện" ? "MANGA" : "MOVIE"} · {i < 2 ? "Vừa xong" : `${i + 1} giờ trước`}</span>
-                <b>{item.title}</b>
-                <p>{item.type === "Truyện" ? `Chương ${85 - i}` : `Tập ${Math.max(1, 10 - i)}`}</p>
-                <div className="progress"><i style={{ width: `${88 - i * 6}%` }} /></div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
+      {items.length > 0 && (
+        <section className="recent-history">
+          <SectionTitle eyebrow="HOẠT ĐỘNG GẦN ĐÂY" title="Lịch sử đọc / xem gần đây" />
+          <div className="history-track">
+            {items.slice(0, 10).map((item) => {
+              const totalCh = (item.chaptersList || []).length;
+              return (
+                <button
+                  className="history-card"
+                  key={item.title}
+                  onClick={() => {
+                    onSelectContent?.(item);
+                    setPage("detail");
+                  }}
+                >
+                  <img src={item.img} alt={item.title} />
+                  <div>
+                    <span>{item.type === "Truyện" ? "MANGA" : "MOVIE"} · {item.updatedAt || "Vừa cập nhật"}</span>
+                    <b>{item.title}</b>
+                    <p>{totalCh > 0 ? `${totalCh} ${item.type === "Truyện" ? "chương" : "tập"} đã đăng` : item.status}</p>
+                    <div className="progress"><i style={{ width: totalCh > 0 ? "100%" : "40%" }} /></div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <div className="library-toolbar">
         <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
@@ -1690,7 +1782,7 @@ function LibraryPage({
             </Button>
           )}
           {view !== "categories" && tab === "Lưu từ chia sẻ" && (
-            <Button variant="secondary" icon="share" onClick={() => onOpenPublicProfile?.("@lananh")}>
+            <Button variant="secondary" icon="share" onClick={() => onOpenPublicProfile?.("@huynguyen")}>
               + Lưu thêm từ thư viện bạn bè
             </Button>
           )}
@@ -1716,36 +1808,49 @@ function LibraryPage({
 
       {/* GIAO DIỆN QUẢN LÝ DANH MỤC RIÊNG */}
       {view === "categories" ? (
-        <div className="category-grid">
-          {categories.map((category, i) => {
-            const count = getCategoryCount(category.name);
-            return (
-              <article className="category-card" key={category.name}>
-                <div className="category-icon">{category.icon}</div>
-                <div>
-                  <span>DANH MỤC RIÊNG</span>
-                  <h3>{category.name}</h3>
-                  <p>{category.description}</p>
-                  <b>{count} tác phẩm trong danh mục</b>
-                </div>
-                <div className="category-actions">
-                  <Button variant="secondary" onClick={() => { setTab(category.name); setView("all"); }}>
-                    Xem ({count})
-                  </Button>
-                  <Button icon="plus" onClick={() => setAssigningCategoryName(category.name)}>
-                    Thêm tác phẩm
-                  </Button>
-                  <button title="Chỉnh sửa danh mục" onClick={() => setCategoryModal({ index: i, name: category.name, icon: category.icon, description: category.description })}>
-                    <Icon name="edit" size={15} />
-                  </button>
-                  <button title="Xóa danh mục" onClick={() => handleDeleteCategory(category.name, i)}>
-                    <Icon name="x" size={15} />
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+        categories.length === 0 ? (
+          <div className="empty-results">
+            <Icon name="book" size={28} />
+            <b>Bạn chưa tạo Danh mục riêng nào (0 danh mục)</b>
+            <p>Hãy nhấn nút bên dưới để tự tạo các danh mục riêng theo ý bạn và phân loại truyện/phim.</p>
+            <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginTop: "10px" }}>
+              <Button icon="plus" onClick={() => setCategoryModal({ index: null, name: "", icon: "☾", description: "" })}>
+                + Tạo danh mục riêng
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="category-grid">
+            {categories.map((category, i) => {
+              const count = getCategoryCount(category.name);
+              return (
+                <article className="category-card" key={category.name}>
+                  <div className="category-icon">{category.icon}</div>
+                  <div>
+                    <span>DANH MỤC RIÊNG</span>
+                    <h3>{category.name}</h3>
+                    <p>{category.description}</p>
+                    <b>{count} tác phẩm trong danh mục</b>
+                  </div>
+                  <div className="category-actions">
+                    <Button variant="secondary" onClick={() => { setTab(category.name); setView("all"); }}>
+                      Xem ({count})
+                    </Button>
+                    <Button icon="plus" onClick={() => setAssigningCategoryName(category.name)}>
+                      Thêm tác phẩm
+                    </Button>
+                    <button title="Chỉnh sửa danh mục" onClick={() => setCategoryModal({ index: i, name: category.name, icon: category.icon, description: category.description })}>
+                      <Icon name="edit" size={15} />
+                    </button>
+                    <button title="Xóa danh mục" onClick={() => handleDeleteCategory(category.name, i)}>
+                      <Icon name="x" size={15} />
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )
       ) : shownItems.length === 0 ? (
         <div className="empty-results">
           <Icon name="book" size={28} />
@@ -2222,6 +2327,7 @@ function DetailPage({
   onOpenShareToChat,
   onOpenReport,
   onOpenPublicProfile,
+  onNavigatePublish,
 }: {
   publishedTitle?: string;
   savedItems?: ContentItem[];
@@ -2234,10 +2340,11 @@ function DetailPage({
   onOpenShareToChat?: (item: ContentItem) => void;
   onOpenReport?: (targetType: "CONTENT" | "COMMENT", targetName: string) => void;
   onOpenPublicProfile?: (username: string) => void;
+  onNavigatePublish?: () => void;
 }) {
   const [season, setSeason] = useState("Mùa 1");
   const [reviewTab, setReviewTab] = useState("Bình luận chung");
-  const [readChapters, setReadChapters] = useState<number[]>([0, 1]);
+  const [readChapters, setReadChapters] = useState<number[]>([]);
   const [spoilerRevealed, setSpoilerRevealed] = useState(false);
   const [detailToast, setDetailToast] = useState("");
   const [userRating, setUserRating] = useState(5);
@@ -2246,57 +2353,95 @@ function DetailPage({
   const [editingWorkModal, setEditingWorkModal] = useState(false);
   const [editingChaptersModal, setEditingChaptersModal] = useState(false);
 
-  const [comments, setComments] = useState([
-    {
-      id: 1,
-      author: "Lan Anh",
-      username: "@lananh",
-      avatar: photos.rain,
-      time: "2 giờ trước",
-      rating: "5.0",
-      text: "Phần xây dựng thế giới thật sự xuất sắc. Từng khung hình đều có cảm giác như đang chuyển động!",
-      spoiler: "Rei thực ra đã biết thân phận của người đeo mặt nạ từ chương 8...",
-    },
-  ]);
+  const matchedItem =
+    [...savedItems, ...catalogItems].find(x => x.title === publishedTitle) ||
+    savedItems[0] ||
+    catalogItems[0];
 
-  const matchedItem = [...savedItems, ...catalogItems].find(x => x.title === (publishedTitle || "Nightfall City"));
-  const currentItem: ContentItem = matchedItem ?? {
-    title: publishedTitle || "Nightfall City",
-    sub: "Sora Kuroda · 2022",
-    img: photos.red,
-    status: "Đang ra",
-    score: "4.8",
-    type: "Truyện",
-    genres: ["Cyberpunk", "Mystery", "Action", "Psychological"],
-    createdBy: { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
-  };
+  if (!matchedItem) {
+    return (
+      <main className="inner-page">
+        <div className="page-shell">
+          <div className="empty-results" style={{ height: "280px" }}>
+            <Icon name="book" size={30} />
+            <b>Chưa có truyện / phim nào được chọn</b>
+            <p>Hãy đăng tải một tác phẩm mới từ trang Đăng truyện / phim để xem đầy đủ thông tin chi tiết tại đây.</p>
+            {onNavigatePublish && (
+              <div style={{ marginTop: "10px" }}>
+                <Button icon="plus" onClick={onNavigatePublish}>+ Đăng truyện / phim mới</Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const currentItem: ContentItem = matchedItem;
+  const comments: ContentCommentItem[] = currentItem.commentsList || [];
 
   const inLibrary = savedItems.some(x => x.title === currentItem.title);
   const liked = favorites.includes(currentItem.title);
   const isOwner = currentItem.createdBy?.user === CURRENT_USER_HANDLE;
   const canEditWork = canManagePublishedContent(currentItem, userRole);
-  const chapters = currentItem.chaptersList || defaultChaptersFor(currentItem.title, currentItem.type === "Phim");
+  const chapters = currentItem.chaptersList || [];
+  const availableSeasons = Array.from(new Set(chapters.map(c => c.season || "Mùa 1")));
+  const seasonList = availableSeasons.length > 0 ? availableSeasons : ["Mùa 1"];
+  const activeSeason = seasonList.includes(season) ? season : seasonList[0];
+  const filteredChapters = chapters.filter(c => (c.season || "Mùa 1") === activeSeason);
 
-  const toggleChapterRead = (idx: number) => setReadChapters(prev => prev.includes(idx) ? prev.filter(x => x !== idx) : [...prev, idx]);
+  const externalLinksToShow: ExternalLinkItem[] =
+    currentItem.externalLinks && currentItem.externalLinks.some(l => l.url.trim() || l.platform.trim())
+      ? currentItem.externalLinks.filter(l => l.url.trim() || l.platform.trim())
+      : currentItem.mainLink && currentItem.mainLink.trim()
+      ? [{ platform: "Đường dẫn đọc / xem", url: currentItem.mainLink.trim(), note: "" }]
+      : [];
+
+  const toggleChapterRead = (idx: number) =>
+    setReadChapters(prev => (prev.includes(idx) ? prev.filter(x => x !== idx) : [...prev, idx]));
 
   const submitComment = () => {
     if (!commentText.trim()) return;
-    setComments([
-      {
-        id: Date.now(),
-        author: "Nguyễn Huy",
-        username: "@huynguyen",
-        avatar: photos.red,
-        time: "Vừa xong",
-        rating: `${userRating}.0`,
-        text: isSpoiler ? "Bình luận này có chứa nội dung tiết lộ cốt truyện." : commentText.trim(),
-        spoiler: isSpoiler ? commentText.trim() : "",
-      },
-      ...comments,
-    ]);
+    const newComment: ContentCommentItem = {
+      id: Date.now(),
+      author: CURRENT_USER_NAME,
+      username: CURRENT_USER_HANDLE,
+      avatar: photos.red,
+      time: "Vừa xong",
+      rating: `${userRating}.0`,
+      text: isSpoiler ? "Bình luận này có chứa nội dung tiết lộ cốt truyện." : commentText.trim(),
+      spoiler: isSpoiler ? commentText.trim() : "",
+    };
+    const nextComments = [newComment, ...comments];
+    const numericRatings = nextComments.map(c => parseFloat(c.rating)).filter(n => !Number.isNaN(n));
+    const avgScore =
+      numericRatings.length > 0
+        ? (numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length).toFixed(1)
+        : currentItem.score;
+
+    onUpdatePublishedContent?.(currentItem.title, {
+      ...currentItem,
+      score: avgScore,
+      commentsList: nextComments,
+    });
     setCommentText("");
     setIsSpoiler(false);
     setDetailToast("Đã đăng đánh giá & bình luận của bạn!");
+  };
+
+  const deleteComment = (commentId: number) => {
+    const nextComments = comments.filter(c => c.id !== commentId);
+    const numericRatings = nextComments.map(c => parseFloat(c.rating)).filter(n => !Number.isNaN(n));
+    const avgScore =
+      numericRatings.length > 0
+        ? (numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length).toFixed(1)
+        : "—";
+    onUpdatePublishedContent?.(currentItem.title, {
+      ...currentItem,
+      score: avgScore,
+      commentsList: nextComments,
+    });
+    setDetailToast("Đã xóa bình luận.");
   };
 
   return <main className="detail-page">
@@ -2340,31 +2485,132 @@ function DetailPage({
     </div>
 
     <section className="detail-hero"><img className="detail-backdrop" src={currentItem.img || photos.hero} alt="" /><div className="detail-overlay" /><div className="detail-content">
-      <div className="detail-poster"><img src={currentItem.img} alt={currentItem.title} /><div className="match">98% PHÙ HỢP</div></div>
+      <div className="detail-poster"><img src={currentItem.img} alt={currentItem.title} /><div className="match">{currentItem.type === "Phim" ? "PHIM" : "TRUYỆN"}</div></div>
       <div className="detail-copy">
         <div className="detail-badges">
           <span>{currentItem.type === "Phim" ? "MOVIE" : "MANGA"}</span>
           <span className="ongoing">{currentItem.status.toUpperCase()}</span>
+          {currentItem.language && <span>{currentItem.language.toUpperCase()}</span>}
           {currentItem.visibility && <span>{currentItem.visibility}</span>}
         </div>
         <h1>{currentItem.title}</h1>
         <p className="jp">
-          Đăng bởi {currentItem.createdBy?.name || CURRENT_USER_NAME} ({currentItem.createdBy?.user || CURRENT_USER_HANDLE}) · {currentItem.updatedAt || "Đã kiểm duyệt"}
+          Đăng bởi {currentItem.createdBy?.name || CURRENT_USER_NAME} ({currentItem.createdBy?.user || CURRENT_USER_HANDLE}) · {currentItem.updatedAt || "Vừa đăng"}
         </p>
-        <div className="creator"><span>THÔNG TIN <b>{currentItem.sub}</b></span><i /><span>PHÁT HÀNH <b>2022 — Nay</b></span><i /><Rating value={currentItem.score} /></div>
-        <div className="genre-row">{currentItem.genres.map(g => <span key={g}>{g}</span>)}</div>
-        <p className="description">
-          {currentItem.description ||
-            `Trong một thế giới nơi ký ức và cảm xúc đan xen giữa thực tại và chiều không gian số, nhân vật chính bước vào hành trình bóc tách sự thật ẩn giấu phía sau ${currentItem.title}.`}
-        </p>
-        <div className="external">
-          <button onClick={() => window.open(currentItem.mainLink || "https://www.netflix.com", "_blank", "noopener,noreferrer")}>
-            Nguồn chính thức <Icon name="arrow" size={15} />
-          </button>
-          <button onClick={() => window.open("https://mangadex.org", "_blank", "noopener,noreferrer")}>
-            MangaDex <Icon name="arrow" size={15} />
-          </button>
+
+        {/* Hiển thị đầy đủ Tác giả, Họa sĩ, Đạo diễn, Diễn viên, Năm xuất bản, Ngôn ngữ đồng bộ 100% với UI Đăng truyện */}
+        <div className="creator" style={{ flexWrap: "wrap", rowGap: "6px" }}>
+          {currentItem.type === "Truyện" ? (
+            <>
+              <span>TÁC GIẢ <b>{currentItem.author || currentItem.sub || "Chưa cập nhật"}</b></span>
+              {currentItem.artist && <><i /><span>HỌA SĨ <b>{currentItem.artist}</b></span></>}
+            </>
+          ) : (
+            <>
+              <span>ĐẠO DIỄN <b>{currentItem.director || currentItem.sub || "Chưa cập nhật"}</b></span>
+              {currentItem.cast && <><i /><span>DIỄN VIÊN <b>{currentItem.cast}</b></span></>}
+              {currentItem.movieMode && <><i /><span>ĐỊNH DẠNG <b>{currentItem.movieMode}</b></span></>}
+            </>
+          )}
+          <i />
+          <span>NĂM XUẤT BẢN <b>{currentItem.releaseYear || "—"}</b></span>
+          {currentItem.language && <><i /><span>NGÔN NGỮ <b>{currentItem.language}</b></span></>}
+          <i />
+          <Rating value={currentItem.score} />
         </div>
+
+        <div className="genre-row">
+          {currentItem.genres.map(g => <span key={g}>{g}</span>)}
+          {currentItem.extraTags &&
+            currentItem.extraTags
+              .split(",")
+              .map(t => t.trim())
+              .filter(Boolean)
+              .map(tag => (
+                <span key={`tag-${tag}`} style={{ borderColor: "rgba(155,89,255,.45)", color: "#d8b4fe" }}>
+                  #{tag.replace(/^#/, "")}
+                </span>
+              ))}
+        </div>
+
+        {/* Hiển thị Mô tả ngắn (nếu có) */}
+        {currentItem.shortDescription && (
+          <div
+            style={{
+              marginTop: "10px",
+              padding: "10px 14px",
+              borderRadius: "10px",
+              background: "rgba(255,255,255,0.04)",
+              borderLeft: "3px solid #9c70f8",
+              fontSize: "12px",
+              lineHeight: 1.6,
+              color: "#e6dff2",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            <strong style={{ display: "block", fontSize: "10px", color: "#b695ff", textTransform: "uppercase", marginBottom: "4px" }}>
+              Mô tả ngắn / Tên khác
+            </strong>
+            {currentItem.shortDescription}
+          </div>
+        )}
+
+        {/* Hiển thị Mô tả chi tiết đúng nguyên văn người dùng đã nhập (giữ nguyên xuống dòng và hashtag) */}
+        <div style={{ marginTop: "10px" }}>
+          <strong style={{ display: "block", fontSize: "10px", color: "#9e93ad", textTransform: "uppercase", marginBottom: "4px" }}>
+            Mô tả chi tiết
+          </strong>
+          <p className="description" style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>
+            {currentItem.description || currentItem.shortDescription || "Chưa có mô tả chi tiết cho tác phẩm này."}
+          </p>
+        </div>
+
+        {/* Thông tin thêm: Nguồn tham khảo & Ghi chú cá nhân */}
+        {(currentItem.sourceRef || currentItem.personalNote) && (
+          <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "11px", color: "#b9b0c7" }}>
+            {currentItem.sourceRef && (
+              <span>📌 Nguồn / Tham khảo: <b>{currentItem.sourceRef}</b></span>
+            )}
+            {currentItem.personalNote && (
+              <span>📝 Ghi chú cá nhân: <b>{currentItem.personalNote}</b></span>
+            )}
+          </div>
+        )}
+
+        {/* Hiển thị đúng danh sách Đường dẫn đọc / xem (Links) mà người dùng đã nhập ở mục 03 */}
+        <div className="external" style={{ flexWrap: "wrap" }}>
+          {externalLinksToShow.length > 0 ? (
+            externalLinksToShow.map((link, idx) => (
+              <button
+                key={`${link.platform}-${idx}`}
+                title={link.note ? `${link.note} (${link.url})` : link.url}
+                onClick={() => {
+                  const targetUrl = link.url.trim();
+                  if (targetUrl) {
+                    window.open(targetUrl.startsWith("http") ? targetUrl : `https://${targetUrl}`, "_blank", "noopener,noreferrer");
+                  }
+                }}
+              >
+                {link.platform.trim() || link.url.trim()}{" "}
+                {link.note ? <small style={{ opacity: 0.78, marginLeft: "4px" }}>({link.note})</small> : null}{" "}
+                <Icon name="arrow" size={15} />
+              </button>
+            ))
+          ) : (
+            <span style={{ fontSize: "11px", color: "#8c8299" }}>Chưa đính kèm đường dẫn đọc / xem bên ngoài.</span>
+          )}
+          {currentItem.type === "Phim" && currentItem.singleMovieUrl && (
+            <button
+              onClick={() => {
+                const targetUrl = currentItem.singleMovieUrl!.trim();
+                window.open(targetUrl.startsWith("http") ? targetUrl : `https://${targetUrl}`, "_blank", "noopener,noreferrer");
+              }}
+            >
+              Xem phim lẻ <Icon name="arrow" size={15} />
+            </button>
+          )}
+        </div>
+
         <div className="detail-actions">
           <Button
             icon={inLibrary ? "check" : "plus"}
@@ -2405,38 +2651,67 @@ function DetailPage({
             </Button>
           )}
         </div>
-        <div className="season-tabs">{["Mùa 1", "Mùa 2"].map(x => <button key={x} onClick={() => setSeason(x)} className={season === x ? "active" : ""}>{x}<small>{x === "Mùa 1" ? `${chapters.length} MỤC` : "SẮP RA MẮT"}</small></button>)}</div>
+        <div className="season-tabs">
+          {seasonList.map(x => {
+            const countInSeason = chapters.filter(c => (c.season || "Mùa 1") === x).length;
+            return (
+              <button key={x} onClick={() => setSeason(x)} className={activeSeason === x ? "active" : ""}>
+                {x}
+                <small>{countInSeason} MỤC</small>
+              </button>
+            );
+          })}
+        </div>
         <div className="chapter-list">
-          {chapters.map((ch, i) => (
-            <div className="chapter" key={ch.id}>
-              <button className={`checkbox ${readChapters.includes(i) ? "checked" : ""}`} onClick={() => toggleChapterRead(i)}>
-                {readChapters.includes(i) && <Icon name="check" size={14} />}
-              </button>
-              <div className="chap-num">
-                {currentItem.type === "Truyện" ? "CHAP" : "TẬP"}<br /><b>{ch.number}</b>
-              </div>
-              <div className="chap-title">
-                <b>{ch.title}</b>
-                <span>{readChapters.includes(i) ? "Đã đọc/xem" : "Chưa đọc/xem"} · {ch.note || "Bản chuẩn"}</span>
-              </div>
-              <button className="comment-count" onClick={() => setReviewTab("Bình luận Chương/Tập")}>
-                <Icon name="message" size={15} /> {12 + i * 4}
-              </button>
-              {canEditWork && (
-                <button
-                  type="button"
-                  className="icon-btn"
-                  title="Chỉnh sửa chương/tập này"
-                  onClick={() => setEditingChaptersModal(true)}
-                >
-                  <Icon name="edit" size={14} />
-                </button>
-              )}
-              <Button variant="secondary" icon="arrow" onClick={() => window.open(ch.url || "https://mangadex.org", "_blank", "noopener,noreferrer")}>
-                Mở link
-              </Button>
+          {filteredChapters.length === 0 ? (
+            <div className="empty-results" style={{ height: "140px" }}>
+              <b>Chưa có {currentItem.type === "Truyện" ? "chương" : "tập"} nào được thêm</b>
+              <p>Nhấn nút “+ Cập nhật / Thêm {currentItem.type === "Truyện" ? "Chương" : "Tập"}” để bổ sung đường dẫn đọc/xem.</p>
             </div>
-          ))}
+          ) : (
+            filteredChapters.map((ch, i) => (
+              <div className="chapter" key={ch.id}>
+                <button className={`checkbox ${readChapters.includes(i) ? "checked" : ""}`} onClick={() => toggleChapterRead(i)}>
+                  {readChapters.includes(i) && <Icon name="check" size={14} />}
+                </button>
+                <div className="chap-num">
+                  {currentItem.type === "Truyện" ? "CHAP" : "TẬP"}<br /><b>{ch.number}</b>
+                </div>
+                <div className="chap-title">
+                  <b>{ch.title || `${currentItem.type === "Truyện" ? "Chương" : "Tập"} ${ch.number}`}</b>
+                  <span>
+                    {readChapters.includes(i) ? "Đã đọc/xem" : "Chưa đọc/xem"}
+                    {ch.note ? ` · ${ch.note}` : ""}
+                    {ch.url ? ` · ${ch.url}` : ""}
+                  </span>
+                </div>
+                {canEditWork && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Chỉnh sửa chương/tập này"
+                    onClick={() => setEditingChaptersModal(true)}
+                  >
+                    <Icon name="edit" size={14} />
+                  </button>
+                )}
+                <Button
+                  variant="secondary"
+                  icon="arrow"
+                  onClick={() => {
+                    const targetUrl = (ch.url || currentItem.mainLink || "").trim();
+                    if (targetUrl) {
+                      window.open(targetUrl.startsWith("http") ? targetUrl : `https://${targetUrl}`, "_blank", "noopener,noreferrer");
+                    } else {
+                      setDetailToast("Chương/tập này chưa được gắn đường dẫn URL.");
+                    }
+                  }}
+                >
+                  Mở link
+                </Button>
+              </div>
+            ))
+          )}
         </div>
       </section>
 
@@ -2473,47 +2748,63 @@ function DetailPage({
           }}
         />
       )}
-      <section className="reviews"><SectionTitle eyebrow="CỘNG ĐỒNG" title="Đánh giá & Bình luận" />
+      <section className="reviews"><SectionTitle eyebrow="CỘNG ĐỒNG" title={`Đánh giá & Bình luận (${comments.length})`} />
         <div className="review-tabs">{["Bình luận chung", "Bình luận Chương/Tập"].map(x => <button className={reviewTab === x ? "active" : ""} onClick={() => setReviewTab(x)} key={x}>{x}</button>)}</div>
-        <div className="comment-form">
-          <div className="comment-user">
-            <img src={photos.red} alt="" />
-            <div>
-              <b>Đánh giá của bạn ({userRating}/5 sao)</b>
-              <div className="star-picker" style={{ marginTop: "4px" }}>
-                {[1, 2, 3, 4, 5].map(st => <button key={st} type="button" className={st <= userRating ? "on" : ""} onClick={() => setUserRating(st)}>★</button>)}
-              </div>
-            </div>
-          </div>
-          <textarea value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Chia sẻ cảm nhận của bạn về tác phẩm này..." />
-          <div className="form-footer">
-            <label><input type="checkbox" checked={isSpoiler} onChange={e => setIsSpoiler(e.target.checked)} /> <span>Cảnh báo Spoiler (Làm mờ nội dung)</span></label>
-            <Button onClick={submitComment}>Đăng bình luận</Button>
-          </div>
-        </div>
-        {comments.map(c => (
-          <div className="thread" key={c.id} style={{ marginTop: "12px" }}>
-            <img src={c.avatar} alt="" style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(c.username)} />
-            <div>
-              <div className="thread-meta">
-                <b style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(c.username)}>{c.author}</b>
-                <span>{c.time}</span>
-                <Rating value={c.rating} />
-              </div>
-              <p>{c.text}</p>
-              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <button onClick={() => setCommentText(`@${c.author} `)}>Trả lời</button>
-                <button style={{ color: "#f87171" }} onClick={() => onOpenReport?.("COMMENT", `Bình luận của ${c.author}`)}>Báo cáo vi phạm</button>
-              </div>
-              {c.spoiler && (
-                <div className={`spoiler ${spoilerRevealed ? "revealed" : ""}`} onClick={() => setSpoilerRevealed(!spoilerRevealed)} style={{ cursor: "pointer" }}>
-                  <div><Icon name="lock" /><b>Nội dung có spoiler</b><span>{spoilerRevealed ? "Nhấn để ẩn" : "Nhấn để hiển thị"}</span></div>
-                  <p>{c.spoiler}</p>
+        {currentItem.allowComments !== false ? (
+          <div className="comment-form">
+            <div className="comment-user">
+              <img src={photos.red} alt="" />
+              <div>
+                <b>Đánh giá của bạn ({userRating}/5 sao)</b>
+                <div className="star-picker" style={{ marginTop: "4px" }}>
+                  {[1, 2, 3, 4, 5].map(st => <button key={st} type="button" className={st <= userRating ? "on" : ""} onClick={() => setUserRating(st)}>★</button>)}
                 </div>
-              )}
+              </div>
+            </div>
+            <textarea value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Chia sẻ cảm nhận của bạn về tác phẩm này..." />
+            <div className="form-footer">
+              <label><input type="checkbox" checked={isSpoiler} onChange={e => setIsSpoiler(e.target.checked)} /> <span>Cảnh báo Spoiler (Làm mờ nội dung)</span></label>
+              <Button onClick={submitComment}>Đăng bình luận</Button>
             </div>
           </div>
-        ))}
+        ) : (
+          <div className="empty-results" style={{ height: "100px", marginBottom: "12px" }}>
+            <b>Người đăng tải đã tắt tính năng bình luận cho tác phẩm này.</b>
+          </div>
+        )}
+        {comments.length === 0 ? (
+          <div className="empty-results" style={{ height: "130px", marginTop: "12px" }}>
+            <b>Chưa có bình luận nào</b>
+            <p>Hãy là người đầu tiên để lại đánh giá và bình luận cho “{currentItem.title}”.</p>
+          </div>
+        ) : (
+          comments.map(c => (
+            <div className="thread" key={c.id} style={{ marginTop: "12px" }}>
+              <img src={c.avatar} alt="" style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(c.username)} />
+              <div>
+                <div className="thread-meta">
+                  <b style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(c.username)}>{c.author}</b>
+                  <span>{c.time}</span>
+                  <Rating value={c.rating} />
+                </div>
+                <p>{c.text}</p>
+                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                  <button onClick={() => setCommentText(`@${c.author} `)}>Trả lời</button>
+                  {(c.username === CURRENT_USER_HANDLE || userRole === "ADMIN") && (
+                    <button style={{ color: "#f87171" }} onClick={() => deleteComment(c.id)}>Xóa bình luận</button>
+                  )}
+                  <button style={{ color: "#f87171" }} onClick={() => onOpenReport?.("COMMENT", `Bình luận của ${c.author}`)}>Báo cáo vi phạm</button>
+                </div>
+                {c.spoiler && (
+                  <div className={`spoiler ${spoilerRevealed ? "revealed" : ""}`} onClick={() => setSpoilerRevealed(!spoilerRevealed)} style={{ cursor: "pointer" }}>
+                    <div><Icon name="lock" /><b>Nội dung có spoiler</b><span>{spoilerRevealed ? "Nhấn để ẩn" : "Nhấn để hiển thị"}</span></div>
+                    <p>{c.spoiler}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
       </section>
     </div>
   </main>;
@@ -2523,17 +2814,17 @@ function PageHeading({ eyebrow, title, description, action }: { eyebrow: string;
   return <div className="page-heading"><div><span>{eyebrow}</span><h1>{title}</h1><p>{description}</p></div>{action}</div>;
 }
 
-function AccountPage({ setPage }: { setPage: (page: string) => void }) {
+function AccountPage({ setPage, worksCount = 0, friendsCount = 0 }: { setPage: (page: string) => void; worksCount?: number; friendsCount?: number }) {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   return <main className="inner-page account-page"><div className="page-shell">
     <PageHeading eyebrow="HỒ SƠ NGƯỜI DÙNG" title="Thông tin tài khoản" description="Quản lý thông tin cá nhân và cách bạn xuất hiện trong cộng đồng." action={<Button variant="secondary" icon="users" onClick={() => setPage("friends")}>Quản lý bạn bè</Button>} />
     {saved && <div className="success-banner"><Icon name="check" /> Thông tin của bạn đã được cập nhật thành công.</div>}
     <div className="account-layout">
-      <aside className="profile-card"><div className="profile-avatar"><img src={photos.red} alt="Nguyễn Huy" />{editing && <button><Icon name="edit" size={16} /></button>}</div><h2>Nguyễn Huy</h2><span>@huynguyen</span><p>Thành viên từ 18/08/2023</p><div><b>45</b><span>Tác phẩm</span><b>28</b><span>Bạn bè</span></div></aside>
+      <aside className="profile-card"><div className="profile-avatar"><img src={photos.red} alt="Nguyễn Huy" />{editing && <button><Icon name="edit" size={16} /></button>}</div><h2>Nguyễn Huy</h2><span>@huynguyen</span><p>Thành viên từ 18/08/2023</p><div><b>{worksCount}</b><span>Tác phẩm</span><b>{friendsCount}</b><span>Bạn bè</span></div></aside>
       <section className="information-stack">
         <div className="information-card"><div className="card-head"><div><span>THÔNG TIN CÔNG KHAI</span><h3>Hồ sơ cá nhân</h3></div>{!editing && <Button variant="secondary" icon="edit" onClick={() => setEditing(true)}>Chỉnh sửa thông tin</Button>}</div>
-          <div className="form-grid"><label><span>Tên hiển thị</span><input disabled={!editing} defaultValue="Nguyễn Huy" /></label><label><span>Tên người dùng</span><input disabled value="@huynguyen" readOnly /><small>Tên người dùng không thể thay đổi.</small></label><label className="wide"><span>Giới thiệu bản thân</span><textarea disabled={!editing} defaultValue="Mê manga trinh thám, những bộ phim cyberpunk và những câu chuyện khiến mình thức đến 3 giờ sáng." /></label></div>
+          <div className="form-grid"><label><span>Tên hiển thị</span><input disabled={!editing} defaultValue="Nguyễn Huy" /></label><label><span>Tên người dùng</span><input disabled value="@huynguyen" readOnly /><small>Tên người dùng không thể thay đổi.</small></label><label className="wide"><span>Giới thiệu bản thân</span><textarea disabled={!editing} defaultValue="Quản lý thư viện truyện và phim cá nhân." /></label></div>
         </div>
         <div className="information-card"><div className="card-head"><div><span>THÔNG TIN RIÊNG TƯ</span><h3>Tài khoản & bảo mật</h3></div></div><div className="form-grid"><label><span>Email</span><input disabled={!editing} defaultValue="huy.nguyen@example.com" /><small>Thay đổi email cần xác minh lại.</small></label><label><span>User ID</span><input disabled value="USR-2408-1893" readOnly /></label><div className="wide password-row"><div><span>Mật khẩu</span><p>Được thay đổi lần cuối 3 tháng trước</p></div><Button variant="ghost" icon="lock">Đổi mật khẩu</Button></div></div></div>
         {editing && <div className="edit-actions"><Button variant="ghost" onClick={() => setEditing(false)}>Hủy</Button><Button onClick={() => { setEditing(false); setSaved(true); }}>Lưu thay đổi</Button></div>}
@@ -2555,9 +2846,9 @@ function SettingsPage({ setPage }: { setPage: (page: string) => void }) {
   const [confirm, setConfirm] = useState("");
   return <main className="inner-page settings-page"><div className="page-shell narrow-shell">
     <PageHeading eyebrow="TÙY CHỈNH TRẢI NGHIỆM" title="Setting" description="Kiểm soát bảo mật, quyền riêng tư, thông báo và giao diện của bạn." />
-    <div className="settings-layout"><aside className="settings-nav">{["Bảo mật tài khoản", "Quyền riêng tư", "Thông báo", "Giao diện", "Vùng nguy hiểm"].map((x, i) => <button className={i === 0 ? "active" : ""} key={x}>{x}</button>)}</aside>
+    <div className="settings-layout"><aside className="settings-nav">{["Bảo mật tài khoản", "Quyền riêng tư", "Thông báo", "Giao diện", "Vùng nguy hiểm"].map((x, i) => <button className={i === 0 ? "active" : ""} onClick={() => {}} key={x}>{x}</button>)}</aside>
       <div className="settings-content">
-        <section className="settings-card"><div className="settings-card-title"><Icon name="lock" /><div><h3>Bảo mật tài khoản</h3><p>Bảo vệ tài khoản và quản lý phiên đăng nhập.</p></div></div><SettingRow title="Mật khẩu" description="Thay đổi mật khẩu đăng nhập của bạn." control={<Button variant="secondary">Thay đổi</Button>} /><SettingRow title="Xác thực đăng nhập" description="Nhận mã xác minh khi đăng nhập trên thiết bị mới." /><SettingRow title="Phiên đang hoạt động" description="3 thiết bị đang đăng nhập." control={<Button variant="ghost">Xem thiết bị</Button>} /><SettingRow title="Đăng xuất thiết bị khác" description="Giữ lại phiên đăng nhập hiện tại." control={<Button variant="danger">Đăng xuất tất cả</Button>} /></section>
+        <section className="settings-card"><div className="settings-card-title"><Icon name="lock" /><div><h3>Bảo mật tài khoản</h3><p>Bảo vệ tài khoản và quản lý phiên đăng nhập.</p></div></div><SettingRow title="Mật khẩu" description="Thay đổi mật khẩu đăng nhập của bạn." control={<Button variant="secondary">Thay đổi</Button>} /><SettingRow title="Xác thực đăng nhập" description="Nhận mã xác minh khi đăng nhập trên thiết bị mới." /><SettingRow title="Phiên đang hoạt động" description="1 thiết bị đang đăng nhập." control={<Button variant="ghost">Xem thiết bị</Button>} /><SettingRow title="Đăng xuất thiết bị khác" description="Giữ lại phiên đăng nhập hiện tại." control={<Button variant="danger">Đăng xuất tất cả</Button>} /></section>
         <section className="settings-card"><div className="settings-card-title"><Icon name="users" /><div><h3>Quyền riêng tư</h3><p>Chọn ai có thể kết nối và xem nội dung của bạn.</p></div></div><SettingRow title="Hiển thị thư viện" description="Cho phép bạn bè xem thư viện cá nhân." /><SettingRow title="Nội dung được chia sẻ" description="Cho phép cộng đồng xem ghi chú công khai." /><SettingRow title="Lời mời kết bạn" description="Cho phép mọi người gửi lời mời kết bạn." /><SettingRow title="Tin nhắn riêng" description="Chỉ nhận tin nhắn từ bạn bè." /><SettingRow title="Hiển thị hồ sơ" description="Hiển thị hồ sơ trong kết quả tìm kiếm." /></section>
         <section className="settings-card"><div className="settings-card-title"><Icon name="bell" /><div><h3>Thông báo</h3><p>Chọn những cập nhật bạn muốn nhận.</p></div></div><SettingRow title="Tin nhắn mới" description="Thông báo khi có tin nhắn trực tiếp hoặc nhóm." /><SettingRow title="Lời mời kết bạn" description="Thông báo về lời mời mới." /><SettingRow title="Chia sẻ nội dung" description="Thông báo khi ai đó chia sẻ tác phẩm." /><SettingRow title="Bình luận & trả lời" description="Thông báo tương tác với bình luận." /><SettingRow title="Thông báo hệ thống" description="Cập nhật bảo mật và tính năng quan trọng." /></section>
         <section className="settings-card"><div className="settings-card-title"><Icon name="settings" /><div><h3>Giao diện</h3><p>Tùy chỉnh cách nền tảng hiển thị.</p></div></div><SettingRow title="Chế độ tối" description="Tối ưu giao diện cho môi trường thiếu sáng." /><SettingRow title="Ngôn ngữ giao diện" description="Ngôn ngữ hiện tại: Tiếng Việt." control={<button className="select-control">Tiếng Việt <Icon name="chevron" size={14} /></button>} /><SettingRow title="Hiệu ứng chuyển động" description="Hiển thị glow và chuyển động khi tương tác." /></section>
@@ -2611,7 +2902,7 @@ function AuthPage({
       }
     }, 550);
   };
-  return <main className="auth-page"><div className="auth-visual"><img src={photos.hero} alt="" /><div className="auth-overlay" /><div><Brand /><p>“Mỗi câu chuyện là một thế giới.<br />Hãy lưu giữ thế giới của riêng bạn.”</p><span>HƠN 12.000 TÁC PHẨM ĐANG CHỜ BẠN</span></div></div>
+  return <main className="auth-page"><div className="auth-visual"><img src={photos.hero} alt="" /><div className="auth-overlay" /><div><Brand /><p>“Mỗi câu chuyện là một thế giới.<br />Hãy lưu giữ thế giới của riêng bạn.”</p><span>THƯ VIỆN CÁ NHÂN & CỘNG ĐỒNG</span></div></div>
     <section className="auth-panel"><div className="auth-form"><span>{mode === "login" ? "CHÀO MỪNG TRỞ LẠI" : "TẠO TÀI KHOẢN"}</span><h1>{mode === "login" ? "Tiếp tục hành trình" : "Bắt đầu câu chuyện"}</h1><p>{mode === "login" ? "Đăng nhập để trở lại thư viện của bạn." : "Tham gia cộng đồng yêu truyện và điện ảnh."}</p>
       {error && <div className="form-error">! {error}</div>}
       {success && <div className="form-success"><Icon name="check" size={15} /> {success}</div>}
@@ -2651,25 +2942,128 @@ function AuthPage({
 
 function PublishPage({ setPage, onPublish }: { setPage: (page: string) => void; onPublish: (item: ContentItem) => void }) {
   const [type, setType] = useState<"Truyện" | "Phim">("Truyện");
-  const [genres, setGenres] = useState<string[]>(["Mystery"]);
-  const [links, setLinks] = useState([{ platform: "MangaDex", url: "", note: "Đọc bản dịch chính thức" }]);
-  const [chapters, setChapters] = useState([{ number: "1", title: "Thành phố không ngủ", url: "" }]);
-  const [movieMode, setMovieMode] = useState("Phim lẻ");
-  const [privacy, setPrivacy] = useState("Cộng đồng");
-  const [selectedUsers, setSelectedUsers] = useState(["@lananh"]);
-  const [cover, setCover] = useState("");
   const [title, setTitle] = useState("");
+  const [shortDescription, setShortDescription] = useState("");
+  const [author, setAuthor] = useState("");
+  const [artist, setArtist] = useState("");
+  const [director, setDirector] = useState("");
+  const [releaseYear, setReleaseYear] = useState("2025");
+  const [cast, setCast] = useState("");
+  const [description, setDescription] = useState("");
+  const [genres, setGenres] = useState<string[]>([]);
+  const [status, setStatus] = useState("Đang ra");
+  const [language, setLanguage] = useState("Tiếng Việt");
+  const [links, setLinks] = useState<ExternalLinkItem[]>([{ platform: "", url: "", note: "" }]);
+  const [chapters, setChapters] = useState<Array<{ number: string; title: string; url: string }>>([
+    { number: "1", title: "", url: "" },
+  ]);
+  const [movieMode, setMovieMode] = useState<"Phim lẻ" | "Series">("Phim lẻ");
+  const [singleMovieUrl, setSingleMovieUrl] = useState("");
+  const [sourceRef, setSourceRef] = useState("");
+  const [extraTags, setExtraTags] = useState("");
+  const [personalNote, setPersonalNote] = useState("");
+  const [privacy, setPrivacy] = useState("Cộng đồng");
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [shareUserInput, setShareUserInput] = useState("");
+  const [allowComments, setAllowComments] = useState(true);
+  const [cover, setCover] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [dialog, setDialog] = useState("");
+
   const available = type === "Truyện" ? mangaGenres : movieGenres;
-  const addLink = () => setLinks([...links, { platform: "Nền tảng khác", url: "", note: "" }]);
+  const addLink = () => setLinks([...links, { platform: "", url: "", note: "" }]);
   const addChapter = () => setChapters([...chapters, { number: String(chapters.length + 1), title: "", url: "" }]);
-  const upload = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => setCover(String(reader.result)); reader.readAsDataURL(file); };
-  const attempt = (action: string) => {
-    if (!title.trim()) { setError("Vui lòng nhập tên truyện / phim trước khi tiếp tục."); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
-    setError(""); setDialog(action);
+  const upload = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setCover(String(reader.result));
+    reader.readAsDataURL(file);
   };
+  const attempt = (action: string) => {
+    if (!title.trim()) {
+      setError("Vui lòng nhập tên truyện / phim trước khi tiếp tục.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setError("");
+    setDialog(action);
+  };
+
+  const buildPublishedItem = (): ContentItem => {
+    const cleanedLinks = links
+      .map(l => ({ platform: l.platform.trim(), url: l.url.trim(), note: l.note.trim() }))
+      .filter(l => l.platform || l.url || l.note);
+
+    const primaryUrl =
+      (type === "Phim" && movieMode === "Phim lẻ" && singleMovieUrl.trim()) ||
+      cleanedLinks[0]?.url ||
+      chapters[0]?.url?.trim() ||
+      "";
+
+    const creatorSummary =
+      type === "Truyện"
+        ? [author.trim(), artist.trim() ? `Họa sĩ: ${artist.trim()}` : "", releaseYear.trim()].filter(Boolean).join(" · ")
+        : [director.trim(), releaseYear.trim()].filter(Boolean).join(" · ");
+
+    const builtChapters: PublishedChapterItem[] =
+      type === "Phim" && movieMode === "Phim lẻ"
+        ? singleMovieUrl.trim()
+          ? [
+              {
+                id: 1,
+                season: "Phim lẻ",
+                number: "Full",
+                title: title.trim(),
+                url: singleMovieUrl.trim(),
+                note: "Bản đầy đủ",
+              },
+            ]
+          : []
+        : chapters
+            .filter(ch => ch.number.trim() || ch.title.trim() || ch.url.trim())
+            .map((ch, idx) => ({
+              id: idx + 1,
+              season: "Mùa 1",
+              number: String(ch.number || idx + 1).trim(),
+              title: ch.title.trim() || `${type === "Phim" ? "Tập" : "Chương"} ${ch.number || idx + 1}`,
+              url: ch.url.trim(),
+              note: "",
+            }));
+
+    return {
+      title: title.trim(),
+      sub: creatorSummary || `${type} · ${releaseYear.trim() || "2025"}`,
+      img: cover || photos.hero,
+      status,
+      score: "—",
+      type,
+      genres: genres.length ? genres : [],
+      createdBy: { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
+      shortDescription: shortDescription.trim(),
+      description: description.trim(),
+      author: author.trim(),
+      artist: artist.trim(),
+      director: director.trim(),
+      cast: cast.trim(),
+      releaseYear: releaseYear.trim(),
+      language,
+      movieMode,
+      singleMovieUrl: singleMovieUrl.trim(),
+      externalLinks: cleanedLinks,
+      mainLink: primaryUrl,
+      sourceRef: sourceRef.trim(),
+      extraTags: extraTags.trim(),
+      personalNote: personalNote.trim(),
+      allowComments,
+      sharedWithUsers: selectedUsers,
+      visibility: privacy === "Riêng tư" ? "PRIVATE" : privacy === "Chia sẻ riêng" ? "SHARED" : "PUBLIC",
+      updatedAt: "Vừa đăng",
+      chaptersList: builtChapters,
+      commentsList: [],
+    };
+  };
+
   return <main className="inner-page publish-page"><div className="page-shell publish-shell">
     <PageHeading eyebrow="NỘI DUNG CỦA BẠN" title="Đăng truyện / phim mới" description="Chia sẻ những câu chuyện và bộ phim yêu thích của bạn với cộng đồng." action={<Button variant="ghost" onClick={() => setPage("library")}>Quay lại thư viện</Button>} />
     {error && <div className="form-error publish-alert">! {error}</div>}{notice && <div className="success-banner"><Icon name="check" />{notice}</div>}
@@ -2678,81 +3072,271 @@ function PublishPage({ setPage, onPublish }: { setPage: (page: string) => void; 
         <section className="publish-section"><div className="publish-title"><span>01</span><div><h2>Thông tin cơ bản</h2><p>Những thông tin đầu tiên giúp cộng đồng nhận biết tác phẩm.</p></div></div>
           <div className="type-switch"><button className={type === "Truyện" ? "active" : ""} onClick={() => { setType("Truyện"); setGenres([]); }}>Truyện <small>Manga / Story</small></button><button className={type === "Phim" ? "active" : ""} onClick={() => { setType("Phim"); setGenres([]); }}>Phim <small>Movie / Series</small></button></div>
           <div className="cover-form"><label className="cover-upload">{cover ? <img src={cover} alt="Xem trước ảnh bìa" /> : <><Icon name="plus" size={25} /><b>Kéo thả ảnh bìa tại đây</b><span>PNG, JPG · Tỷ lệ đề xuất 2:3</span></>}<input type="file" accept="image/*" onChange={e => upload(e.target.files?.[0])} /></label>
-            <div className="publish-fields"><label><span>Tên truyện / phim *</span><input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ví dụ: Thành phố trong mưa" /></label><label><span>Mô tả ngắn</span><textarea placeholder="Một câu giới thiệu ngắn gọn và thu hút..." /></label>{type === "Truyện" ? <div className="two-fields"><label><span>Tác giả *</span><input placeholder="Tên tác giả" /></label><label><span>Họa sĩ</span><input placeholder="Tên họa sĩ (nếu có)" /></label></div> : <><div className="two-fields"><label><span>Đạo diễn *</span><input placeholder="Tên đạo diễn" /></label><label><span>Năm phát hành</span><input placeholder="2025" /></label></div><label><span>Diễn viên</span><input placeholder="Phân cách tên bằng dấu phẩy" /></label></>}</div>
-          </div><label className="full-field"><span>Mô tả chi tiết</span><textarea className="rich-area" placeholder="Viết nội dung giới thiệu, tóm tắt hoặc cảm nhận chi tiết..." /></label>
+            <div className="publish-fields">
+              <label><span>Tên truyện / phim *</span><input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ví dụ: Cẩn thận thú dữ" /></label>
+              <label><span>Mô tả ngắn</span><textarea value={shortDescription} onChange={e => setShortDescription(e.target.value)} placeholder="Tên khác, thể loại tóm tắt hoặc câu giới thiệu ngắn gọn..." /></label>
+              {type === "Truyện" ? (
+                <div className="two-fields">
+                  <label><span>Tác giả *</span><input value={author} onChange={e => setAuthor(e.target.value)} placeholder="Tên tác giả" /></label>
+                  <label><span>Họa sĩ</span><input value={artist} onChange={e => setArtist(e.target.value)} placeholder="Tên họa sĩ (nếu có)" /></label>
+                </div>
+              ) : (
+                <>
+                  <div className="two-fields">
+                    <label><span>Đạo diễn *</span><input value={director} onChange={e => setDirector(e.target.value)} placeholder="Tên đạo diễn" /></label>
+                    <label><span>Năm phát hành</span><input value={releaseYear} onChange={e => setReleaseYear(e.target.value)} placeholder="2025" /></label>
+                  </div>
+                  <label><span>Diễn viên</span><input value={cast} onChange={e => setCast(e.target.value)} placeholder="Phân cách tên bằng dấu phẩy" /></label>
+                </>
+              )}
+            </div>
+          </div>
+          <label className="full-field">
+            <span>Mô tả chi tiết</span>
+            <textarea className="rich-area" value={description} onChange={e => setDescription(e.target.value)} placeholder="Viết nội dung giới thiệu, tóm tắt cốt truyện hoặc cảm nhận chi tiết..." />
+          </label>
         </section>
-        <section className="publish-section"><div className="publish-title"><span>02</span><div><h2>Thể loại & phân loại</h2><p>Chọn nhiều thể loại phù hợp để người đọc dễ tìm thấy.</p></div></div><div className="publish-genres">{available.map(g => <button className={genres.includes(g) ? "active" : ""} onClick={() => setGenres(genres.includes(g) ? genres.filter(x => x !== g) : [...genres, g])} key={g}>{g}</button>)}</div><div className="three-fields"><label><span>Trạng thái</span><select><option>Đang ra</option><option>Hoàn thành</option><option>Drop</option></select></label><label><span>Ngôn ngữ</span><select><option>Tiếng Việt</option><option>Tiếng Anh</option><option>Tiếng Nhật</option></select></label><label><span>Năm xuất bản</span><input placeholder="2025" /></label></div></section>
-        <section className="publish-section"><div className="publish-title"><span>03</span><div><h2>Đường dẫn đọc / xem</h2><p>Thêm liên kết hợp pháp đến nền tảng bên ngoài.</p></div></div>{links.map((link, i) => <div className="dynamic-row" key={i}><span className="drag">⠿</span><input value={link.platform} onChange={e => setLinks(links.map((x, index) => index === i ? { ...x, platform: e.target.value } : x))} placeholder="Nền tảng" /><input value={link.url} onChange={e => setLinks(links.map((x, index) => index === i ? { ...x, url: e.target.value } : x))} placeholder="https://..." /><input value={link.note} onChange={e => setLinks(links.map((x, index) => index === i ? { ...x, note: e.target.value } : x))} placeholder="Mô tả liên kết" /><button onClick={() => setLinks(links.filter((_, index) => index !== i))}><Icon name="x" size={15} /></button></div>)}<Button variant="secondary" icon="plus" onClick={addLink}>Thêm đường dẫn</Button></section>
+
+        <section className="publish-section"><div className="publish-title"><span>02</span><div><h2>Thể loại & phân loại</h2><p>Chọn nhiều thể loại phù hợp để người đọc dễ tìm thấy.</p></div></div>
+          <div className="publish-genres">{available.map(g => <button className={genres.includes(g) ? "active" : ""} onClick={() => setGenres(genres.includes(g) ? genres.filter(x => x !== g) : [...genres, g])} key={g}>{g}</button>)}</div>
+          <div className="three-fields">
+            <label><span>Trạng thái</span><select value={status} onChange={e => setStatus(e.target.value)}><option value="Đang ra">Đang ra</option><option value="Hoàn thành">Hoàn thành</option><option value="Drop">Drop</option></select></label>
+            <label><span>Ngôn ngữ</span><select value={language} onChange={e => setLanguage(e.target.value)}><option value="Tiếng Việt">Tiếng Việt</option><option value="Tiếng Anh">Tiếng Anh</option><option value="Tiếng Nhật">Tiếng Nhật</option><option value="Tiếng Hàn">Tiếng Hàn</option><option value="Tiếng Trung">Tiếng Trung</option></select></label>
+            <label><span>Năm xuất bản</span><input value={releaseYear} onChange={e => setReleaseYear(e.target.value)} placeholder="2025" /></label>
+          </div>
+        </section>
+
+        <section className="publish-section"><div className="publish-title"><span>03</span><div><h2>Đường dẫn đọc / xem</h2><p>Thêm liên kết hợp pháp đến nền tảng bên ngoài (VD: Roads Team, Sony Team...).</p></div></div>
+          {links.map((link, i) => (
+            <div className="dynamic-row" key={i}>
+              <span className="drag">⠿</span>
+              <input value={link.platform} onChange={e => setLinks(links.map((x, index) => index === i ? { ...x, platform: e.target.value } : x))} placeholder="Tên nền tảng / Nhóm dịch (VD: Roads Team)" />
+              <input value={link.url} onChange={e => setLinks(links.map((x, index) => index === i ? { ...x, url: e.target.value } : x))} placeholder="https://..." />
+              <input value={link.note} onChange={e => setLinks(links.map((x, index) => index === i ? { ...x, note: e.target.value } : x))} placeholder="Mô tả liên kết" />
+              <button onClick={() => setLinks(links.filter((_, index) => index !== i))}><Icon name="x" size={15} /></button>
+            </div>
+          ))}
+          <Button variant="secondary" icon="plus" onClick={addLink}>Thêm đường dẫn</Button>
+        </section>
+
         <section className="publish-section"><div className="publish-title"><span>04</span><div><h2>{type === "Truyện" ? "Quản lý chương" : "Phần & tập phim"}</h2><p>Mỗi chương hoặc tập phim có thể sử dụng một đường dẫn riêng.</p></div></div>
           {type === "Phim" && <div className="type-switch mini"><button className={movieMode === "Phim lẻ" ? "active" : ""} onClick={() => setMovieMode("Phim lẻ")}>Phim lẻ</button><button className={movieMode === "Series" ? "active" : ""} onClick={() => setMovieMode("Series")}>TV / Anime Series</button></div>}
-          {type === "Phim" && movieMode === "Phim lẻ" ? <label className="full-field"><span>Đường dẫn xem phim</span><input placeholder="https://netflix.com/..." /></label> : <>{type === "Phim" && <div className="season-heading"><b>Mùa 1 · Khởi đầu</b><Button variant="ghost" icon="plus">Thêm mùa</Button></div>}{chapters.map((chapter, i) => <div className="chapter-editor" key={i}><span className="drag">⠿</span><div><small>{type === "Truyện" ? "CHƯƠNG" : "TẬP"}</small><input value={chapter.number} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, number: e.target.value } : x))} /></div><label><span>Tiêu đề</span><input value={chapter.title} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, title: e.target.value } : x))} placeholder="Tên chương / tập" /></label><label><span>Đường dẫn</span><input value={chapter.url} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, url: e.target.value } : x))} placeholder="https://..." /></label><button><Icon name="edit" size={15} /></button><button onClick={() => setChapters(chapters.filter((_, index) => index !== i))}><Icon name="x" size={15} /></button></div>)}<Button variant="secondary" icon="plus" onClick={addChapter}>{type === "Truyện" ? "Thêm chương" : "Thêm tập"}</Button></>}
+          {type === "Phim" && movieMode === "Phim lẻ" ? (
+            <label className="full-field"><span>Đường dẫn xem phim</span><input value={singleMovieUrl} onChange={e => setSingleMovieUrl(e.target.value)} placeholder="https://..." /></label>
+          ) : (
+            <>
+              {type === "Phim" && <div className="season-heading"><b>Mùa 1 · Khởi đầu</b></div>}
+              {chapters.map((chapter, i) => (
+                <div className="chapter-editor" key={i}>
+                  <span className="drag">⠿</span>
+                  <div>
+                    <small>{type === "Truyện" ? "CHƯƠNG" : "TẬP"}</small>
+                    <input value={chapter.number} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, number: e.target.value } : x))} />
+                  </div>
+                  <label><span>Tiêu đề</span><input value={chapter.title} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, title: e.target.value } : x))} placeholder="Tên chương / tập" /></label>
+                  <label><span>Đường dẫn</span><input value={chapter.url} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, url: e.target.value } : x))} placeholder="https://..." /></label>
+                  <button type="button"><Icon name="edit" size={15} /></button>
+                  <button type="button" onClick={() => setChapters(chapters.filter((_, index) => index !== i))}><Icon name="x" size={15} /></button>
+                </div>
+              ))}
+              <Button variant="secondary" icon="plus" onClick={addChapter}>{type === "Truyện" ? "Thêm chương" : "Thêm tập"}</Button>
+            </>
+          )}
         </section>
-        <section className="publish-section"><div className="publish-title"><span>05</span><div><h2>Thông tin thêm</h2><p>Các dữ liệu tùy chọn dành riêng cho bộ sưu tập của bạn.</p></div></div><div className="two-fields"><label><span>Nguồn / tham khảo</span><input placeholder="Tên nguồn hoặc URL tham khảo" /></label><label><span>Thẻ bổ sung</span><input placeholder="neon, tương lai, bí ẩn..." /></label></div><label className="full-field"><span>Ghi chú cá nhân</span><textarea placeholder="Ghi chú riêng về nội dung này..." /></label><div className="rating-notice"><Rating value="—" /><p>Điểm cộng đồng được tính tự động từ đánh giá của người dùng và không thể chỉnh sửa thủ công.</p></div></section>
-        <section className="publish-section"><div className="publish-title"><span>06</span><div><h2>Cài đặt đăng tải</h2><p>Kiểm soát những người có thể khám phá nội dung của bạn.</p></div></div><div className="privacy-options">{[["Riêng tư", "Chỉ bạn có thể truy cập"], ["Cộng đồng", "Mọi người có thể khám phá"], ["Chia sẻ riêng", "Chỉ những người được chọn"]].map(x => <button className={privacy === x[0] ? "active" : ""} onClick={() => setPrivacy(x[0])} key={x[0]}><Icon name={x[0] === "Riêng tư" ? "lock" : x[0] === "Cộng đồng" ? "users" : "share"} /><b>{x[0]}</b><span>{x[1]}</span></button>)}</div>
-          {privacy === "Chia sẻ riêng" && <div className="private-users"><label><Icon name="search" size={16} /><input placeholder="Tìm người dùng để chia sẻ..." /></label><div>{selectedUsers.map(user => <span key={user}>{user}<button onClick={() => setSelectedUsers(selectedUsers.filter(x => x !== user))}>×</button></span>)}<button onClick={() => !selectedUsers.includes("@minhtran") && setSelectedUsers([...selectedUsers, "@minhtran"])}>+ @minhtran</button></div></div>}
-          <label className="comment-permission"><input type="checkbox" defaultChecked /> Cho phép người khác bình luận và đánh giá nội dung.</label><div className="copyright-note"><Icon name="flag" /><p>Việc đăng tải chỉ chia sẻ metadata và các đường dẫn bên ngoài. Không tải lên hoặc phân phối tệp truyện, phim có bản quyền.</p></div>
+
+        <section className="publish-section"><div className="publish-title"><span>05</span><div><h2>Thông tin thêm</h2><p>Các dữ liệu tùy chọn dành riêng cho bộ sưu tập của bạn.</p></div></div>
+          <div className="two-fields">
+            <label><span>Nguồn / tham khảo</span><input value={sourceRef} onChange={e => setSourceRef(e.target.value)} placeholder="Tên nguồn hoặc URL tham khảo" /></label>
+            <label><span>Thẻ bổ sung</span><input value={extraTags} onChange={e => setExtraTags(e.target.value)} placeholder="ABO, chữa lành, học đường..." /></label>
+          </div>
+          <label className="full-field"><span>Ghi chú cá nhân</span><textarea value={personalNote} onChange={e => setPersonalNote(e.target.value)} placeholder="Ghi chú riêng về nội dung này..." /></label>
+          <div className="rating-notice"><Rating value="—" /><p>Điểm cộng đồng được tính tự động từ đánh giá của người dùng và không thể chỉnh sửa thủ công.</p></div>
         </section>
-        <div className="publish-actions"><Button variant="ghost" onClick={() => setPage("library")}>Hủy</Button><div><Button variant="secondary" onClick={() => { setNotice("Đã lưu bản nháp lúc 21:42."); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Lưu bản nháp</Button><Button variant="secondary" onClick={() => attempt("preview")}>Xem trước</Button><Button icon="arrow" onClick={() => attempt("publish")}>Đăng truyện / phim</Button></div></div>
+
+        <section className="publish-section"><div className="publish-title"><span>06</span><div><h2>Cài đặt đăng tải</h2><p>Kiểm soát những người có thể khám phá nội dung của bạn.</p></div></div>
+          <div className="privacy-options">{[["Riêng tư", "Chỉ bạn có thể truy cập"], ["Cộng đồng", "Mọi người có thể khám phá"], ["Chia sẻ riêng", "Chỉ những người được chọn"]].map(x => <button className={privacy === x[0] ? "active" : ""} onClick={() => setPrivacy(x[0])} key={x[0]}><Icon name={x[0] === "Riêng tư" ? "lock" : x[0] === "Cộng đồng" ? "users" : "share"} /><b>{x[0]}</b><span>{x[1]}</span></button>)}</div>
+          {privacy === "Chia sẻ riêng" && (
+            <div className="private-users">
+              <label>
+                <Icon name="search" size={16} />
+                <input
+                  value={shareUserInput}
+                  onChange={e => setShareUserInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && shareUserInput.trim()) {
+                      e.preventDefault();
+                      const formatted = shareUserInput.trim().startsWith("@") ? shareUserInput.trim() : `@${shareUserInput.trim()}`;
+                      if (!selectedUsers.includes(formatted)) setSelectedUsers([...selectedUsers, formatted]);
+                      setShareUserInput("");
+                    }
+                  }}
+                  placeholder="Nhập @username và nhấn Enter để thêm..."
+                />
+              </label>
+              <div>
+                {selectedUsers.map(user => (
+                  <span key={user}>
+                    {user}
+                    <button onClick={() => setSelectedUsers(selectedUsers.filter(x => x !== user))}>×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <label className="comment-permission">
+            <input type="checkbox" checked={allowComments} onChange={e => setAllowComments(e.target.checked)} /> Cho phép người khác bình luận và đánh giá nội dung.
+          </label>
+          <div className="copyright-note"><Icon name="flag" /><p>Việc đăng tải chỉ chia sẻ metadata và các đường dẫn bên ngoài. Không tải lên hoặc phân phối tệp truyện, phim có bản quyền.</p></div>
+        </section>
+
+        <div className="publish-actions"><Button variant="ghost" onClick={() => setPage("library")}>Hủy</Button><div><Button variant="secondary" onClick={() => { setNotice("Đã lưu bản nháp thành công."); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Lưu bản nháp</Button><Button variant="secondary" onClick={() => attempt("preview")}>Xem trước</Button><Button icon="arrow" onClick={() => attempt("publish")}>Đăng truyện / phim</Button></div></div>
       </div>
     </div>
-  </div>{dialog && <div className="modal-backdrop"><div className="confirm-dialog publish-confirm"><div className="danger-symbol safe"><Icon name={dialog === "preview" ? "search" : "check"} /></div><h2>{dialog === "preview" ? "Xem trước nội dung?" : "Sẵn sàng đăng tải?"}</h2><p>{dialog === "preview" ? `Bản xem trước “${title}” sẽ hiển thị theo dữ liệu bạn đã nhập.` : `“${title}” sẽ được đăng với quyền: ${privacy}. Bạn có thể chỉnh sửa sau.`}</p><div><Button variant="ghost" onClick={() => setDialog("")}>Quay lại</Button><Button onClick={() => dialog === "publish" ? onPublish({
-    title,
-    sub: `${type} · ${CURRENT_USER_NAME} · ${genres.length ? genres.join(", ") : "Drama"}`,
-    img: cover || photos.hero,
-    status: "Đang ra",
-    score: "—",
-    type,
-    genres: genres.length ? genres : ["Drama"],
-    createdBy: { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE },
-    description: `Tác phẩm ${type.toLowerCase()} “${title}” do ${CURRENT_USER_NAME} (${CURRENT_USER_HANDLE}) đăng tải và quản lý trực tiếp trên nền tảng.`,
-    mainLink: links[0]?.url?.trim() || (type === "Phim" ? "https://netflix.com/" : "https://mangadex.org/"),
-    visibility: privacy === "Riêng tư" ? "PRIVATE" : privacy === "Chia sẻ riêng" ? "SHARED" : "PUBLIC",
-    updatedAt: "Vừa đăng",
-    chaptersList: chapters.map((ch, idx) => ({
-      id: idx + 1,
-      season: "Mùa 1",
-      number: String(ch.number || idx + 1),
-      title: ch.title.trim() || `${type === "Phim" ? "Tập" : "Chương"} ${idx + 1}`,
-      url: ch.url.trim() || (type === "Phim" ? "https://netflix.com/" : "https://mangadex.org/"),
-      note: "Bản chính thức",
-    })),
-  }) : setDialog("")}>{dialog === "publish" ? "Xác nhận đăng" : "Mở xem trước"}</Button></div></div></div>}</main>;
+  </div>{dialog && <div className="modal-backdrop"><div className="confirm-dialog publish-confirm"><div className="danger-symbol safe"><Icon name={dialog === "preview" ? "search" : "check"} /></div><h2>{dialog === "preview" ? "Xem trước nội dung?" : "Sẵn sàng đăng tải?"}</h2><p>{dialog === "preview" ? `Bản xem trước “${title}” sẽ hiển thị đầy đủ mô tả ngắn, mô tả chi tiết, đường dẫn và các chương bạn đã nhập.` : `“${title}” sẽ được đăng với quyền: ${privacy}. Bạn có thể chỉnh sửa bất kỳ lúc nào.`}</p><div><Button variant="ghost" onClick={() => setDialog("")}>Quay lại</Button><Button onClick={() => {
+    const built = buildPublishedItem();
+    setDialog("");
+    onPublish(built);
+  }}>{dialog === "publish" ? "Xác nhận đăng" : "Mở xem trước"}</Button></div></div></div>}</main>;
 }
 
-const friendData = [
-  { name: "Lan Anh", user: "@lananh", bio: "Mê anime chữa lành và phim Nhật.", img: photos.rain, online: true },
-  { name: "Minh Trần", user: "@minhtran", bio: "Đọc shounen, xem sci-fi mỗi tối.", img: photos.city, online: true },
-  { name: "Thu Hà", user: "@hanguyen", bio: "Một chiếc mọt truyện chính hiệu.", img: photos.lantern, online: false },
-  { name: "Tuấn Minh", user: "@tuanminh", bio: "Review phim và manga trinh thám.", img: photos.street, online: false },
-];
+type DirectoryUser = { name: string; user: string; bio: string; img: string; online: boolean };
+
+const friendData: DirectoryUser[] = [];
+
+function loadSavedDirectoryUsers(): DirectoryUser[] {
+  try {
+    const raw = window.localStorage.getItem("pl_directory_users_v1");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // Ignore storage error
+  }
+  return [];
+}
+
+function saveDirectoryUsers(list: DirectoryUser[]) {
+  try {
+    window.localStorage.setItem("pl_directory_users_v1", JSON.stringify(list));
+  } catch {
+    // Ignore storage error
+  }
+}
 
 function FriendsPage({ setPage, onOpenPublicProfile }: { setPage: (page: string) => void; onOpenPublicProfile?: (username: string) => void }) {
   const [tab, setTab] = useState("Danh sách bạn bè");
   const [requestTab, setRequestTab] = useState("Đã nhận");
-  const [requests, setRequests] = useState(["Lan Anh", "Thu Hà"]);
-  const [sent, setSent] = useState<string[]>(["Minh Trần"]);
-  const [friends, setFriends] = useState(["Tuấn Minh"]);
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>(() => loadSavedDirectoryUsers());
+  const [requests, setRequests] = useState<string[]>([]);
+  const [sent, setSent] = useState<string[]>([]);
+  const [friends, setFriends] = useState<string[]>(() => directoryUsers.map(u => u.name));
   const [confirm, setConfirm] = useState<{ name: string; action: string } | null>(null);
   const [menu, setMenu] = useState("");
   const [query, setQuery] = useState("");
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [toast, setToast] = useState("");
-  const accept = (name: string) => { setRequests(requests.filter(x => x !== name)); if (!friends.includes(name)) setFriends([...friends, name]); setToast(`Đã chấp nhận lời mời kết bạn từ ${name}.`); };
-  const relationship = (name: string) => friends.includes(name) ? "friend" : requests.includes(name) ? "incoming" : sent.includes(name) ? "sent" : "none";
-  const visible = friendData.filter(f => (!query || `${f.name} ${f.user}`.toLowerCase().includes(query.toLowerCase())) && (!onlineOnly || f.online));
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newPersonName, setNewPersonName] = useState("");
+  const [newPersonHandle, setNewPersonHandle] = useState("");
+  const [newPersonBio, setNewPersonBio] = useState("");
+  const [newPersonRelation, setNewPersonRelation] = useState<"friend" | "incoming" | "sent">("friend");
+
+  const accept = (name: string) => {
+    setRequests(requests.filter(x => x !== name));
+    if (!friends.includes(name)) setFriends([...friends, name]);
+    setToast(`Đã chấp nhận lời mời kết bạn từ ${name}.`);
+  };
+  const relationship = (name: string) =>
+    friends.includes(name) ? "friend" : requests.includes(name) ? "incoming" : sent.includes(name) ? "sent" : "none";
+  const visible = directoryUsers.filter(
+    f => (!query || `${f.name} ${f.user}`.toLowerCase().includes(query.toLowerCase())) && (!onlineOnly || f.online)
+  );
+
+  const handleCreateCustomPerson = () => {
+    if (!newPersonName.trim()) return;
+    const formattedHandle = newPersonHandle.trim()
+      ? newPersonHandle.trim().startsWith("@")
+        ? newPersonHandle.trim()
+        : `@${newPersonHandle.trim()}`
+      : `@${newPersonName.trim().toLowerCase().replace(/\s+/g, "")}`;
+    const created: DirectoryUser = {
+      name: newPersonName.trim(),
+      user: formattedHandle,
+      bio: newPersonBio.trim() || "Thành viên cộng đồng.",
+      img: photos.city,
+      online: true,
+    };
+    const nextDir = [created, ...directoryUsers.filter(u => u.user !== created.user && u.name !== created.name)];
+    setDirectoryUsers(nextDir);
+    saveDirectoryUsers(nextDir);
+    if (newPersonRelation === "friend" && !friends.includes(created.name)) setFriends([...friends, created.name]);
+    if (newPersonRelation === "incoming" && !requests.includes(created.name)) setRequests([...requests, created.name]);
+    if (newPersonRelation === "sent" && !sent.includes(created.name)) setSent([...sent, created.name]);
+    setNewPersonName("");
+    setNewPersonHandle("");
+    setNewPersonBio("");
+    setShowAddUserModal(false);
+    setToast(`Đã thêm người dùng ${created.name} (${created.user}).`);
+  };
+
   return <main className="inner-page friends-page"><div className="page-shell">
-    <PageHeading eyebrow="KẾT NỐI CỘNG ĐỒNG" title="Bạn bè" description="Tìm người cùng sở thích, chia sẻ câu chuyện và trò chuyện cùng nhau." action={<Button variant="secondary" icon="users">Mời bạn bè</Button>} />
+    <PageHeading
+      eyebrow="KẾT NỐI CỘNG ĐỒNG"
+      title="Bạn bè"
+      description="Tìm người cùng sở thích, chia sẻ câu chuyện và trò chuyện cùng nhau."
+      action={<Button icon="plus" onClick={() => setShowAddUserModal(true)}>+ Thêm bạn bè / người dùng</Button>}
+    />
     {toast && <div className="success-banner"><Icon name="check" />{toast}<button onClick={() => setToast("")}>×</button></div>}
-    <div className="friend-stats"><div><b>{28 + friends.length}</b><span>Tổng bạn bè</span></div><div><b>{requests.length}</b><span>Lời mời đang chờ</span></div><div><b>{sent.length}</b><span>Lời mời đã gửi</span></div></div>
+    <div className="friend-stats"><div><b>{friends.length}</b><span>Tổng bạn bè</span></div><div><b>{requests.length}</b><span>Lời mời đang chờ</span></div><div><b>{sent.length}</b><span>Lời mời đã gửi</span></div></div>
     <div className="friend-tabs">{["Danh sách bạn bè", "Lời mời kết bạn", "Tìm kiếm bạn bè"].map(x => <button className={tab === x ? "active" : ""} onClick={() => setTab(x)} key={x}>{x}{x === "Lời mời kết bạn" && requests.length > 0 && <span>{requests.length}</span>}</button>)}</div>
     {tab === "Tìm kiếm bạn bè" && <div className="find-toolbar"><label className="friend-search"><Icon name="search" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Tìm kiếm theo tên hoặc username..." /><Button>Tìm kiếm</Button></label><label className="online-filter"><input type="checkbox" checked={onlineOnly} onChange={e => setOnlineOnly(e.target.checked)} /> Chỉ hiển thị đang online</label></div>}
     {tab === "Lời mời kết bạn" && <div className="request-tabs"><button className={requestTab === "Đã nhận" ? "active" : ""} onClick={() => setRequestTab("Đã nhận")}>Lời mời đã nhận · {requests.length}</button><button className={requestTab === "Đã gửi" ? "active" : ""} onClick={() => setRequestTab("Đã gửi")}>Lời mời đã gửi · {sent.length}</button></div>}
-    <div className="section-kicker">{tab === "Tìm kiếm bạn bè" ? "GỢI Ý DÀNH CHO BẠN" : tab === "Danh sách bạn bè" ? "TẤT CẢ BẠN BÈ" : requestTab === "Đã nhận" ? "LỜI MỜI ĐANG CHỜ PHẢN HỒI" : "LỜI MỜI ĐANG CHỜ CHẤP NHẬN"}</div>
-    <div className="friend-grid">{visible.filter(f => tab === "Danh sách bạn bè" ? friends.includes(f.name) : tab === "Lời mời kết bạn" ? (requestTab === "Đã nhận" ? requests.includes(f.name) : sent.includes(f.name)) : true).map(f => <article className="friend-card" key={f.name}><div className="friend-avatar" style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(f.user)}><img src={f.img} alt={f.name} /><i className={f.online ? "online" : ""} /></div><div className="friend-info"><h3 style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(f.user)}>{f.name}</h3><span>{f.user}</span><p>{f.bio}</p><small>{f.online ? "Đang hoạt động" : "Offline"} · {2 + f.name.length % 5} bạn chung</small></div>
-      {tab === "Lời mời kết bạn" && requestTab === "Đã nhận" ? <div className="friend-actions"><span className="request-date">Gửi 2 ngày trước</span><Button onClick={() => accept(f.name)}>Chấp nhận</Button><Button variant="ghost" onClick={() => setRequests(requests.filter(x => x !== f.name))}>Từ chối</Button></div> : tab === "Lời mời kết bạn" ? <div className="friend-actions"><span className="pending-badge">ĐANG CHỜ · 18/05/2025</span><Button variant="ghost" onClick={() => setSent(sent.filter(x => x !== f.name))}>Hủy lời mời</Button></div> : tab === "Tìm kiếm bạn bè" ? <div className="friend-actions">{relationship(f.name) === "friend" ? <Button variant="secondary" icon="check">Bạn bè</Button> : relationship(f.name) === "incoming" ? <Button onClick={() => accept(f.name)}>Chấp nhận</Button> : relationship(f.name) === "sent" ? <Button variant="ghost" onClick={() => setSent(sent.filter(x => x !== f.name))}>Đã gửi lời mời · Hủy</Button> : <Button icon="plus" onClick={() => setSent([...sent, f.name])}>Kết bạn</Button>}<Button variant="ghost" onClick={() => onOpenPublicProfile?.(f.user)}>Xem hồ sơ</Button></div> : <div className="friend-actions"><Button icon="message" onClick={() => setPage("chat")}>Nhắn tin</Button><Button variant="ghost" onClick={() => onOpenPublicProfile?.(f.user)}>Xem hồ sơ</Button><div className="friend-menu-wrap"><button className="friend-more" onClick={() => setMenu(menu === f.name ? "" : f.name)}><Icon name="more" /></button>{menu === f.name && <div className="friend-option-menu"><button onClick={() => onOpenPublicProfile?.(f.user)}>Xem hồ sơ & Thư viện</button><button onClick={() => setConfirm({ name: f.name, action: "remove" })}>Hủy kết bạn</button><button className="danger" onClick={() => setConfirm({ name: f.name, action: "block" })}>Chặn người dùng</button></div>}</div></div>}
+    <div className="section-kicker">{tab === "Tìm kiếm bạn bè" ? "DANH SÁCH NGƯỜI DÙNG" : tab === "Danh sách bạn bè" ? "TẤT CẢ BẠN BÈ" : requestTab === "Đã nhận" ? "LỜI MỜI ĐANG CHỜ PHẢN HỒI" : "LỜI MỜI ĐANG CHỜ CHẤP NHẬN"}</div>
+    <div className="friend-grid">{visible.filter(f => tab === "Danh sách bạn bè" ? friends.includes(f.name) : tab === "Lời mời kết bạn" ? (requestTab === "Đã nhận" ? requests.includes(f.name) : sent.includes(f.name)) : true).map(f => <article className="friend-card" key={f.name}><div className="friend-avatar" style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(f.user)}><img src={f.img} alt={f.name} /><i className={f.online ? "online" : ""} /></div><div className="friend-info"><h3 style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(f.user)}>{f.name}</h3><span>{f.user}</span><p>{f.bio}</p><small>{f.online ? "Đang hoạt động" : "Offline"}</small></div>
+      {tab === "Lời mời kết bạn" && requestTab === "Đã nhận" ? <div className="friend-actions"><span className="request-date">Vừa gửi</span><Button onClick={() => accept(f.name)}>Chấp nhận</Button><Button variant="ghost" onClick={() => setRequests(requests.filter(x => x !== f.name))}>Từ chối</Button></div> : tab === "Lời mời kết bạn" ? <div className="friend-actions"><span className="pending-badge">ĐANG CHỜ</span><Button variant="ghost" onClick={() => setSent(sent.filter(x => x !== f.name))}>Hủy lời mời</Button></div> : tab === "Tìm kiếm bạn bè" ? <div className="friend-actions">{relationship(f.name) === "friend" ? <Button variant="secondary" icon="check">Bạn bè</Button> : relationship(f.name) === "incoming" ? <Button onClick={() => accept(f.name)}>Chấp nhận</Button> : relationship(f.name) === "sent" ? <Button variant="ghost" onClick={() => setSent(sent.filter(x => x !== f.name))}>Đã gửi lời mời · Hủy</Button> : <Button icon="plus" onClick={() => setSent([...sent, f.name])}>Kết bạn</Button>}<Button variant="ghost" onClick={() => onOpenPublicProfile?.(f.user)}>Xem hồ sơ</Button></div> : <div className="friend-actions"><Button icon="message" onClick={() => setPage("chat")}>Nhắn tin</Button><Button variant="ghost" onClick={() => onOpenPublicProfile?.(f.user)}>Xem hồ sơ</Button><div className="friend-menu-wrap"><button className="friend-more" onClick={() => setMenu(menu === f.name ? "" : f.name)}><Icon name="more" /></button>{menu === f.name && <div className="friend-option-menu"><button onClick={() => onOpenPublicProfile?.(f.user)}>Xem hồ sơ & Thư viện</button><button onClick={() => setConfirm({ name: f.name, action: "remove" })}>Hủy kết bạn</button><button className="danger" onClick={() => setConfirm({ name: f.name, action: "block" })}>Chặn người dùng</button></div>}</div></div>}
     </article>)}</div>
-    {!visible.length && <div className="empty-results"><Icon name="users" size={28} /><b>Không tìm thấy người dùng</b><p>Hãy thử một tên hoặc username khác.</p></div>}
-  </div>{confirm && <div className="modal-backdrop"><div className="confirm-dialog"><div className="danger-symbol"><Icon name="flag" /></div><h2>{confirm.action === "block" ? `Chặn ${confirm.name}?` : `Hủy kết bạn với ${confirm.name}?`}</h2><p>{confirm.action === "block" ? "Người này sẽ không thể tìm thấy, gửi lời mời hoặc nhắn tin cho bạn." : "Hai bạn sẽ không còn thấy nội dung chỉ chia sẻ với bạn bè."}</p><div><Button variant="ghost" onClick={() => setConfirm(null)}>Hủy</Button><Button variant="danger" onClick={() => { setFriends(friends.filter(x => x !== confirm.name)); setToast(confirm.action === "block" ? `Đã chặn ${confirm.name}.` : `Đã hủy kết bạn với ${confirm.name}.`); setConfirm(null); }}>Xác nhận</Button></div></div></div>}</main>;
+    {visible.filter(f => tab === "Danh sách bạn bè" ? friends.includes(f.name) : tab === "Lời mời kết bạn" ? (requestTab === "Đã nhận" ? requests.includes(f.name) : sent.includes(f.name)) : true).length === 0 && (
+      <div className="empty-results">
+        <Icon name="users" size={28} />
+        <b>Chưa có người dùng hoặc bạn bè nào trong mục này</b>
+        <p>Nhấn nút “+ Thêm bạn bè / người dùng” ở góc phải trên để tự thêm tài khoản và kiểm tra.</p>
+      </div>
+    )}
+  </div>
+  {showAddUserModal && (
+    <div className="modal-backdrop" onMouseDown={() => setShowAddUserModal(false)}>
+      <div className="admin-modal-wide" style={{ width: "460px" }} onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span>THÊM NGƯỜI DÙNG THỰC TẾ</span>
+            <h2>Thêm Bạn bè / Tài khoản</h2>
+            <p>Tự tạo người dùng để kiểm tra kết bạn, hồ sơ công khai và nhắn tin.</p>
+          </div>
+          <button className="icon-btn" onClick={() => setShowAddUserModal(false)}><Icon name="x" /></button>
+        </div>
+        <label className="admin-field"><span>Tên hiển thị *</span><input value={newPersonName} onChange={e => setNewPersonName(e.target.value)} placeholder="VD: Nguyễn Văn B" /></label>
+        <label className="admin-field"><span>Username (@handle)</span><input value={newPersonHandle} onChange={e => setNewPersonHandle(e.target.value)} placeholder="VD: @nguyenvanb" /></label>
+        <label className="admin-field"><span>Giới thiệu ngắn</span><input value={newPersonBio} onChange={e => setNewPersonBio(e.target.value)} placeholder="Mô tả sở thích..." /></label>
+        <label className="admin-field">
+          <span>Trạng thái kết nối</span>
+          <select value={newPersonRelation} onChange={e => setNewPersonRelation(e.target.value as "friend" | "incoming" | "sent")}>
+            <option value="friend">Đã là bạn bè</option>
+            <option value="incoming">Đang gửi lời mời kết bạn cho tôi</option>
+            <option value="sent">Tôi đã gửi lời mời kết bạn</option>
+          </select>
+        </label>
+        <div className="modal-actions">
+          <div />
+          <div>
+            <Button variant="ghost" onClick={() => setShowAddUserModal(false)}>Hủy</Button>
+            <Button icon="plus" onClick={handleCreateCustomPerson}>Thêm ngay</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+  {confirm && <div className="modal-backdrop"><div className="confirm-dialog"><div className="danger-symbol"><Icon name="flag" /></div><h2>{confirm.action === "block" ? `Chặn ${confirm.name}?` : `Hủy kết bạn với ${confirm.name}?`}</h2><p>{confirm.action === "block" ? "Người này sẽ không thể tìm thấy, gửi lời mời hoặc nhắn tin cho bạn." : "Hai bạn sẽ không còn thấy nội dung chỉ chia sẻ với bạn bè."}</p><div><Button variant="ghost" onClick={() => setConfirm(null)}>Hủy</Button><Button variant="danger" onClick={() => { setFriends(friends.filter(x => x !== confirm.name)); setToast(confirm.action === "block" ? `Đã chặn ${confirm.name}.` : `Đã hủy kết bạn với ${confirm.name}.`); setConfirm(null); }}>Xác nhận</Button></div></div></div>}</main>;
 }
 
 type GroupMemberRole = "LEADER" | "ADMIN" | "MEMBER";
@@ -2819,194 +3403,20 @@ type ConversationState = {
 
 const SAMPLE_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
 
-const initialConversationStates: ConversationState[] = [
-  {
-    id: "conv-manga-club",
-    name: "Hội mê manga",
-    text: "Lan Anh: Phim này cũng có vibe khá giống đó...",
-    img: photos.city,
-    count: 2,
-    group: true,
-    requireApproval: true,
-    members: [
-      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", nickname: "Admin Huy", online: true },
-      { name: "Lan Anh", user: "@lananh", avatar: photos.rain, role: "ADMIN", nickname: "Thánh soi chap mới", online: true },
-      { name: "Minh Trần", user: "@minhtran", avatar: photos.city, role: "MEMBER", nickname: "Minh Cyberpunk", online: true },
-      { name: "Thu Hà", user: "@hanguyen", avatar: photos.lantern, role: "MEMBER", nickname: "", online: false },
-      { name: "Tuấn Minh", user: "@tuanminh", avatar: photos.street, role: "MEMBER", nickname: "Nhà phê bình", online: true },
-    ],
-    pendingMembers: [
-      { name: "Hoàng Nam", user: "@hoangnam", avatar: photos.alley, invitedBy: "Minh Trần", requestedAt: "5 phút trước" },
-      { name: "Khánh Linh", user: "@khanhlinh", avatar: photos.red, invitedBy: "Lan Anh", requestedAt: "18 phút trước" },
-    ],
-    sharedMedia: [
-      { id: "m1", kind: "IMAGE", url: photos.red, title: "Nightfall City Poster" },
-      { id: "m2", kind: "IMAGE", url: photos.rain, title: "Thành Phố Mưa Concept" },
-      { id: "m3", kind: "IMAGE", url: photos.lantern, title: "Lồng Đèn Đỏ Artwork" },
-    ],
-    messages: [
-      {
-        id: "msg-1",
-        senderName: "Lan Anh",
-        senderUser: "@lananh",
-        senderAvatar: photos.rain,
-        isMe: false,
-        time: "20:14",
-        text: "Mọi người đã đọc chap 10.5 của Nightfall City chưa?",
-      },
-      {
-        id: "msg-2",
-        senderName: "Huy Nguyễn",
-        senderUser: "@huynguyen",
-        senderAvatar: photos.red,
-        isMe: true,
-        time: "20:16",
-        text: "Vừa đọc xong luôn. Cái kết bất ngờ thật!",
-        status: "Đã xem",
-      },
-      {
-        id: "msg-3",
-        senderName: "Minh Trần",
-        senderUser: "@minhtran",
-        senderAvatar: photos.city,
-        isMe: false,
-        time: "20:18",
-        revoked: true,
-      },
-      {
-        id: "msg-4",
-        senderName: "Lan Anh",
-        senderUser: "@lananh",
-        senderAvatar: photos.rain,
-        isMe: false,
-        time: "20:20",
-        text: "Phim này cũng có vibe khá giống đó, để mình chia sẻ nhé.",
-        sharedContent: {
-          title: "Thành Phố Không Ngủ",
-          typeLabel: "PHIM · 2024",
-          score: "4.7",
-          desc: "Một kiến trúc sư truy tìm những mảnh ký ức bị thất lạc giữa đô thị tương lai.",
-          img: photos.lantern,
-        },
-      },
-    ],
-  },
-  {
-    id: "conv-lan-anh",
-    name: "Lan Anh",
-    text: "Cậu xem phim này chưa?",
-    img: photos.rain,
-    count: 1,
-    group: false,
-    requireApproval: false,
-    members: [
-      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", nickname: "Huy", online: true },
-      { name: "Lan Anh", user: "@lananh", avatar: photos.rain, role: "MEMBER", nickname: "Lan Anh 🌸", online: true },
-    ],
-    pendingMembers: [],
-    sharedMedia: [{ id: "m-la-1", kind: "IMAGE", url: photos.rain, title: "Poster Anime" }],
-    messages: [
-      {
-        id: "la-1",
-        senderName: "Lan Anh",
-        senderUser: "@lananh",
-        senderAvatar: photos.rain,
-        isMe: false,
-        time: "20:21",
-        text: "Cậu xem bộ Thành Phố Mưa bản Director's Cut chưa? Nhạc phim đỉnh lắm luôn!",
-      },
-    ],
-  },
-  {
-    id: "conv-movie-night",
-    name: "Movie Night",
-    text: "Hẹn mọi người tối thứ 7",
-    img: photos.lantern,
-    count: 0,
-    group: true,
-    requireApproval: true,
-    members: [
-      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", nickname: "Chủ rạp", online: true },
-      { name: "Tuấn Minh", user: "@tuanminh", avatar: photos.street, role: "ADMIN", nickname: "Chọn phim", online: true },
-      { name: "Lan Anh", user: "@lananh", avatar: photos.rain, role: "MEMBER", nickname: "", online: true },
-    ],
-    pendingMembers: [],
-    sharedMedia: [{ id: "m-mn-1", kind: "IMAGE", url: photos.lantern, title: "Lịch chiếu tối thứ 7" }],
-    messages: [
-      {
-        id: "mn-1",
-        senderName: "Tuấn Minh",
-        senderUser: "@tuanminh",
-        senderAvatar: photos.street,
-        isMe: false,
-        time: "19:45",
-        text: "Hẹn mọi người tối thứ 7 lúc 21h bật Video Call xem chung nhé!",
-      },
-    ],
-  },
-  {
-    id: "conv-tuan-minh",
-    name: "Tuấn Minh",
-    text: "Đã gửi tệp kịch bản phân tích",
-    img: photos.street,
-    count: 0,
-    group: false,
-    requireApproval: false,
-    members: [
-      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", online: true },
-      { name: "Tuấn Minh", user: "@tuanminh", avatar: photos.street, role: "MEMBER", online: false },
-    ],
-    pendingMembers: [],
-    sharedMedia: [],
-    messages: [
-      {
-        id: "tm-1",
-        senderName: "Tuấn Minh",
-        senderUser: "@tuanminh",
-        senderAvatar: photos.street,
-        isMe: false,
-        time: "18:30",
-        text: "Mình gửi cậu bản PDF tổng hợp timeline của Nightfall City nhé.",
-        attachments: [
-          {
-            id: "att-init-1",
-            kind: "FILE",
-            name: "Nightfall_City_Timeline_Analysis.pdf",
-            url: "#",
-            sizeLabel: "2.4 MB · PDF",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "conv-midnight-shelf",
-    name: "Kệ sách nửa đêm",
-    text: "Hà: Mình vừa thêm truyện...",
-    img: photos.alley,
-    count: 0,
-    group: true,
-    requireApproval: false,
-    members: [
-      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", online: true },
-      { name: "Thu Hà", user: "@hanguyen", avatar: photos.lantern, role: "ADMIN", nickname: "Mọt sách đêm", online: false },
-      { name: "Minh Trần", user: "@minhtran", avatar: photos.city, role: "MEMBER", online: true },
-    ],
-    pendingMembers: [],
-    sharedMedia: [{ id: "m-ms-1", kind: "IMAGE", url: photos.alley, title: "Ký Ức Ngõ Hẻm" }],
-    messages: [
-      {
-        id: "ms-1",
-        senderName: "Thu Hà",
-        senderUser: "@hanguyen",
-        senderAvatar: photos.lantern,
-        isMe: false,
-        time: "20:24",
-        text: "Mình vừa thêm bộ Tiệm Cầm Đồ Thời Gian vào kệ chung của nhóm rồi đó!",
-      },
-    ],
-  },
-];
+const initialConversationStates: ConversationState[] = [];
+
+function loadSavedConversations(): ConversationState[] {
+  try {
+    const raw = window.localStorage.getItem("pl_chat_convs_v1");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // Ignore storage error
+  }
+  return [];
+}
 
 function ChatPage({
   setPage,
@@ -3019,7 +3429,7 @@ function ChatPage({
   onOpenPublicProfile?: (username: string) => void;
   onSaveSharedToLibrary?: (item: ContentItem) => void;
 }) {
-  const [convList, setConvList] = useState<ConversationState[]>(initialConversationStates);
+  const [convList, setConvList] = useState<ConversationState[]>(() => loadSavedConversations());
   const [active, setActive] = useState(0);
   const [convQuery, setConvQuery] = useState("");
   const [inChatSearch, setInChatSearch] = useState("");
@@ -3027,7 +3437,7 @@ function ChatPage({
   const [message, setMessage] = useState("");
   const [stagedAttachments, setStagedAttachments] = useState<ChatAttachment[]>([]);
   const [showSampleMediaPicker, setShowSampleMediaPicker] = useState(false);
-  const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [typingUser] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   // Modal Quản lý bạn bè, lời mời kết bạn đã nhận / đã gửi và tìm kiếm ngay trong trang Nhắn tin
@@ -3035,15 +3445,17 @@ function ChatPage({
   const [friendModalTab, setFriendModalTab] = useState<"friends" | "received" | "sent" | "search">("friends");
   const [friendSearchQuery, setFriendSearchQuery] = useState("");
   const [onlineOnly, setOnlineOnly] = useState(false);
-  const [friends, setFriends] = useState<string[]>(["Tuấn Minh", "Lan Anh"]);
-  const [receivedRequests, setReceivedRequests] = useState<string[]>(["Thu Hà"]);
-  const [sentRequests, setSentRequests] = useState<string[]>(["Minh Trần"]);
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>(() => loadSavedDirectoryUsers());
+  const [friends, setFriends] = useState<string[]>(() => loadSavedDirectoryUsers().map(u => u.name));
+  const [receivedRequests, setReceivedRequests] = useState<string[]>([]);
+  const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [chatToast, setChatToast] = useState("");
+  const [newDirectPartnerName, setNewDirectPartnerName] = useState("");
 
   // Modal Tạo nhóm chat mới
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupMembers, setNewGroupMembers] = useState<string[]>(["Lan Anh", "Tuấn Minh"]);
+  const [newGroupMembers, setNewGroupMembers] = useState<string[]>([]);
 
   // Các Modal quản lý nhóm nâng cao (Đổi tên nhóm, Đổi Avatar nhóm, Thêm thành viên, Phê duyệt, Đặt biệt danh & Phân quyền, Video Call)
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -3071,7 +3483,21 @@ function ChatPage({
     participants: GroupMember[];
   } | null>(null);
 
-  const currentConv = convList[active] || convList[0];
+  const emptyFallbackConv: ConversationState = {
+    id: "empty-conv",
+    name: "Chưa chọn cuộc trò chuyện",
+    text: "Hãy tạo nhóm chat hoặc cuộc trò chuyện 1-1 mới",
+    img: photos.city,
+    count: 0,
+    group: true,
+    requireApproval: false,
+    members: [{ name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE, avatar: photos.red, role: "LEADER", online: true }],
+    pendingMembers: [],
+    sharedMedia: [],
+    messages: [],
+  };
+
+  const currentConv = convList[active] || convList[0] || emptyFallbackConv;
 
   const notifyChat = (msg: string) => {
     setChatToast(msg);
@@ -3086,6 +3512,11 @@ function ChatPage({
       channel.onmessage = event => {
         if (event.data?.type === "SYNC_CONVERSATIONS" && Array.isArray(event.data.payload)) {
           setConvList(event.data.payload);
+          try {
+            window.localStorage.setItem("pl_chat_convs_v1", JSON.stringify(event.data.payload));
+          } catch {
+            // Ignore storage error
+          }
         }
       };
     } catch {
@@ -3107,6 +3538,11 @@ function ChatPage({
   const broadcastAndSetConvList = (updater: (prev: ConversationState[]) => ConversationState[]) => {
     setConvList(prev => {
       const next = updater(prev);
+      try {
+        window.localStorage.setItem("pl_chat_convs_v1", JSON.stringify(next));
+      } catch {
+        // Ignore storage error
+      }
       try {
         const channel = new BroadcastChannel("personal_library_chat_realtime_v2");
         channel.postMessage({ type: "SYNC_CONVERSATIONS", payload: next });
@@ -3205,18 +3641,39 @@ function ChatPage({
     });
   };
 
-  // Gửi tin nhắn + tệp/hình ảnh/video đồng bộ thời gian thực
+  // Gửi tin nhắn + tệp/hình ảnh/video đồng bộ thời gian thực (KHÔNG tự động trả lời ảo)
   const send = () => {
     if (!message.trim() && stagedAttachments.length === 0) return;
     const textVal = message.trim();
     const attachmentsToSend = [...stagedAttachments];
     const msgId = `msg-${Date.now()}`;
-    const targetConvId = currentConv.id;
+
+    // Nếu chưa có cuộc trò chuyện nào, tự động khởi tạo một cuộc trò chuyện của người dùng
+    let targetConvId = currentConv.id;
+    let baseList = convList;
+    if (convList.length === 0) {
+      const defaultConv: ConversationState = {
+        id: `conv-${Date.now()}`,
+        name: "Nhóm thảo luận của tôi",
+        text: "",
+        img: photos.city,
+        count: 0,
+        group: true,
+        requireApproval: false,
+        members: [{ name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE, avatar: photos.red, role: "LEADER", online: true }],
+        pendingMembers: [],
+        sharedMedia: [],
+        messages: [],
+      };
+      targetConvId = defaultConv.id;
+      baseList = [defaultConv];
+      setActive(0);
+    }
 
     const newMsg: ChatMessageItem = {
       id: msgId,
-      senderName: "Huy Nguyễn",
-      senderUser: "@huynguyen",
+      senderName: CURRENT_USER_NAME,
+      senderUser: CURRENT_USER_HANDLE,
       senderAvatar: photos.red,
       isMe: true,
       time: nowTimeStr(),
@@ -3242,8 +3699,9 @@ function ChatPage({
         title: a.name,
       }));
 
-    broadcastAndSetConvList(prev =>
-      prev.map(c =>
+    broadcastAndSetConvList(prev => {
+      const listToUse = prev.length === 0 ? baseList : prev;
+      return listToUse.map(c =>
         c.id === targetConvId
           ? {
               ...c,
@@ -3252,73 +3710,12 @@ function ChatPage({
               messages: [...c.messages, newMsg],
             }
           : c
-      )
-    );
+      );
+    });
 
     setMessage("");
     setStagedAttachments([]);
     setShowSampleMediaPicker(false);
-
-    // Đồng bộ trạng thái "Đã nhận" -> "Đã xem" & phản hồi thời gian thực
-    window.setTimeout(() => {
-      broadcastAndSetConvList(prev =>
-        prev.map(c =>
-          c.id === targetConvId
-            ? {
-                ...c,
-                messages: c.messages.map(m => (m.id === msgId ? { ...m, status: "Đã xem" } : m)),
-              }
-            : c
-        )
-      );
-    }, 900);
-
-    // Mô phỏng thành viên trong nhóm đang nhập và trả lời thời gian thực
-    const responder = currentConv.members.find(m => m.user !== "@huynguyen") || {
-      name: "Lan Anh",
-      user: "@lananh",
-      avatar: photos.rain,
-      role: "MEMBER" as GroupMemberRole,
-      online: true,
-    };
-
-    window.setTimeout(() => {
-      setTypingUser(responder.nickname || responder.name);
-    }, 1100);
-
-    window.setTimeout(() => {
-      setTypingUser(null);
-      const replyText =
-        attachmentsToSend.some(a => a.kind === "VIDEO")
-          ? "Video nét căng luôn! Cảnh hành động đoạn này đỉnh thật sự 🔥"
-          : attachmentsToSend.some(a => a.kind === "IMAGE")
-          ? "Ảnh poster đẹp xuất sắc, mình lưu về bộ sưu tập liền đây ✨"
-          : attachmentsToSend.some(a => a.kind === "FILE")
-          ? `Cảm ơn cậu nhé, mình vừa tải tệp “${attachmentsToSend[0].name}” về máy rồi!`
-          : `Đồng ý luôn! Mình cũng đang theo dõi sát bộ này cùng mọi người trong ${currentConv.name}.`;
-
-      const replyMsg: ChatMessageItem = {
-        id: `reply-${Date.now()}`,
-        senderName: responder.name,
-        senderUser: responder.user,
-        senderAvatar: responder.avatar,
-        isMe: false,
-        time: nowTimeStr(),
-        text: replyText,
-      };
-
-      broadcastAndSetConvList(prev =>
-        prev.map(c =>
-          c.id === targetConvId
-            ? {
-                ...c,
-                text: `${responder.nickname || responder.name}: ${replyText}`,
-                messages: [...c.messages, replyMsg],
-              }
-            : c
-        )
-      );
-    }, 2600);
   };
 
   // Thu hồi tin nhắn theo thời gian thực
@@ -3337,7 +3734,7 @@ function ChatPage({
     const newName = renameInput.trim();
     const convId = currentConv.id;
     updateCurrentConv(c => ({ ...c, name: newName }));
-    appendSystemEvent(convId, `✏️ Huy Nguyễn đã đổi tên nhóm thành “${newName}”.`);
+    appendSystemEvent(convId, `✏️ ${CURRENT_USER_NAME} đã đổi tên nhóm thành “${newName}”.`);
     setShowRenameModal(false);
     notifyChat(`Đã đổi tên nhóm thành “${newName}” (đồng bộ thời gian thực).`);
   };
@@ -3351,7 +3748,7 @@ function ChatPage({
       img: newImgUrl,
       sharedMedia: [{ id: `av-${Date.now()}`, kind: "IMAGE", url: newImgUrl, title: "Ảnh đại diện nhóm mới" }, ...c.sharedMedia],
     }));
-    appendSystemEvent(convId, "🖼️ Huy Nguyễn đã cập nhật ảnh đại diện nhóm mới.");
+    appendSystemEvent(convId, `🖼️ ${CURRENT_USER_NAME} đã cập nhật ảnh đại diện nhóm mới.`);
     setShowAvatarModal(false);
     setCustomAvatarUrl("");
     notifyChat("Đã cập nhật ảnh đại diện nhóm theo thời gian thực!");
@@ -3371,7 +3768,6 @@ function ChatPage({
         if (m.user === targetUser) {
           return { ...m, nickname: trimmedNick, role: nextRole };
         }
-        // Nếu chuyển quyền Trưởng nhóm (LEADER) cho người khác thì hạ Trưởng nhóm cũ xuống ADMIN
         if (nextRole === "LEADER" && m.role === "LEADER" && m.user !== targetUser) {
           return { ...m, role: "ADMIN" };
         }
@@ -3402,9 +3798,23 @@ function ChatPage({
 
   // Thêm thành viên mới vào nhóm (Trực tiếp hoặc đưa vào danh sách Chờ phê duyệt)
   const handleAddSelectedMembers = () => {
-    if (selectedToAdd.length === 0) return;
+    const customTrimmed = addMemberQuery.trim();
+    let usersToAdd = allDirectoryUsers.filter(u => selectedToAdd.includes(u.name));
+    if (usersToAdd.length === 0 && customTrimmed) {
+      const createdCustom: DirectoryUser = {
+        name: customTrimmed.replace(/^@/, ""),
+        user: customTrimmed.startsWith("@") ? customTrimmed : `@${customTrimmed.toLowerCase().replace(/\s+/g, "")}`,
+        bio: "Thành viên nhóm.",
+        img: photos.city,
+        online: true,
+      };
+      const nextDir = [createdCustom, ...directoryUsers.filter(u => u.user !== createdCustom.user)];
+      setDirectoryUsers(nextDir);
+      saveDirectoryUsers(nextDir);
+      usersToAdd = [createdCustom];
+    }
+    if (usersToAdd.length === 0) return;
     const convId = currentConv.id;
-    const usersToAdd = allDirectoryUsers.filter(u => selectedToAdd.includes(u.name));
 
     if (addAsPendingMode && currentConv.requireApproval) {
       const newPendings: PendingGroupMember[] = usersToAdd.map(u => ({
@@ -3436,11 +3846,12 @@ function ChatPage({
         ...c,
         members: [...c.members, ...newMembers.filter(nm => !c.members.some(em => em.user === nm.user))],
       }));
-      appendSystemEvent(convId, `🎉 Huy Nguyễn đã thêm ${usersToAdd.map(u => u.name).join(", ")} vào nhóm.`);
+      appendSystemEvent(convId, `🎉 ${CURRENT_USER_NAME} đã thêm ${usersToAdd.map(u => u.name).join(", ")} vào nhóm.`);
       notifyChat(`Đã thêm ${usersToAdd.length} thành viên mới vào nhóm theo thời gian thực!`);
     }
 
     setSelectedToAdd([]);
+    setAddMemberQuery("");
     setShowAddMemberModal(false);
   };
 
@@ -3515,7 +3926,7 @@ function ChatPage({
     });
     appendSystemEvent(
       currentConv.id,
-      `${mode === "VIDEO" ? "📹" : "📞"} Huy Nguyễn đã bắt đầu cuộc gọi ${mode === "VIDEO" ? "Video" : "Thoại"} ${
+      `${mode === "VIDEO" ? "📹" : "📞"} ${CURRENT_USER_NAME} đã bắt đầu cuộc gọi ${mode === "VIDEO" ? "Video" : "Thoại"} ${
         currentConv.group ? "nhóm" : "1-1"
       }.`
     );
@@ -3536,21 +3947,30 @@ function ChatPage({
   };
 
   const startDirectChatWith = (personName: string, avatarImg: string) => {
-    const existingIdx = convList.findIndex(c => c.name === personName);
+    const trimmed = personName.trim();
+    if (!trimmed) return;
+    const handle = `@${trimmed.toLowerCase().replace(/\s+/g, "")}`;
+    if (!directoryUsers.some(u => u.name === trimmed)) {
+      const nextDir = [{ name: trimmed, user: handle, bio: "Thành viên cộng đồng.", img: avatarImg, online: true }, ...directoryUsers];
+      setDirectoryUsers(nextDir);
+      saveDirectoryUsers(nextDir);
+      if (!friends.includes(trimmed)) setFriends([...friends, trimmed]);
+    }
+    const existingIdx = convList.findIndex(c => c.name === trimmed);
     if (existingIdx >= 0) {
       setActive(existingIdx);
     } else {
       const newConv: ConversationState = {
         id: `conv-${Date.now()}`,
-        name: personName,
+        name: trimmed,
         text: "Bắt đầu cuộc trò chuyện 1-1 mới",
         img: avatarImg,
         count: 0,
         group: false,
         requireApproval: false,
         members: [
-          { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", online: true },
-          { name: personName, user: `@${personName.toLowerCase().replace(/\s+/g, "")}`, avatar: avatarImg, role: "MEMBER", online: true },
+          { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE, avatar: photos.red, role: "LEADER", online: true },
+          { name: trimmed, user: handle, avatar: avatarImg, role: "MEMBER", online: true },
         ],
         pendingMembers: [],
         sharedMedia: [],
@@ -3559,6 +3979,7 @@ function ChatPage({
       broadcastAndSetConvList(prev => [newConv, ...prev]);
       setActive(0);
     }
+    setNewDirectPartnerName("");
     setShowFriendsModal(false);
   };
 
@@ -3591,7 +4012,7 @@ function ChatPage({
   const createNewGroupChat = () => {
     if (!newGroupName.trim()) return;
     const pickedMembers: GroupMember[] = [
-      { name: "Huy Nguyễn", user: "@huynguyen", avatar: photos.red, role: "LEADER", nickname: "Trưởng nhóm", online: true },
+      { name: CURRENT_USER_NAME, user: CURRENT_USER_HANDLE, avatar: photos.red, role: "LEADER", nickname: "Trưởng nhóm", online: true },
       ...allDirectoryUsers
         .filter(u => newGroupMembers.includes(u.name))
         .map(u => ({
@@ -3630,6 +4051,7 @@ function ChatPage({
     broadcastAndSetConvList(prev => [created, ...prev]);
     setActive(0);
     setNewGroupName("");
+    setNewGroupMembers([]);
     setShowCreateGroup(false);
     notifyChat(`Đã tạo nhóm trò chuyện “${created.name}”.`);
   };
@@ -3639,12 +4061,7 @@ function ChatPage({
     c.text.toLowerCase().includes(convQuery.toLowerCase())
   );
 
-  const allDirectoryUsers = [
-    ...friendData,
-    { name: "Hoàng Nam", user: "@hoangnam", bio: "Fan cứng Sci-Fi & Cyberpunk.", img: photos.alley, online: true },
-    { name: "Khánh Linh", user: "@khanhlinh", bio: "Thích đọc manhwa lãng mạn, giả tưởng.", img: photos.red, online: false },
-    { name: "Bảo Ngọc", user: "@baongoc", bio: "Sưu tầm artbook & nhạc phim Ghibli.", img: photos.lantern, online: true },
-  ];
+  const allDirectoryUsers = directoryUsers;
 
   const filteredDirectory = allDirectoryUsers.filter(u =>
     (!friendSearchQuery || `${u.name} ${u.user}`.toLowerCase().includes(friendSearchQuery.toLowerCase())) &&
@@ -3959,15 +4376,6 @@ function ChatPage({
           );
         })}
 
-        <div className="private-card">
-          <Icon name="lock" />
-          <div>
-            <b>Nội dung riêng tư chưa được cấp quyền</b>
-            <p>Yêu cầu chủ sở hữu cấp quyền để xem nội dung này.</p>
-          </div>
-          <button onClick={() => notifyChat("Đã gửi yêu cầu cấp quyền truy cập cho chủ sở hữu.")}>Gửi yêu cầu</button>
-        </div>
-
         {typingUser && (
           <div className="typing-indicator-row">
             <span className="typing-dots"><i /><i /><i /></span>
@@ -4014,7 +4422,7 @@ function ChatPage({
                   {
                     id: `img-${Date.now()}`,
                     kind: "IMAGE",
-                    name: "Poster_Cyberpunk_2026.jpg",
+                    name: "Anh_Dinh_Kem.jpg",
                     url: photos.city,
                     sizeLabel: "1.2 MB · ẢNH",
                   },
@@ -4022,7 +4430,7 @@ function ChatPage({
                 setShowSampleMediaPicker(false);
               }}
             >
-              🖼️ Đính kèm Ảnh Poster mẫu
+              🖼️ Đính kèm Ảnh
             </button>
             <button
               type="button"
@@ -4032,7 +4440,7 @@ function ChatPage({
                   {
                     id: `vid-${Date.now()}`,
                     kind: "VIDEO",
-                    name: "Trailer_Nightfall_City_Official.mp4",
+                    name: "Video_Dinh_Kem.mp4",
                     url: SAMPLE_VIDEO_URL,
                     sizeLabel: "8.4 MB · VIDEO MP4",
                   },
@@ -4040,7 +4448,7 @@ function ChatPage({
                 setShowSampleMediaPicker(false);
               }}
             >
-              🎬 Đính kèm Video Trailer mẫu
+              🎬 Đính kèm Video MP4
             </button>
             <button
               type="button"
@@ -4050,7 +4458,7 @@ function ChatPage({
                   {
                     id: `file-${Date.now()}`,
                     kind: "FILE",
-                    name: "Danh_Sach_Truyen_De_Cu_2026.pdf",
+                    name: "Tai_Lieu_Dinh_Kem.pdf",
                     url: "#",
                     sizeLabel: "1.8 MB · PDF",
                   },
@@ -4058,7 +4466,7 @@ function ChatPage({
                 setShowSampleMediaPicker(false);
               }}
             >
-              📄 Đính kèm Tệp PDF mẫu
+              📄 Đính kèm Tệp PDF
             </button>
           </div>
         </div>
@@ -4161,7 +4569,15 @@ function ChatPage({
               </Button>
             </>
           ) : (
-            <Button variant="secondary" icon="users" onClick={() => onOpenPublicProfile?.("@lananh")}>
+            <Button
+              variant="secondary"
+              icon="users"
+              onClick={() =>
+                onOpenPublicProfile?.(
+                  currentConv.members.find(m => m.user !== CURRENT_USER_HANDLE)?.user || CURRENT_USER_HANDLE
+                )
+              }
+            >
               Xem trang cá nhân
             </Button>
           )}
@@ -4666,6 +5082,20 @@ function ChatPage({
           </label>
         </div>
 
+        {/* Tạo nhanh cuộc trò chuyện 1-1 với bất kỳ tên người dùng nào bạn tự thêm */}
+        <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+          <input
+            className="admin-select"
+            style={{ flex: 1 }}
+            value={newDirectPartnerName}
+            onChange={e => setNewDirectPartnerName(e.target.value)}
+            placeholder="Nhập tên người dùng mới để thêm & bắt đầu chat 1-1..."
+          />
+          <Button icon="plus" onClick={() => startDirectChatWith(newDirectPartnerName, photos.city)}>
+            + Thêm & Nhắn tin
+          </Button>
+        </div>
+
         <div className="chat-friends-tabs">
           <button className={friendModalTab === "friends" ? "active" : ""} onClick={() => setFriendModalTab("friends")}>
             Danh sách bạn bè <span>{friends.length}</span>
@@ -4695,7 +5125,7 @@ function ChatPage({
                 <Button variant="ghost" onClick={() => removeFriend(u.name)}>Hủy kết bạn</Button>
               </div>
             </div>)}
-            {filteredDirectory.filter(u => friends.includes(u.name)).length === 0 && <div className="empty-results" style={{ height: "160px" }}><b>Không tìm thấy bạn bè phù hợp</b><p>Hãy thử từ khóa khác hoặc chuyển sang tab Tìm & Kết bạn mới.</p></div>}
+            {filteredDirectory.filter(u => friends.includes(u.name)).length === 0 && <div className="empty-results" style={{ height: "160px" }}><b>Chưa có bạn bè nào trong danh sách</b><p>Bạn có thể nhập tên người dùng ở ô bên trên để tự thêm bạn bè và bắt đầu nhắn tin.</p></div>}
           </>}
 
           {friendModalTab === "received" && <>
@@ -4703,7 +5133,7 @@ function ChatPage({
               <div className="conv-avatar"><img src={u.img} alt={u.name} /><i style={{ background: u.online ? "#36d092" : "#625b6b" }} /></div>
               <div>
                 <b>{u.name}</b>
-                <small>{u.user} · Gửi lời mời 2 giờ trước</small>
+                <small>{u.user} · Vừa gửi lời mời</small>
                 <p>{u.bio}</p>
               </div>
               <div className="chat-friend-actions">
@@ -4756,6 +5186,7 @@ function ChatPage({
                 </div>
               </div>;
             })}
+            {filteredDirectory.length === 0 && <div className="empty-results" style={{ height: "160px" }}><b>Chưa có người dùng nào</b><p>Hãy nhập tên người dùng ở thanh phía trên để thêm mới.</p></div>}
           </>}
         </div>
 
@@ -4770,7 +5201,7 @@ function ChatPage({
     {showCreateGroup && <div className="modal-backdrop" onMouseDown={() => setShowCreateGroup(false)}>
       <div className="admin-modal-wide" style={{ width: "480px" }} onMouseDown={e => e.stopPropagation()}>
         <div className="modal-head"><div><span>NHẮN TIN NHÓM</span><h2>Tạo Nhóm Trò Chuyện Mới</h2><p>Đặt tên nhóm và chọn bạn bè để bắt đầu thảo luận truyện, phim.</p></div><button className="icon-btn" onClick={() => setShowCreateGroup(false)}><Icon name="x" /></button></div>
-        <label className="admin-field"><span>Tên nhóm chat *</span><input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="VD: Hội bàn luận One Piece & Sci-Fi..." /></label>
+        <label className="admin-field"><span>Tên nhóm chat *</span><input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="VD: Nhóm thảo luận truyện & phim..." /></label>
         <div className="admin-field">
           <span>Chọn thành viên thêm vào nhóm ({newGroupMembers.length} đã chọn)</span>
           <div className="admin-genre-picks" style={{ marginTop: "8px" }}>
@@ -4780,6 +5211,7 @@ function ChatPage({
               className={newGroupMembers.includes(u.name) ? "active" : ""}
               onClick={() => setNewGroupMembers(newGroupMembers.includes(u.name) ? newGroupMembers.filter(x => x !== u.name) : [...newGroupMembers, u.name])}
             >{u.name} ({u.user})</button>)}
+            {allDirectoryUsers.length === 0 && <span style={{ fontSize: "10px", color: "#8c8299" }}>Bạn sẽ là Trưởng nhóm đầu tiên. Có thể mời thêm thành viên sau khi tạo nhóm.</span>}
           </div>
         </div>
         <div className="modal-actions"><div /><div><Button variant="ghost" onClick={() => setShowCreateGroup(false)}>Hủy</Button><Button icon="plus" onClick={createNewGroupChat}>Tạo nhóm ngay</Button></div></div>
@@ -4797,22 +5229,18 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   const [toast, setToast] = useState("");
   const showToast = (msg: string) => { setToast(msg); window.setTimeout(() => setToast(""), 3500); };
 
-  // 1. STATE QUẢN LÝ NGƯỜI DÙNG
+  // 1. STATE QUẢN LÝ NGƯỜI DÙNG (Chỉ giữ tài khoản thật của bạn, không tạo sẵn tài khoản ảo)
   const [userSearch, setUserSearch] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState("ALL");
   const [userStatusFilter, setUserStatusFilter] = useState("ALL");
   const [users, setUsers] = useState<AdminUserItem[]>([
-    { id: 1, name: "Nguyễn Huy", username: "@huynguyen", email: "huy.nguyen@example.com", avatar: photos.red, bio: "Quản trị viên hệ thống Mê Truyện.", role: "ADMIN", status: "ACTIVE", joinedAt: "18/08/2023" },
-    { id: 2, name: "Lan Anh", username: "@lananh", email: "lananh@example.com", avatar: photos.rain, bio: "Mê anime chữa lành và phim Nhật.", role: "USER", status: "ACTIVE", joinedAt: "02/11/2023" },
-    { id: 3, name: "Minh Trần", username: "@minhtran", email: "minhtran@example.com", avatar: photos.city, bio: "Đọc shounen, xem sci-fi mỗi tối.", role: "USER", status: "LOCKED", joinedAt: "14/01/2024" },
-    { id: 4, name: "Tuấn Minh", username: "@tuanminh", email: "tuanminh@example.com", avatar: photos.street, bio: "Review phim và manga trinh thám.", role: "USER", status: "ACTIVE", joinedAt: "25/03/2024" },
-    { id: 5, name: "Thu Hà", username: "@hanguyen", email: "thuha@example.com", avatar: photos.lantern, bio: "Một chiếc mọt truyện chính hiệu.", role: "USER", status: "BANNED", joinedAt: "09/06/2024" },
+    { id: 1, name: CURRENT_USER_NAME, username: CURRENT_USER_HANDLE, email: "huy.nguyen@example.com", avatar: photos.red, bio: "Quản trị viên hệ thống Mê Truyện.", role: "ADMIN", status: "ACTIVE", joinedAt: "18/08/2023" },
   ]);
   const [editingUser, setEditingUser] = useState<AdminUserItem | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({ name: "", username: "", email: "", role: "USER" as "USER" | "ADMIN", status: "ACTIVE" as "ACTIVE" | "LOCKED" | "BANNED", bio: "" });
 
-  // 2. STATE QUẢN LÝ TRUYỆN / PHIM & CHƯƠNG / TẬP
+  // 2. STATE QUẢN LÝ TRUYỆN / PHIM & CHƯƠNG / TẬP (Đồng bộ 100% với dữ liệu thật trong contents)
   const [contentSearch, setContentSearch] = useState("");
   const [contentTypeFilter, setContentTypeFilter] = useState("ALL");
   const [contentStatusFilter, setContentStatusFilter] = useState("ALL");
@@ -4826,15 +5254,11 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
       score: c.score,
       type: c.type,
       isSeries: true,
-      visibility: "PUBLIC",
-      description: `Mô tả chi tiết chính thức cho tác phẩm “${c.title}” (${c.sub}). Nội dung được kiểm duyệt và cập nhật bởi Quản trị viên hệ thống.`,
-      mainLink: c.type === "Truyện" ? "https://mangadex.org" : "https://www.netflix.com",
+      visibility: c.visibility || "PUBLIC",
+      description: c.description || c.shortDescription || "",
+      mainLink: c.mainLink || c.externalLinks?.[0]?.url || "",
       genres: c.genres,
-      chapters: [
-        { id: 1, season: "Mùa 1", number: "1", title: "Khởi đầu hành trình", url: "https://mangadex.org/chapter/1", note: "Bản dịch chuẩn" },
-        { id: 2, season: "Mùa 1", number: "2", title: "Bí mật trong đêm", url: "https://mangadex.org/chapter/2", note: "Đã cập nhật link mới" },
-        { id: 3, season: "Mùa 1", number: "3.5", title: "Ngoại truyện đặc biệt", url: "https://mangadex.org/chapter/3-5", note: "" },
-      ],
+      chapters: c.chaptersList || [],
     }))
   );
   const [editingContent, setEditingContent] = useState<AdminContentItem | null>(null);
@@ -4858,25 +5282,29 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   ]);
   const [newCategory, setNewCategory] = useState({ name: "", desc: "" });
 
-  // 4. STATE BÁO CÁO VI PHẠM & BÌNH LUẬN
-  const [reports, setReports] = useState([
-    { id: 101, reporter: "@lananh", targetType: "REVIEW", targetName: "Bình luận chương 8 - Nightfall City", reason: "Tiết lộ nội dung (Spoiler) không gắn cảnh báo", status: "PENDING", adminNote: "" },
-    { id: 102, reporter: "@tuanminh", targetType: "CONTENT", targetName: "Ánh Sáng Cuối Hè", reason: "Đường dẫn xem phim bên ngoài bị hỏng", status: "PENDING", adminNote: "" },
-    { id: 103, reporter: "@hanguyen", targetType: "MESSAGE", targetName: "Tin nhắn nhóm Hội mê manga", reason: "Spam đường dẫn quảng cáo", status: "RESOLVED", adminNote: "Đã xóa tin nhắn và nhắc nhở thành viên." },
-  ]);
+  // 4. STATE BÁO CÁO VI PHẠM & BÌNH LUẬN (Rỗng mặc định, không tạo sẵn báo cáo giả)
+  const [reports, setReports] = useState<Array<{ id: number; reporter: string; targetType: string; targetName: string; reason: string; status: string; adminNote: string }>>([]);
 
-  // Đồng bộ thay đổi kho truyện/phim của Admin ra toàn hệ thống
+  // Đồng bộ thay đổi kho truyện/phim của Admin ra toàn hệ thống (giữ nguyên toàn bộ metadata gốc)
   const syncGlobalContents = (updatedList: AdminContentItem[]) => {
     setAdminContents(updatedList);
-    setContents(updatedList.map(item => ({
-      title: item.title,
-      sub: item.sub,
-      img: item.img,
-      status: item.status,
-      score: item.score,
-      type: item.type,
-      genres: item.genres,
-    })));
+    setContents(updatedList.map(item => {
+      const existing = contents.find(x => x.title === item.title);
+      return {
+        ...(existing || {}),
+        title: item.title,
+        sub: item.sub,
+        img: item.img,
+        status: item.status,
+        score: item.score,
+        type: item.type,
+        genres: item.genres,
+        visibility: item.visibility,
+        description: item.description,
+        mainLink: item.mainLink,
+        chaptersList: item.chapters,
+      };
+    }));
   };
 
   // Bộ lọc người dùng
@@ -4962,14 +5390,14 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           sub: "Đạo diễn / Tác giả",
           img: photos.hero,
           status: "Đang ra",
-          score: "4.8",
+          score: "—",
           type: "Truyện",
           isSeries: true,
           visibility: "PUBLIC",
           description: "",
           mainLink: "https://",
-          genres: ["Action"],
-          chapters: [{ id: 1, season: "Mùa 1", number: "1", title: "Chương mở đầu", url: "https://", note: "" }],
+          genres: [],
+          chapters: [{ id: 1, season: "Mùa 1", number: "1", title: "", url: "https://", note: "" }],
         })}>+ Thêm Truyện / Phim</Button>
       </div>}
     />
@@ -5383,80 +5811,55 @@ function PublicProfilePage({
   onSaveSharedItem: (item: ContentItem) => void;
   onOpenShareToChat: (item: ContentItem) => void;
 }) {
+  const savedUsers = loadSavedDirectoryUsers();
   const profiles: Record<string, { name: string; user: string; bio: string; img: string; banner: string; joined: string; friendsCount: number; sharedCount: number }> = {
-    "@lananh": {
-      name: "Lan Anh",
-      user: "@lananh",
-      bio: "Mê anime chữa lành, điện ảnh Nhật Bản và những bộ manga cyberpunk mang chiều sâu tâm lý.",
-      img: photos.rain,
+    "@huynguyen": {
+      name: "Nguyễn Huy",
+      user: "@huynguyen",
+      bio: "Thư viện cá nhân quản lý truyện và phim yêu thích.",
+      img: photos.hero,
       banner: photos.hero,
-      joined: "12/03/2024",
-      friendsCount: 42,
-      sharedCount: 8,
-    },
-    "@minhtran": {
-      name: "Minh Trần",
-      user: "@minhtran",
-      bio: "Đọc shounen, xem sci-fi mỗi tối. Thích sưu tầm các bộ phim khoa học viễn tưởng kinh điển.",
-      img: photos.city,
-      banner: photos.lantern,
-      joined: "05/11/2023",
-      friendsCount: 31,
-      sharedCount: 6,
-    },
-    "@hanguyen": {
-      name: "Thu Hà",
-      user: "@hanguyen",
-      bio: "Một chiếc mọt truyện chính hiệu · Hay viết review dài cho những bộ truyện trinh thám.",
-      img: photos.lantern,
-      banner: photos.alley,
-      joined: "20/01/2024",
-      friendsCount: 19,
-      sharedCount: 5,
-    },
-    "@tuanminh": {
-      name: "Tuấn Minh",
-      user: "@tuanminh",
-      bio: "Review phim và manga trinh thám · Luôn sẵn sàng trao đổi list phim cuối tuần.",
-      img: photos.street,
-      banner: photos.city,
-      joined: "14/07/2023",
-      friendsCount: 54,
-      sharedCount: 9,
+      joined: "Hôm nay",
+      friendsCount: savedUsers.length,
+      sharedCount: items.filter(it => it.visibility !== "PRIVATE").length,
     },
   };
+  savedUsers.forEach(u => {
+    profiles[u.user] = {
+      name: u.name,
+      user: u.user,
+      bio: u.bio || "Thành viên cộng đồng Mê Truyện.",
+      img: u.img || photos.hero,
+      banner: photos.hero,
+      joined: "Thành viên",
+      friendsCount: 1,
+      sharedCount: items.filter(it => it.createdBy?.user === u.user && it.visibility !== "PRIVATE").length,
+    };
+  });
 
-  const [selectedUser, setSelectedUser] = useState(username || "@lananh");
-  const profile = profiles[selectedUser] || profiles["@lananh"];
+  const normalizedUsername = username ? (username.startsWith("@") ? username : `@${username}`) : "@huynguyen";
+  if (!profiles[normalizedUsername]) {
+    profiles[normalizedUsername] = {
+      name: normalizedUsername.replace(/^@/, ""),
+      user: normalizedUsername,
+      bio: "Thành viên cộng đồng Mê Truyện.",
+      img: photos.hero,
+      banner: photos.hero,
+      joined: "Thành viên",
+      friendsCount: 0,
+      sharedCount: 0,
+    };
+  }
+
+  const [selectedUser, setSelectedUser] = useState(normalizedUsername);
+  const profile = profiles[selectedUser] || profiles["@huynguyen"];
   const [filterType, setFilterType] = useState<"Tất cả" | "Truyện" | "Phim">("Tất cả");
   const [savedTitles, setSavedTitles] = useState<string[]>([]);
   const [toast, setToast] = useState("");
   const [isFriend, setIsFriend] = useState(true);
 
-  const friendExclusiveItems: ContentItem[] = [
-    {
-      title: "Hành Tinh Pha Lê",
-      type: "Phim",
-      sub: "Movie · 2025",
-      genres: ["Sci-Fi", "Adventure"],
-      score: "4.9",
-      status: "Hoàn thành",
-      img: photos.city,
-      sharedFrom: { name: profile.name, user: profile.user, sharedAt: "Vừa lưu" },
-    },
-    {
-      title: "Tiệm Cầm Đồ Thời Gian",
-      type: "Truyện",
-      sub: "K. Takahashi",
-      genres: ["Fantasy", "Mystery", "Drama"],
-      score: "4.8",
-      status: "Muốn đọc / xem",
-      img: photos.lantern,
-      sharedFrom: { name: profile.name, user: profile.user, sharedAt: "Vừa lưu" },
-    },
-  ];
-
-  const sharedItems = [...friendExclusiveItems, ...items.filter((_, idx) => idx % 3 !== 2)]
+  const sharedItems = items
+    .filter(item => item.visibility !== "PRIVATE" && (!item.createdBy?.user || item.createdBy?.user === selectedUser || selectedUser === "@huynguyen"))
     .filter(item => filterType === "Tất cả" || item.type === filterType);
 
   const handleCopyToMyLibrary = (item: ContentItem) => {
@@ -5475,7 +5878,7 @@ function PublicProfilePage({
     <div className="friend-switcher-bar">
       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
         <Button variant="ghost" onClick={() => setPage("library")}>← Quay lại thư viện</Button>
-        <span style={{ fontSize: "10px", color: "#9e93ad", fontWeight: 600 }}>Xem hồ sơ bạn bè:</span>
+        <span style={{ fontSize: "10px", color: "#9e93ad", fontWeight: 600 }}>Xem hồ sơ:</span>
       </div>
       <div className="friend-switcher-pills">
         {Object.keys(profiles).map(u => (
@@ -5508,7 +5911,7 @@ function PublicProfilePage({
           <div className="pub-stats">
             <div><b>{sharedItems.length}</b><small>Tác phẩm công khai</small></div>
             <div><b>{profile.friendsCount}</b><small>Bạn bè</small></div>
-            <div><b>128</b><small>Lượt được lưu</small></div>
+            <div><b>0</b><small>Lượt được lưu</small></div>
           </div>
         </div>
         <div className="pub-actions">
@@ -5534,47 +5937,49 @@ function PublicProfilePage({
       </div>
     </div>
 
-    <div className="poster-grid">
-      {sharedItems.map((item) => {
-        const isSaved = savedTitles.includes(item.title);
-        return (
-          <article key={item.title} className="poster-card library-card">
-            <div className="poster-image" onClick={() => setPage("detail")}>
-              <img src={item.img} alt={item.title} />
-              <span className="privacy shared">🌐 Công khai ({profile.user})</span>
-            </div>
-            <div className="poster-copy">
-              <div className="content-type">{item.type === "Truyện" ? "MANGA" : "MOVIE"}</div>
-              <h3 onClick={() => setPage("detail")} style={{ cursor: "pointer" }}>{item.title}</h3>
-              <p className="personal-note">“Tác phẩm được {profile.name} chia sẻ công khai cùng cộng đồng.”</p>
-              <Rating value={item.score} />
-              <div className="card-actions" style={{ marginTop: "8px", display: "flex", gap: "6px" }}>
-                <Button
-                  variant={isSaved ? "secondary" : "primary"}
-                  icon={isSaved ? "check" : "plus"}
-                  onClick={() => handleCopyToMyLibrary(item)}
-                >
-                  {isSaved ? "Đã lưu về thư viện" : "Lưu về thư viện"}
-                </Button>
-                <button className="icon-btn" title="Chia sẻ vào tin nhắn" onClick={() => onOpenShareToChat(item)}>
-                  <Icon name="share" size={15} />
-                </button>
+    {sharedItems.length === 0 ? (
+      <div className="empty-results">
+        <Icon name="book" size={28} />
+        <b>Chưa có tác phẩm công khai nào</b>
+        <p>Khi {profile.name} đăng truyện hoặc phim ở chế độ Cộng đồng, tác phẩm sẽ hiển thị tại đây.</p>
+      </div>
+    ) : (
+      <div className="poster-grid">
+        {sharedItems.map((item) => {
+          const isSaved = savedTitles.includes(item.title);
+          return (
+            <article key={item.title} className="poster-card library-card">
+              <div className="poster-image" onClick={() => setPage("detail")}>
+                <img src={item.img} alt={item.title} />
+                <span className="privacy shared">🌐 Công khai ({profile.user})</span>
               </div>
-            </div>
-          </article>
-        );
-      })}
-    </div>
+              <div className="poster-copy">
+                <div className="content-type">{item.type === "Truyện" ? "MANGA" : "MOVIE"}</div>
+                <h3 onClick={() => setPage("detail")} style={{ cursor: "pointer" }}>{item.title}</h3>
+                <p className="personal-note">{item.shortDescription || item.description || `Tác phẩm được ${profile.name} chia sẻ công khai.`}</p>
+                <Rating value={item.score} />
+                <div className="card-actions" style={{ marginTop: "8px", display: "flex", gap: "6px" }}>
+                  <Button
+                    variant={isSaved ? "secondary" : "primary"}
+                    icon={isSaved ? "check" : "plus"}
+                    onClick={() => handleCopyToMyLibrary(item)}
+                  >
+                    {isSaved ? "Đã lưu về thư viện" : "Lưu về thư viện"}
+                  </Button>
+                  <button className="icon-btn" title="Chia sẻ vào tin nhắn" onClick={() => onOpenShareToChat(item)}>
+                    <Icon name="share" size={15} />
+                  </button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    )}
   </div></main>;
 }
 
-const initialNotifications: NotificationItem[] = [
-  { id: 1, type: "CHAPTER", icon: "📖", targetTitle: "Nightfall City", text: "vừa cập nhật Chương 10.5: Màn đêm buông xuống.", time: "12 phút trước", unread: true, targetPage: "detail" },
-  { id: 2, type: "SHARE", icon: "🌐", targetTitle: "Lan Anh (@lananh)", text: "đã chia sẻ bộ phim “Thành Phố Không Ngủ” vào nhóm Hội mê manga.", time: "35 phút trước", unread: true, targetPage: "chat" },
-  { id: 3, type: "COMMENT", icon: "💬", targetTitle: "Tuấn Minh (@tuanminh)", text: "đã trả lời bình luận của bạn trong “Nightfall City”.", time: "2 giờ trước", unread: true, targetPage: "detail" },
-  { id: 4, type: "FRIEND", icon: "👋", targetTitle: "Thu Hà (@hanguyen)", text: "đã gửi cho bạn một lời mời kết bạn mới.", time: "1 ngày trước", unread: false, targetPage: "friends" },
-  { id: 5, type: "CHAPTER", icon: "🎬", targetTitle: "Thành Phố Mưa", text: "vừa ra mắt Tập 9 (Mùa 1) với phụ đề Tiếng Việt.", time: "2 ngày trước", unread: false, targetPage: "detail" },
-];
+const initialNotifications: NotificationItem[] = [];
 
 function NotificationsPage({
   notifications,
@@ -5670,11 +6075,13 @@ function CommandPaletteModal({
     return (
       item.title.toLowerCase().includes(q) ||
       item.sub.toLowerCase().includes(q) ||
+      (item.author || "").toLowerCase().includes(q) ||
       item.genres.some(g => g.toLowerCase().includes(q))
     );
   }).slice(0, 6);
 
-  const matchedUsers = friendData.filter(u => {
+  const directoryUsers = loadSavedDirectoryUsers();
+  const matchedUsers = directoryUsers.filter(u => {
     if (scope === "Truyện" || scope === "Phim") return false;
     if (!query.trim()) return true;
     const q = query.toLowerCase();
@@ -5748,7 +6155,7 @@ function CommandPaletteModal({
           <div className="empty-results" style={{ margin: "12px 0" }}>
             <Icon name="search" size={24} />
             <b>Không tìm thấy kết quả phù hợp</b>
-            <p>Hãy thử tìm bằng từ khóa khác hoặc tên tác giả/đạo diễn.</p>
+            <p>Hãy thử tìm bằng từ khóa khác hoặc đăng truyện/phim mới vào thư viện.</p>
           </div>
         )}
       </div>
@@ -5771,9 +6178,10 @@ function ShareToChatModal({
   onClose: () => void;
   onSharedSuccess: (targetChat: string, item: ContentItem) => void;
 }) {
-  const [selectedTitle, setSelectedTitle] = useState(initialItem?.title || items[0]?.title || "Nightfall City");
-  const [selectedConv, setSelectedConv] = useState(initialConversationStates[0].name);
-  const [note, setNote] = useState("Bộ này cuốn lắm, cậu thử xem nhé!");
+  const savedConvs = loadSavedConversations();
+  const [selectedTitle, setSelectedTitle] = useState(initialItem?.title || items[0]?.title || "");
+  const [selectedConv, setSelectedConv] = useState(savedConvs[0]?.name || "Nhóm thảo luận của tôi");
+  const [note, setNote] = useState("");
   const [permissionMode, setPermissionMode] = useState<"VIEW_ONLY" | "ALLOW_COPY">("ALLOW_COPY");
 
   const chosenItem = items.find(x => x.title === selectedTitle) || initialItem || items[0];
@@ -5809,9 +6217,13 @@ function ShareToChatModal({
       <div className="admin-field-two">
         <label className="admin-field">
           <span>Gửi đến cuộc trò chuyện (1-1 / Nhóm)</span>
-          <select value={selectedConv} onChange={e => setSelectedConv(e.target.value)}>
-            {initialConversationStates.map(c => <option key={c.name} value={c.name}>{c.group ? "👥 Nhóm: " : "👤 Bạn bè: "}{c.name}</option>)}
-          </select>
+          {savedConvs.length > 0 ? (
+            <select value={selectedConv} onChange={e => setSelectedConv(e.target.value)}>
+              {savedConvs.map(c => <option key={c.name} value={c.name}>{c.group ? "👥 Nhóm: " : "👤 Bạn bè: "}{c.name}</option>)}
+            </select>
+          ) : (
+            <input value={selectedConv} onChange={e => setSelectedConv(e.target.value)} placeholder="Nhập tên nhóm hoặc người nhận..." />
+          )}
         </label>
         <label className="admin-field">
           <span>Quyền truy cập khi chia sẻ</span>
@@ -5898,19 +6310,60 @@ function ReportModal({
   </div>;
 }
 
+const CONTENTS_STORAGE_KEY = "pl_contents_v1";
+const FAVORITES_STORAGE_KEY = "pl_favorites_v1";
+
+function loadSavedContents(): ContentItem[] {
+  try {
+    const raw = window.localStorage.getItem(CONTENTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadSavedFavorites(): string[] {
+  try {
+    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function App() {
   const [page, setPage] = useState("login");
   const [authenticated, setAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<"USER" | "ADMIN">("USER");
-  const [favorites, setFavorites] = useState<string[]>(["Nightfall City", "Lồng Đèn Đỏ"]);
-  const [allContents, setAllContents] = useState<ContentItem[]>(libraryItems);
+  const [favorites, setFavorites] = useState<string[]>(() => loadSavedFavorites());
+  const [allContents, setAllContents] = useState<ContentItem[]>(() => loadSavedContents());
   const [publishedTitle, setPublishedTitle] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [publicProfileUser, setPublicProfileUser] = useState("@lananh");
+  const [publicProfileUser, setPublicProfileUser] = useState("@huynguyen");
   const [shareModalItem, setShareModalItem] = useState<ContentItem | null | undefined>(undefined);
   const [reportTarget, setReportTarget] = useState<{ type: "CONTENT" | "COMMENT"; name: string } | null>(null);
   const [globalToast, setGlobalToast] = useState("");
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CONTENTS_STORAGE_KEY, JSON.stringify(allContents));
+    } catch {
+      // ignore storage errors
+    }
+  }, [allContents]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+    } catch {
+      // ignore storage errors
+    }
+  }, [favorites]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -6114,6 +6567,7 @@ export default function App() {
           showGlobalToast(`Đã xóa vĩnh viễn tác phẩm “${title}” khỏi hệ thống!`);
           navigate("library");
         }}
+        onNavigatePublish={() => navigate("publish")}
       />
     )}
     {page === "chat" && (
@@ -6132,7 +6586,7 @@ export default function App() {
         }}
       />
     )}
-    {page === "account" && <AccountPage setPage={navigate} />}
+    {page === "account" && <AccountPage setPage={navigate} worksCount={allContents.length} />}
     {page === "settings" && <SettingsPage setPage={navigate} />}
     {page === "friends" && <FriendsPage setPage={navigate} onOpenPublicProfile={openPublicProfile} />}
     {page === "public-profile" && (
