@@ -205,22 +205,63 @@ const mangaGenres = ["BL", "BG", "GL", "Action", "Adventure", "Comedy", "Drama",
 const movieGenres = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Musical", "Romance", "Sci-Fi", "Thriller", "War", "Western", "Family", "Psychological", "Supernatural"];
 const allGenres = Array.from(new Set([...mangaGenres, ...movieGenres]));
 
-function SectionTitle({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: string }) {
-  return <div className="section-title"><div>{eyebrow && <span>{eyebrow}</span>}<h2>{title}</h2></div>{action && <button>{action} <Icon name="arrow" size={15} /></button>}</div>;
+function SectionTitle({ eyebrow, title, action, onAction }: { eyebrow?: string; title: string; action?: string; onAction?: () => void }) {
+  return <div className="section-title"><div>{eyebrow && <span>{eyebrow}</span>}<h2>{title}</h2></div>{action && <button onClick={onAction}>{action} <Icon name="arrow" size={15} /></button>}</div>;
 }
 
 function FavoriteButton({ active, toggle }: { active: boolean; toggle: () => void }) {
   return <button className={`favorite-btn ${active ? "active" : ""}`} onClick={e => { e.stopPropagation(); toggle(); }} aria-label={active ? "Bỏ yêu thích" : "Thêm yêu thích"}><Icon name="heart" size={17} /></button>;
 }
 
-function FilterCollection({ initialType = "Tất cả", favorites, toggleFavorite, setPage, compact = false, search = "" }: { initialType?: string; favorites: string[]; toggleFavorite: (title: string) => void; setPage: (page: string) => void; compact?: boolean; search?: string }) {
+const catalogItems: ContentItem[] = [
+  ...libraryItems,
+  { title: "Hành Tinh Ánh Sáng", sub: "Movie · 2025", img: photos.city, status: "Đang ra", score: "4.9", type: "Phim", genres: ["Sci-Fi", "Adventure", "Drama"] },
+  { title: "Khúc Nhạc Đêm Mưa", sub: "R. Shinkai", img: photos.rain, status: "Muốn đọc / xem", score: "4.8", type: "Truyện", genres: ["Romance", "Slice of Life", "Drama"] },
+  { title: "Bóng Ma Đường Tàu", sub: "H. Sato", img: photos.alley, status: "Đang ra", score: "4.7", type: "Truyện", genres: ["Mystery", "Supernatural", "Thriller"] },
+];
+
+function FilterCollection({
+  initialType = "Tất cả",
+  favorites,
+  toggleFavorite,
+  setPage,
+  compact = false,
+  search = "",
+  savedItems = libraryItems,
+  onSelectContent,
+  onToggleLibraryItem,
+}: {
+  initialType?: string;
+  favorites: string[];
+  toggleFavorite: (title: string) => void;
+  setPage: (page: string) => void;
+  compact?: boolean;
+  search?: string;
+  savedItems?: ContentItem[];
+  onSelectContent?: (item: ContentItem) => void;
+  onToggleLibraryItem?: (item: ContentItem) => void;
+}) {
   const [type, setType] = useState(initialType);
   const [status, setStatus] = useState("Tất cả");
   const [genres, setGenres] = useState<string[]>([]);
   const availableGenres = type === "Truyện" ? mangaGenres : type === "Phim" ? movieGenres : allGenres;
-  const filtered = libraryItems.filter(item => item.title.toLocaleLowerCase("vi").includes(search.toLocaleLowerCase("vi")) && (type === "Tất cả" || item.type === type) && (status === "Tất cả" || item.status === status) && genres.every(g => item.genres.includes(g)));
-  const chooseType = (value: string) => { setType(value); setGenres(current => current.filter(g => (value === "Truyện" ? mangaGenres : value === "Phim" ? movieGenres : allGenres).includes(g))); };
-  const reset = () => { setType(initialType); setStatus("Tất cả"); setGenres([]); };
+  const sourcePool = Array.from(new Map([...savedItems, ...catalogItems].map(item => [item.title, item])).values());
+  const filtered = sourcePool.filter(
+    item =>
+      item.title.toLocaleLowerCase("vi").includes(search.toLocaleLowerCase("vi")) &&
+      (type === "Tất cả" || item.type === type) &&
+      (status === "Tất cả" || item.status === status) &&
+      genres.every(g => item.genres.includes(g))
+  );
+  const chooseType = (value: string) => {
+    setType(value);
+    setGenres(current => current.filter(g => (value === "Truyện" ? mangaGenres : value === "Phim" ? movieGenres : allGenres).includes(g)));
+  };
+  const reset = () => {
+    setType(initialType);
+    setStatus("Tất cả");
+    setGenres([]);
+  };
   return <div className={`filter-collection ${compact ? "compact" : ""}`}>
     <div className="advanced-filter">
       <div className="filter-group"><span>LOẠI</span><div>{["Tất cả", "Truyện", "Phim"].map(x => <button className={type === x ? "active" : ""} onClick={() => chooseType(x)} key={x}>{x}</button>)}</div></div>
@@ -230,55 +271,580 @@ function FilterCollection({ initialType = "Tất cả", favorites, toggleFavorit
     </div>
     {(type !== initialType || status !== "Tất cả" || genres.length > 0) && <div className="active-filters"><span>ĐANG LỌC</span>{type !== initialType && <button onClick={() => chooseType(initialType)}>{type} ×</button>}{status !== "Tất cả" && <button onClick={() => setStatus("Tất cả")}>{status} ×</button>}{genres.map(g => <button onClick={() => setGenres(genres.filter(x => x !== g))} key={g}>{g} ×</button>)}</div>}
     <div className="result-count"><b>{filtered.length}</b> tác phẩm phù hợp</div>
-    {filtered.length ? <div className="poster-grid">{filtered.map((item, i) => <article className="poster-card" key={item.title} onClick={() => setPage("detail")}>
-      <div className="poster-image"><img src={item.img} alt={item.title} /><span className={`status ${item.status === "Hoàn thành" ? "done" : item.status === "Drop" ? "drop" : ""}`}>{item.status}</span><FavoriteButton active={favorites.includes(item.title)} toggle={() => toggleFavorite(item.title)} /></div>
-      <div className="poster-copy"><div className="content-type">{item.type === "Truyện" ? "MANGA" : "MOVIE"}</div><h3>{item.title}</h3><div className="card-genres">{item.genres.slice(0, 2).map(g => <span key={g}>{g}</span>)}</div><Rating value={item.score} /></div>
-    </article>)}</div> : <div className="empty-results"><Icon name="search" size={28} /><b>Không tìm thấy tác phẩm phù hợp</b><p>Hãy thử bỏ bớt thể loại hoặc đặt lại bộ lọc.</p><Button variant="secondary" onClick={reset}>Đặt lại bộ lọc</Button></div>}
+    {filtered.length ? <div className="poster-grid">{filtered.map(item => {
+      const inLib = savedItems.some(x => x.title === item.title);
+      return (
+        <article
+          className="poster-card"
+          key={item.title}
+          onClick={() => {
+            onSelectContent?.(item);
+            setPage("detail");
+          }}
+        >
+          <div className="poster-image">
+            <img src={item.img} alt={item.title} />
+            <span className={`status ${item.status === "Hoàn thành" ? "done" : item.status === "Drop" ? "drop" : ""}`}>{item.status}</span>
+            <FavoriteButton active={favorites.includes(item.title)} toggle={() => toggleFavorite(item.title)} />
+          </div>
+          <div className="poster-copy">
+            <div className="content-type">{item.type === "Truyện" ? "MANGA" : "MOVIE"}</div>
+            <h3>{item.title}</h3>
+            <div className="card-genres">{item.genres.slice(0, 2).map(g => <span key={g}>{g}</span>)}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+              <Rating value={item.score} />
+              {onToggleLibraryItem && (
+                <button
+                  type="button"
+                  className={`quick-lib-btn ${inLib ? "saved" : ""}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    onToggleLibraryItem(item);
+                  }}
+                  title={inLib ? "Đã có trong Thư viện của tôi (Nhấn để gỡ)" : "Lưu nhanh vào Thư viện của tôi"}
+                >
+                  <Icon name={inLib ? "check" : "plus"} size={13} />
+                  {inLib ? "Đã lưu" : "Lưu"}
+                </button>
+              )}
+            </div>
+          </div>
+        </article>
+      );
+    })}</div> : <div className="empty-results"><Icon name="search" size={28} /><b>Không tìm thấy tác phẩm phù hợp</b><p>Hãy thử bỏ bớt thể loại hoặc đặt lại bộ lọc.</p><Button variant="secondary" onClick={reset}>Đặt lại bộ lọc</Button></div>}
   </div>;
 }
 
-function HomePage({ setPage, favorites, toggleFavorite }: { setPage: (page: string) => void; favorites: string[]; toggleFavorite: (title: string) => void }) {
+type ContinueEntry = {
+  item: ContentItem;
+  currentUnit: number;
+  totalUnits: number;
+  unitLabel: "Chương" | "Tập";
+  chapterTitle: string;
+  synopsis: string;
+  lastReadAt: string;
+};
+
+function HomePage({
+  setPage,
+  favorites,
+  toggleFavorite,
+  savedItems = libraryItems,
+  onSaveToLibrary,
+  onRemoveFromLibrary,
+  onSelectContent,
+}: {
+  setPage: (page: string) => void;
+  favorites: string[];
+  toggleFavorite: (title: string) => void;
+  savedItems?: ContentItem[];
+  onSaveToLibrary?: (item: ContentItem, options?: { status: string; category: string; note: string; favorite: boolean }) => void;
+  onRemoveFromLibrary?: (title: string) => void;
+  onSelectContent?: (item: ContentItem) => void;
+}) {
+  const heroSlides: Array<{
+    titleLine1: string;
+    titleLine2: string;
+    eyebrow: string;
+    desc: string;
+    bg: string;
+    item: ContentItem;
+  }> = [
+    {
+      titleLine1: "NIGHTFALL",
+      titleLine2: "CITY",
+      eyebrow: "Đề xuất cho bạn",
+      desc: "Trong một Tokyo nơi ký ức được mua bán như tiền tệ, một thám tử trẻ phải lần theo dấu vết của quá khứ đã bị đánh cắp trước khi thành phố chìm vào bóng tối.",
+      bg: photos.hero,
+      item: libraryItems[0],
+    },
+    {
+      titleLine1: "HÀNH TINH",
+      titleLine2: "ÁNH SÁNG",
+      eyebrow: "Phim mới thịnh hành",
+      desc: "Một chuyến tàu xuyên ngân hà chở theo những ký ức cuối cùng của Trái Đất, nơi hai kẻ xa lạ phát hiện ra tần số bí ẩn nối liền hai thế giới.",
+      bg: photos.city,
+      item: catalogItems[libraryItems.length],
+    },
+    {
+      titleLine1: "LỒNG ĐÈN",
+      titleLine2: "ĐỎ",
+      eyebrow: "Tác phẩm được chia sẻ nhiều nhất",
+      desc: "Giữa phố cổ Kyoto ngập tràn ánh đèn lồng đỏ, tiệm trà nhỏ chỉ mở cửa vào lúc nửa đêm để lắng nghe tâm sự của những linh hồn chưa thể siêu thoát.",
+      bg: photos.lantern,
+      item: libraryItems[2],
+    },
+    {
+      titleLine1: "KHÚC NHẠC",
+      titleLine2: "ĐÊM MƯA",
+      eyebrow: "Góc chữa lành cuối tuần",
+      desc: "Cơn mưa đầu mùa vô tình giữ chân hai tâm hồn cô đơn dưới mái hiên ga tàu cũ, mở ra một mùa hè ngập tràn giai điệu dương cầm và những lời hẹn ước.",
+      bg: photos.rain,
+      item: catalogItems[libraryItems.length + 1],
+    },
+  ];
+
+  const [heroIndex, setHeroIndex] = useState(0);
+  const currentHero = heroSlides[heroIndex];
+  const isHeroInLibrary = savedItems.some(x => x.title === currentHero.item.title);
+
+  // State cho danh sách "Đang tiếp tục đọc / xem"
+  const [continueList, setContinueList] = useState<ContinueEntry[]>([
+    {
+      item: libraryItems[0],
+      currentUnit: 85,
+      totalUnits: 100,
+      unitLabel: "Chương",
+      chapterTitle: "Màn đêm buông xuống tại Quận 9",
+      synopsis: "Rei xâm nhập vào kho lưu trữ ký ức ngầm dưới tháp Shinjuku và phát hiện ra đoạn băng ghi hình từ 10 năm trước.",
+      lastReadAt: "15 phút trước",
+    },
+    {
+      item: libraryItems[1],
+      currentUnit: 9,
+      totalUnits: 12,
+      unitLabel: "Tập",
+      chapterTitle: "Tiếng mưa bên hiên nhà cũ",
+      synopsis: "Cơn bão bất ngờ khiến chuyến tàu cuối ngày bị hoãn, buộc Aoi và Haruto phải đối diện với bức thư chưa từng gửi.",
+      lastReadAt: "2 giờ trước",
+    },
+    {
+      item: libraryItems[2],
+      currentUnit: 71,
+      totalUnits: 100,
+      unitLabel: "Chương",
+      chapterTitle: "Chiếc đèn lồng thứ bảy",
+      synopsis: "Vị khách thứ bảy bước vào tiệm trà cùng chiếc đồng hồ quả quýt đã ngừng chạy từ một thế kỷ trước.",
+      lastReadAt: "Hôm qua",
+    },
+    {
+      item: libraryItems[3],
+      currentUnit: 11,
+      totalUnits: 12,
+      unitLabel: "Tập",
+      chapterTitle: "Bản ghi âm lúc 0 giờ",
+      synopsis: "Manh mối cuối cùng trong con hẻm nhỏ dẫn thám tử Kenji tới căn phòng nơi mọi bí mật bắt đầu.",
+      lastReadAt: "2 ngày trước",
+    },
+  ]);
+
+  // Modal "Lưu vào thư viện"
+  const [saveModalItem, setSaveModalItem] = useState<ContentItem | null>(null);
+  const [saveStatus, setSaveStatus] = useState("Đang đọc / xem");
+  const [saveCategory, setSaveCategory] = useState("Kệ đêm mưa");
+  const [savePrivacy, setSavePrivacy] = useState("PRIVATE");
+  const [saveFavorite, setSaveFavorite] = useState(true);
+  const [saveNote, setSaveNote] = useState("");
+  const [homeToast, setHomeToast] = useState("");
+
+  // Modal "Đọc tiếp / Xem tiếp"
+  const [activeContinue, setActiveContinue] = useState<ContinueEntry | null>(null);
+
+  const openSaveModal = (item: ContentItem) => {
+    setSaveModalItem(item);
+    setSaveStatus(item.status || "Đang đọc / xem");
+    setSaveCategory(item.type === "Truyện" ? "Đọc cuối tuần" : "Kệ đêm mưa");
+    setSavePrivacy("PRIVATE");
+    setSaveFavorite(favorites.includes(item.title));
+    setSaveNote(`Đã lưu từ Trang chủ (${new Date().toLocaleDateString("vi-VN")}).`);
+  };
+
+  const handleConfirmSaveToLibrary = () => {
+    if (!saveModalItem) return;
+    onSaveToLibrary?.(
+      { ...saveModalItem, status: saveStatus },
+      { status: saveStatus, category: saveCategory, note: saveNote, favorite: saveFavorite }
+    );
+    setHomeToast(`Đã lưu “${saveModalItem.title}” (${saveStatus} · #${saveCategory}) vào Thư viện của tôi!`);
+    setSaveModalItem(null);
+  };
+
+  const updateContinueProgress = (title: string, nextUnit: number) => {
+    setContinueList(prev =>
+      prev.map(entry => {
+        if (entry.item.title !== title) return entry;
+        const clamped = Math.max(1, Math.min(entry.totalUnits, nextUnit));
+        const updated = {
+          ...entry,
+          currentUnit: clamped,
+          lastReadAt: "Vừa đọc / xem",
+        };
+        if (activeContinue?.item.title === title) {
+          setActiveContinue(updated);
+        }
+        return updated;
+      })
+    );
+  };
+
   return <main>
     <section className="hero">
-      <img className="hero-bg" src={photos.hero} alt="" />
+      <img className="hero-bg" src={currentHero.bg} alt="" />
       <div className="hero-fade" />
       <div className="hero-copy">
-        <div className="eyebrow"><i /> Đề xuất cho bạn</div>
-        <h1>NIGHTFALL<br /><em>CITY</em></h1>
-        <div className="hero-meta"><span>Cyberpunk</span><span>Bí ẩn</span><span>Hành động</span><Rating value="4.9" /></div>
-        <p>Trong một Tokyo nơi ký ức được mua bán như tiền tệ, một thám tử trẻ phải lần theo dấu vết của quá khứ đã bị đánh cắp trước khi thành phố chìm vào bóng tối.</p>
-        <div className="hero-buttons"><Button icon="play" onClick={() => setPage("detail")}>Xem chi tiết</Button><Button variant="secondary" icon="plus">Lưu vào thư viện</Button></div>
-        <div className="slider-dots"><i className="active" /><i /><i /><i /><span>01 / 04</span></div>
+        <div className="eyebrow"><i /> {currentHero.eyebrow}</div>
+        <h1>{currentHero.titleLine1}<br /><em>{currentHero.titleLine2}</em></h1>
+        <div className="hero-meta">
+          {currentHero.item.genres.slice(0, 3).map(g => <span key={g}>{g}</span>)}
+          <Rating value={currentHero.item.score} />
+        </div>
+        <p>{currentHero.desc}</p>
+        <div className="hero-buttons">
+          <Button
+            icon="play"
+            onClick={() => {
+              onSelectContent?.(currentHero.item);
+              setPage("detail");
+            }}
+          >
+            Xem chi tiết
+          </Button>
+          <Button
+            variant={isHeroInLibrary ? "primary" : "secondary"}
+            icon={isHeroInLibrary ? "check" : "plus"}
+            onClick={() => openSaveModal(currentHero.item)}
+          >
+            {isHeroInLibrary ? "Đã lưu trong thư viện · Tuỳ chỉnh" : "Lưu vào thư viện"}
+          </Button>
+        </div>
+        <div className="slider-dots">
+          {heroSlides.map((slide, idx) => (
+            <i
+              key={slide.item.title}
+              className={idx === heroIndex ? "active" : ""}
+              style={{ cursor: "pointer" }}
+              title={slide.item.title}
+              onClick={() => setHeroIndex(idx)}
+            />
+          ))}
+          <span>{`0${heroIndex + 1} / 0${heroSlides.length}`}</span>
+        </div>
       </div>
-      <div className="hero-poster"><img src={photos.red} alt="Nightfall City" /><div className="poster-glow" /></div>
+      <div className="hero-poster" onClick={() => { onSelectContent?.(currentHero.item); setPage("detail"); }} style={{ cursor: "pointer" }}>
+        <img src={currentHero.item.img} alt={currentHero.item.title} />
+        <div className="poster-glow" />
+      </div>
       <div className="scroll-hint">CUỘN ĐỂ KHÁM PHÁ <span /></div>
     </section>
 
     <div className="page-shell">
+      {homeToast && (
+        <div className="success-banner" style={{ marginBottom: "18px" }}>
+          <Icon name="check" />
+          <div style={{ flex: 1 }}>{homeToast}</div>
+          <Button variant="secondary" onClick={() => setPage("library")}>Mở Thư viện của tôi →</Button>
+          <button onClick={() => setHomeToast("")}>×</button>
+        </div>
+      )}
+
       <section>
-        <SectionTitle eyebrow="TIẾP NỐI HÀNH TRÌNH" title="Đang tiếp tục đọc / xem" action="Xem tất cả" />
+        <SectionTitle
+          eyebrow="TIẾP NỐI HÀNH TRÌNH"
+          title="Đang tiếp tục đọc / xem"
+          action="Xem tất cả"
+          onAction={() => setPage("library")}
+        />
         <div className="continue-grid">
-          {libraryItems.slice(0, 4).map((item, i) => <article className="continue-card" key={item.title}>
-            <img src={item.img} alt={item.title} />
-            <div className="continue-info"><div className="type">{i % 2 ? "PHIM" : "MANGA"}</div><h3>{item.title}</h3><p>{i % 2 ? `Tập ${8 + i}/12` : `Chương ${85 - i * 7}/100`}</p><div className="progress"><i style={{ width: `${82 - i * 12}%` }} /></div><button>Đọc tiếp <Icon name="arrow" size={14} /></button></div>
-          </article>)}
+          {continueList.map(entry => {
+            const pct = Math.round((entry.currentUnit / entry.totalUnits) * 100);
+            const isMovie = entry.item.type === "Phim";
+            return (
+              <article className="continue-card" key={entry.item.title}>
+                <img
+                  src={entry.item.img}
+                  alt={entry.item.title}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    onSelectContent?.(entry.item);
+                    setPage("detail");
+                  }}
+                />
+                <div className="continue-info">
+                  <div className="type">{isMovie ? "PHIM" : "MANGA"} · <span style={{ color: "#a69bb5", fontWeight: 500 }}>{entry.lastReadAt}</span></div>
+                  <h3
+                    style={{ cursor: "pointer" }}
+                    onClick={() => {
+                      onSelectContent?.(entry.item);
+                      setPage("detail");
+                    }}
+                  >
+                    {entry.item.title}
+                  </h3>
+                  <p>{entry.unitLabel} {entry.currentUnit}/{entry.totalUnits} ({pct}%)</p>
+                  <div className="progress"><i style={{ width: `${pct}%` }} /></div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                    <button type="button" onClick={() => setActiveContinue(entry)}>
+                      {isMovie ? "Xem tiếp" : "Đọc tiếp"} <Icon name="arrow" size={14} />
+                    </button>
+                    {entry.currentUnit < entry.totalUnits && (
+                      <button
+                        type="button"
+                        className="continue-plus-btn"
+                        title={`Tăng nhanh +1 ${entry.unitLabel}`}
+                        onClick={() => {
+                          updateContinueProgress(entry.item.title, entry.currentUnit + 1);
+                          setHomeToast(`Đã cập nhật tiến độ “${entry.item.title}” lên ${entry.unitLabel} ${entry.currentUnit + 1}/${entry.totalUnits}!`);
+                        }}
+                      >
+                        +1 {entry.unitLabel}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
 
       <section className="explore">
         <SectionTitle eyebrow="BỘ SƯU TẬP NỔI BẬT" title="Dành riêng cho bạn" />
-        <FilterCollection favorites={favorites} toggleFavorite={toggleFavorite} setPage={setPage} compact />
+        <FilterCollection
+          favorites={favorites}
+          toggleFavorite={toggleFavorite}
+          setPage={setPage}
+          compact
+          savedItems={savedItems}
+          onSelectContent={onSelectContent}
+          onToggleLibraryItem={item => {
+            const exists = savedItems.some(x => x.title === item.title);
+            if (exists) {
+              onRemoveFromLibrary?.(item.title);
+              setHomeToast(`Đã gỡ “${item.title}” khỏi Thư viện của tôi.`);
+            } else {
+              openSaveModal(item);
+            }
+          }}
+        />
       </section>
     </div>
+
+    {/* Modal Lưu vào Thư viện từ Trang Chủ */}
+    {saveModalItem && (
+      <div className="modal-backdrop" onMouseDown={() => setSaveModalItem(null)}>
+        <div className="share-modal admin-modal" onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>THƯ VIỆN CÁ NHÂN</span>
+              <h2>Lưu vào Thư viện của tôi</h2>
+              <p>Tùy chỉnh trạng thái và danh mục cho “<b>{saveModalItem.title}</b>”</p>
+            </div>
+            <button className="icon-btn" onClick={() => setSaveModalItem(null)}><Icon name="x" /></button>
+          </div>
+
+          <div className="home-modal-preview">
+            <img src={saveModalItem.img} alt={saveModalItem.title} />
+            <div>
+              <span className="badge-pill active">{saveModalItem.type === "Truyện" ? "MANGA" : "MOVIE"}</span>
+              <h3>{saveModalItem.title}</h3>
+              <p>{saveModalItem.sub} · {saveModalItem.genres.join(", ")}</p>
+              <Rating value={saveModalItem.score} />
+            </div>
+          </div>
+
+          <div className="admin-form-grid">
+            <label className="admin-field">
+              <span>Trạng thái đọc / xem</span>
+              <select value={saveStatus} onChange={e => setSaveStatus(e.target.value)}>
+                <option value="Đang đọc / xem">📖 Đang đọc / xem</option>
+                <option value="Muốn đọc / xem">🔖 Muốn đọc / xem</option>
+                <option value="Hoàn thành">✓ Đã hoàn thành</option>
+              </select>
+            </label>
+            <label className="admin-field">
+              <span>Xếp vào Danh mục cá nhân</span>
+              <select value={saveCategory} onChange={e => setSaveCategory(e.target.value)}>
+                <option value="Kệ đêm mưa">☾ Kệ đêm mưa</option>
+                <option value="Cyberpunk">◇ Cyberpunk</option>
+                <option value="Đọc cuối tuần">◫ Đọc cuối tuần</option>
+                <option value="Phim chữa lành">✦ Phim chữa lành</option>
+                <option value="Trinh thám">⌕ Trinh thám</option>
+                <option value="Xem cùng bạn">♙ Xem cùng bạn</option>
+              </select>
+            </label>
+            <label className="admin-field">
+              <span>Quyền hiển thị trong thư viện</span>
+              <select value={savePrivacy} onChange={e => setSavePrivacy(e.target.value)}>
+                <option value="PRIVATE">▣ Riêng tư (Chỉ mình tôi)</option>
+                <option value="SHARED">◎ Chia sẻ cộng đồng (Công khai)</option>
+                <option value="PEOPLE">♙ Chia sẻ riêng cho bạn bè</option>
+              </select>
+            </label>
+            <label className="admin-field" style={{ justifyContent: "flex-end" }}>
+              <span>Đánh dấu Yêu thích</span>
+              <button
+                type="button"
+                className={`fav-toggle-row ${saveFavorite ? "active" : ""}`}
+                onClick={() => setSaveFavorite(!saveFavorite)}
+              >
+                <Icon name="heart" size={15} />
+                {saveFavorite ? "Đã thêm vào Yêu thích ♥" : "Thêm vào Yêu thích"}
+              </button>
+            </label>
+          </div>
+
+          <label className="admin-field" style={{ marginTop: "8px" }}>
+            <span>Ghi chú cá nhân</span>
+            <textarea
+              value={saveNote}
+              onChange={e => setSaveNote(e.target.value)}
+              placeholder="Ghi lại lý do bạn lưu tác phẩm này hoặc chương/tập muốn bắt đầu..."
+            />
+          </label>
+
+          <div className="modal-actions">
+            {savedItems.some(x => x.title === saveModalItem.title) ? (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  onRemoveFromLibrary?.(saveModalItem.title);
+                  setHomeToast(`Đã xóa “${saveModalItem.title}” khỏi Thư viện của tôi.`);
+                  setSaveModalItem(null);
+                }}
+              >
+                Xóa khỏi thư viện
+              </Button>
+            ) : <div />}
+            <div>
+              <Button variant="ghost" onClick={() => setSaveModalItem(null)}>Hủy</Button>
+              <Button icon="check" onClick={handleConfirmSaveToLibrary}>
+                {savedItems.some(x => x.title === saveModalItem.title) ? "Cập nhật trong thư viện" : "Lưu vào thư viện"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal Đọc tiếp / Xem tiếp từ Trang Chủ */}
+    {activeContinue && (
+      <div className="modal-backdrop" onMouseDown={() => setActiveContinue(null)}>
+        <div className="share-modal admin-modal continue-reader-modal" onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>TIẾP NỐI HÀNH TRÌNH · {activeContinue.item.type === "Phim" ? "TRÌNH XEM PHIM" : "TRÌNH ĐỌC TRUYỆN"}</span>
+              <h2>{activeContinue.item.title}</h2>
+              <p>{activeContinue.unitLabel} {activeContinue.currentUnit}/{activeContinue.totalUnits}: <b>{activeContinue.chapterTitle}</b></p>
+            </div>
+            <button className="icon-btn" onClick={() => setActiveContinue(null)}><Icon name="x" /></button>
+          </div>
+
+          <div className="reader-preview-box">
+            <img src={activeContinue.item.img} alt={activeContinue.item.title} />
+            <div className="reader-preview-copy">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <span className="badge-pill active">{activeContinue.unitLabel} {activeContinue.currentUnit} / {activeContinue.totalUnits}</span>
+                <span style={{ fontSize: "10px", color: "#a79db8" }}>Tiến độ: {Math.round((activeContinue.currentUnit / activeContinue.totalUnits) * 100)}%</span>
+                <span style={{ fontSize: "10px", color: "#34d399" }}>● Đã đồng bộ vị trí đọc/xem</span>
+              </div>
+              <h4>{activeContinue.chapterTitle}</h4>
+              <p>{activeContinue.synopsis}</p>
+              <div className="reader-progress-controls">
+                <button
+                  type="button"
+                  className="btn secondary"
+                  disabled={activeContinue.currentUnit <= 1}
+                  onClick={() => updateContinueProgress(activeContinue.item.title, activeContinue.currentUnit - 1)}
+                >
+                  ← {activeContinue.unitLabel} trước
+                </button>
+                <input
+                  type="range"
+                  min={1}
+                  max={activeContinue.totalUnits}
+                  value={activeContinue.currentUnit}
+                  onChange={e => updateContinueProgress(activeContinue.item.title, Number(e.target.value))}
+                />
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={activeContinue.currentUnit >= activeContinue.totalUnits}
+                  onClick={() => updateContinueProgress(activeContinue.item.title, activeContinue.currentUnit + 1)}
+                >
+                  {activeContinue.unitLabel} tiếp (+1) →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-actions" style={{ marginTop: "14px", flexWrap: "wrap", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Button
+                variant="secondary"
+                icon="check"
+                onClick={() => {
+                  updateContinueProgress(activeContinue.item.title, activeContinue.totalUnits);
+                  setHomeToast(`Chúc mừng! Bạn đã hoàn thành 100% “${activeContinue.item.title}”.`);
+                }}
+              >
+                Đánh dấu Hoàn thành (100%)
+              </Button>
+              <Button
+                variant="ghost"
+                icon="arrow"
+                onClick={() =>
+                  window.open(
+                    activeContinue.item.type === "Phim" ? "https://www.netflix.com" : "https://mangadex.org",
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
+              >
+                {activeContinue.item.type === "Phim" ? "Mở trên Netflix" : "Đọc trên MangaDex"}
+              </Button>
+            </div>
+            <div>
+              <Button variant="ghost" onClick={() => setActiveContinue(null)}>Đóng</Button>
+              <Button
+                icon="play"
+                onClick={() => {
+                  const target = activeContinue.item;
+                  setActiveContinue(null);
+                  onSelectContent?.(target);
+                  setPage("detail");
+                }}
+              >
+                Xem chi tiết & Bình luận
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
   </main>;
 }
 
-function ListingPage({ mode, setPage, favorites, toggleFavorite }: { mode: "Truyện" | "Phim"; setPage: (page: string) => void; favorites: string[]; toggleFavorite: (title: string) => void }) {
+function ListingPage({
+  mode,
+  setPage,
+  favorites,
+  toggleFavorite,
+  savedItems = libraryItems,
+  onSelectContent,
+  onToggleLibraryItem,
+}: {
+  mode: "Truyện" | "Phim";
+  setPage: (page: string) => void;
+  favorites: string[];
+  toggleFavorite: (title: string) => void;
+  savedItems?: ContentItem[];
+  onSelectContent?: (item: ContentItem) => void;
+  onToggleLibraryItem?: (item: ContentItem) => void;
+}) {
   const [search, setSearch] = useState("");
   return <main className="inner-page listing-page"><div className="page-shell">
     <div className="listing-head"><div><span>KHÁM PHÁ KHÔNG GIỚI HẠN</span><h1>Truyện & Phim</h1><p>Tìm câu chuyện tiếp theo dành cho bạn từ bộ sưu tập manga và điện ảnh được tuyển chọn.</p></div><label><Icon name="search" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm theo tên tác phẩm..." /></label></div>
     {search && <div className="search-note">Kết quả tìm kiếm cho “<b>{search}</b>” <button onClick={() => setSearch("")}>Xóa</button></div>}
-    <FilterCollection initialType={mode} favorites={favorites} toggleFavorite={toggleFavorite} setPage={setPage} search={search} />
+    <FilterCollection
+      initialType={mode}
+      favorites={favorites}
+      toggleFavorite={toggleFavorite}
+      setPage={setPage}
+      search={search}
+      savedItems={savedItems}
+      onSelectContent={onSelectContent}
+      onToggleLibraryItem={onToggleLibraryItem}
+    />
   </div></main>;
 }
 
@@ -1070,11 +1636,19 @@ function LibraryPage({
 
 function DetailPage({
   publishedTitle = "",
+  savedItems = libraryItems,
+  favorites = [],
+  onToggleLibrary,
+  onToggleFavorite,
   onOpenShareToChat,
   onOpenReport,
   onOpenPublicProfile,
 }: {
   publishedTitle?: string;
+  savedItems?: ContentItem[];
+  favorites?: string[];
+  onToggleLibrary?: (item: ContentItem) => void;
+  onToggleFavorite?: (title: string) => void;
   onOpenShareToChat?: (item: ContentItem) => void;
   onOpenReport?: (targetType: "CONTENT" | "COMMENT", targetName: string) => void;
   onOpenPublicProfile?: (username: string) => void;
@@ -1083,8 +1657,6 @@ function DetailPage({
   const [reviewTab, setReviewTab] = useState("Bình luận chung");
   const [readChapters, setReadChapters] = useState<number[]>([0, 1]);
   const [spoilerRevealed, setSpoilerRevealed] = useState(false);
-  const [inLibrary, setInLibrary] = useState(false);
-  const [liked, setLiked] = useState(true);
   const [detailToast, setDetailToast] = useState("");
   const [userRating, setUserRating] = useState(5);
   const [commentText, setCommentText] = useState("");
@@ -1102,7 +1674,8 @@ function DetailPage({
     },
   ]);
 
-  const currentItem: ContentItem = {
+  const matchedItem = [...savedItems, ...catalogItems].find(x => x.title === (publishedTitle || "Nightfall City"));
+  const currentItem: ContentItem = matchedItem ?? {
     title: publishedTitle || "Nightfall City",
     sub: "Sora Kuroda · 2022",
     img: photos.red,
@@ -1111,6 +1684,9 @@ function DetailPage({
     type: "Truyện",
     genres: ["Cyberpunk", "Mystery", "Action", "Psychological"],
   };
+
+  const inLibrary = savedItems.some(x => x.title === currentItem.title);
+  const liked = favorites.includes(currentItem.title);
 
   const toggleChapterRead = (idx: number) => setReadChapters(prev => prev.includes(idx) ? prev.filter(x => x !== idx) : [...prev, idx]);
 
@@ -1135,20 +1711,33 @@ function DetailPage({
   };
 
   return <main className="detail-page">
-    {publishedTitle && <div className="published-banner"><Icon name="check" /><span><b>Đăng tải thành công</b> “{publishedTitle}” đã xuất hiện trong thư viện của bạn.</span></div>}
+    {publishedTitle && <div className="published-banner"><Icon name="check" /><span>Đang xem chi tiết tác phẩm “<b>{currentItem.title}</b>”.</span></div>}
     {detailToast && <div className="published-banner" style={{ cursor: "pointer" }} onClick={() => setDetailToast("")}><Icon name="check" /><span>{detailToast}</span></div>}
-    <section className="detail-hero"><img className="detail-backdrop" src={photos.hero} alt="" /><div className="detail-overlay" /><div className="detail-content">
-      <div className="detail-poster"><img src={photos.red} alt="Nightfall City" /><div className="match">98% PHÙ HỢP</div></div>
-      <div className="detail-copy"><div className="detail-badges"><span>MANGA</span><span className="ongoing">ĐANG RA</span></div><h1>{publishedTitle || "Nightfall City"}</h1><p className="jp">{publishedTitle ? "NỘI DUNG DO BẠN ĐĂNG" : "ナイトフォール・シティ"}</p>
-        <div className="creator"><span>TÁC GIẢ <b>Sora Kuroda</b></span><i /><span>PHÁT HÀNH <b>2022 — Nay</b></span><i /><Rating value="4.8" /></div>
-        <div className="genre-row"><span>Cyberpunk</span><span>Bí ẩn</span><span>Hành động</span><span>Tâm lý</span></div>
-        <p className="description">Trong một Tokyo tương lai, nơi ký ức được mã hóa và mua bán, thám tử Rei Nakamura tỉnh dậy mà không còn quá khứ. Cùng một hacker bí ẩn, cô bước vào hành trình bóc tách sự thật về thành phố — và chính mình.</p>
+    <section className="detail-hero"><img className="detail-backdrop" src={currentItem.img || photos.hero} alt="" /><div className="detail-overlay" /><div className="detail-content">
+      <div className="detail-poster"><img src={currentItem.img} alt={currentItem.title} /><div className="match">98% PHÙ HỢP</div></div>
+      <div className="detail-copy"><div className="detail-badges"><span>{currentItem.type === "Phim" ? "MOVIE" : "MANGA"}</span><span className="ongoing">{currentItem.status.toUpperCase()}</span></div><h1>{currentItem.title}</h1><p className="jp">{currentItem.sub}</p>
+        <div className="creator"><span>THÔNG TIN <b>{currentItem.sub}</b></span><i /><span>PHÁT HÀNH <b>2022 — Nay</b></span><i /><Rating value={currentItem.score} /></div>
+        <div className="genre-row">{currentItem.genres.map(g => <span key={g}>{g}</span>)}</div>
+        <p className="description">Trong một thế giới nơi ký ức và cảm xúc đan xen giữa thực tại và chiều không gian số, nhân vật chính bước vào hành trình bóc tách sự thật ẩn giấu phía sau {currentItem.title}.</p>
         <div className="external"><button onClick={() => window.open("https://www.netflix.com", "_blank", "noopener,noreferrer")}>Netflix <Icon name="arrow" size={15} /></button><button onClick={() => window.open("https://mangadex.org", "_blank", "noopener,noreferrer")}>MangaDex <Icon name="arrow" size={15} /></button></div>
         <div className="detail-actions">
-          <Button icon={inLibrary ? "check" : "plus"} onClick={() => { setInLibrary(!inLibrary); setDetailToast(inLibrary ? "Đã xóa khỏi thư viện cá nhân." : "Đã lưu vào thư viện cá nhân của bạn!"); }}>
+          <Button
+            icon={inLibrary ? "check" : "plus"}
+            onClick={() => {
+              onToggleLibrary?.(currentItem);
+              setDetailToast(inLibrary ? `Đã xóa “${currentItem.title}” khỏi thư viện cá nhân.` : `Đã lưu “${currentItem.title}” vào thư viện cá nhân của bạn!`);
+            }}
+          >
             {inLibrary ? "Đã có trong thư viện" : "Thêm vào thư viện"}
           </Button>
-          <Button variant="secondary" icon="heart" onClick={() => { setLiked(!liked); setDetailToast(liked ? "Đã bỏ yêu thích." : "Đã thêm vào danh sách Yêu thích ❤️"); }}>
+          <Button
+            variant="secondary"
+            icon="heart"
+            onClick={() => {
+              onToggleFavorite?.(currentItem.title);
+              setDetailToast(liked ? "Đã bỏ yêu thích." : "Đã thêm vào danh sách Yêu thích ❤️");
+            }}
+          >
             {liked ? "Đã yêu thích" : "Yêu thích"}
           </Button>
           <Button variant="ghost" icon="share" onClick={() => onOpenShareToChat?.(currentItem)}>Chia sẻ qua Chat</Button>
@@ -3010,9 +3599,72 @@ export default function App() {
         <div className="success-banner"><Icon name="check" /> {globalToast}<button onClick={() => setGlobalToast("")}>×</button></div>
       </div>
     )}
-    {page === "home" && <HomePage setPage={navigate} favorites={favorites} toggleFavorite={toggleFavorite} />}
-    {page === "manga" && <ListingPage mode="Truyện" setPage={navigate} favorites={favorites} toggleFavorite={toggleFavorite} />}
-    {page === "movies" && <ListingPage mode="Phim" setPage={navigate} favorites={favorites} toggleFavorite={toggleFavorite} />}
+    {page === "home" && (
+      <HomePage
+        setPage={navigate}
+        favorites={favorites}
+        toggleFavorite={toggleFavorite}
+        savedItems={allContents}
+        onSelectContent={item => setPublishedTitle(item.title)}
+        onSaveToLibrary={(item, options) => {
+          setAllContents(prev => {
+            const exists = prev.some(x => x.title === item.title);
+            if (exists) {
+              return prev.map(x => (x.title === item.title ? { ...x, status: item.status } : x));
+            }
+            return [item, ...prev];
+          });
+          if (options?.favorite && !favorites.includes(item.title)) {
+            setFavorites(prev => [...prev, item.title]);
+          } else if (options && !options.favorite && favorites.includes(item.title)) {
+            setFavorites(prev => prev.filter(x => x !== item.title));
+          }
+        }}
+        onRemoveFromLibrary={title => setAllContents(prev => prev.filter(x => x.title !== title))}
+      />
+    )}
+    {page === "manga" && (
+      <ListingPage
+        mode="Truyện"
+        setPage={navigate}
+        favorites={favorites}
+        toggleFavorite={toggleFavorite}
+        savedItems={allContents}
+        onSelectContent={item => setPublishedTitle(item.title)}
+        onToggleLibraryItem={item => {
+          setAllContents(prev => {
+            const exists = prev.some(x => x.title === item.title);
+            if (exists) {
+              showGlobalToast(`Đã gỡ “${item.title}” khỏi Thư viện của tôi.`);
+              return prev.filter(x => x.title !== item.title);
+            }
+            showGlobalToast(`Đã lưu “${item.title}” vào Thư viện của tôi!`);
+            return [item, ...prev];
+          });
+        }}
+      />
+    )}
+    {page === "movies" && (
+      <ListingPage
+        mode="Phim"
+        setPage={navigate}
+        favorites={favorites}
+        toggleFavorite={toggleFavorite}
+        savedItems={allContents}
+        onSelectContent={item => setPublishedTitle(item.title)}
+        onToggleLibraryItem={item => {
+          setAllContents(prev => {
+            const exists = prev.some(x => x.title === item.title);
+            if (exists) {
+              showGlobalToast(`Đã gỡ “${item.title}” khỏi Thư viện của tôi.`);
+              return prev.filter(x => x.title !== item.title);
+            }
+            showGlobalToast(`Đã lưu “${item.title}” vào Thư viện của tôi!`);
+            return [item, ...prev];
+          });
+        }}
+      />
+    )}
     {page === "library" && (
       <LibraryPage
         setPage={navigate}
@@ -3028,6 +3680,16 @@ export default function App() {
     {page === "detail" && (
       <DetailPage
         publishedTitle={publishedTitle}
+        savedItems={allContents}
+        favorites={favorites}
+        onToggleLibrary={item => {
+          setAllContents(prev =>
+            prev.some(x => x.title === item.title)
+              ? prev.filter(x => x.title !== item.title)
+              : [item, ...prev]
+          );
+        }}
+        onToggleFavorite={toggleFavorite}
         onOpenShareToChat={item => setShareModalItem(item)}
         onOpenReport={(type, name) => setReportTarget({ type, name })}
         onOpenPublicProfile={openPublicProfile}
