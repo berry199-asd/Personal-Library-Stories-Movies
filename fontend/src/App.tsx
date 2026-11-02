@@ -2577,37 +2577,66 @@ function DetailPage({
           </div>
         )}
 
-        {/* Hiển thị đúng danh sách Đường dẫn đọc / xem (Links) mà người dùng đã nhập ở mục 03 */}
-        <div className="external" style={{ flexWrap: "wrap" }}>
-          {externalLinksToShow.length > 0 ? (
-            externalLinksToShow.map((link, idx) => (
+        {/* Hiển thị nổi bật các nút Link Web đọc / xem ngay dưới phần mô tả */}
+        <div
+          style={{
+            marginTop: "14px",
+            padding: "12px 14px",
+            borderRadius: "10px",
+            background: "rgba(139, 92, 246, 0.08)",
+            border: "1px solid rgba(139, 92, 246, 0.28)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", gap: "8px", flexWrap: "wrap" }}>
+            <strong style={{ fontSize: "10px", color: "#c4b5fd", letterSpacing: "0.8px", textTransform: "uppercase" }}>
+              🌐 Danh sách Link Web đọc / xem ({externalLinksToShow.length})
+            </strong>
+            {canEditWork && (
               <button
-                key={`${link.platform}-${idx}`}
-                title={link.note ? `${link.note} (${link.url})` : link.url}
-                onClick={() => {
-                  const targetUrl = link.url.trim();
-                  if (targetUrl) {
-                    window.open(targetUrl.startsWith("http") ? targetUrl : `https://${targetUrl}`, "_blank", "noopener,noreferrer");
-                  }
-                }}
+                type="button"
+                onClick={() => setEditingWorkModal(true)}
+                style={{ border: 0, background: "none", color: "#a78bfa", fontSize: "10px", cursor: "pointer", fontWeight: 600 }}
               >
-                {link.platform.trim() || link.url.trim()}{" "}
-                {link.note ? <small style={{ opacity: 0.78, marginLeft: "4px" }}>({link.note})</small> : null}{" "}
-                <Icon name="arrow" size={15} />
+                + Thêm / Sửa link web
               </button>
-            ))
+            )}
+          </div>
+          {externalLinksToShow.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {externalLinksToShow.map((link, idx) => (
+                <button
+                  key={`${link.platform}-${idx}`}
+                  type="button"
+                  title={link.note ? `${link.platform || "Link Web"}: ${link.note} (${link.url})` : link.url}
+                  onClick={() => {
+                    const targetUrl = link.url.trim();
+                    if (targetUrl) {
+                      window.open(targetUrl.startsWith("http") ? targetUrl : `https://${targetUrl}`, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "7px",
+                    padding: "7px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(167, 139, 250, 0.4)",
+                    background: "#1c142b",
+                    color: "#f3e8ff",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  <span>🌐 {link.platform.trim() || `Link Web #${idx + 1}`}</span>
+                  <Icon name="arrow" size={14} />
+                </button>
+              ))}
+            </div>
           ) : (
-            <span style={{ fontSize: "11px", color: "#8c8299" }}>Chưa đính kèm đường dẫn đọc / xem bên ngoài.</span>
-          )}
-          {currentItem.type === "Phim" && currentItem.singleMovieUrl && (
-            <button
-              onClick={() => {
-                const targetUrl = currentItem.singleMovieUrl!.trim();
-                window.open(targetUrl.startsWith("http") ? targetUrl : `https://${targetUrl}`, "_blank", "noopener,noreferrer");
-              }}
-            >
-              Xem phim lẻ <Icon name="arrow" size={15} />
-            </button>
+            <span style={{ fontSize: "11px", color: "#8c8299" }}>
+              Chưa đính kèm link web đọc / xem. {canEditWork ? "Nhấn “+ Thêm / Sửa link web” để bổ sung." : ""}
+            </span>
           )}
         </div>
 
@@ -2643,6 +2672,93 @@ function DetailPage({
     </div></section>
     <div className="page-shell detail-lower">
       <section className="chapters-panel">
+        {/* BẢNG DANH SÁCH CÁC LINK WEB ĐỌC / XEM (ĐƯỜNG DẪN TRANG WEB Ở MỤC 03, TÁCH BIỆT VỚI LINK TỪNG CHAP) */}
+        <div style={{ marginBottom: "28px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+            <SectionTitle
+              eyebrow="ĐƯỜNG DẪN ĐỌC / XEM (LINK WEB)"
+              title={`Danh sách Link Web đã thêm (${externalLinksToShow.length})`}
+            />
+            {canEditWork && (
+              <Button variant="secondary" icon="edit" onClick={() => setEditingWorkModal(true)}>
+                + Thêm / Sửa Link Web
+              </Button>
+            )}
+          </div>
+          <div className="chapter-list" style={{ border: "1px solid #2b2238", borderRadius: "12px", background: "#130e1c", padding: "4px 14px" }}>
+            {externalLinksToShow.length === 0 ? (
+              <div className="empty-results" style={{ height: "110px" }}>
+                <b>Chưa có đường dẫn trang web nào được thêm</b>
+                <p>Nhấn nút “+ Thêm / Sửa Link Web” để bổ sung trang web đọc truyện / xem phim (VD: Roads Team, Sony Team...).</p>
+              </div>
+            ) : (
+              externalLinksToShow.map((link, idx) => (
+                <div className="chapter" key={`weblink-${idx}`} style={{ height: "auto", minHeight: "64px", padding: "10px 0" }}>
+                  <div className="chap-num" style={{ width: "48px" }}>
+                    WEB<b>{idx + 1}</b>
+                  </div>
+                  <div className="chap-title" style={{ minWidth: 0 }}>
+                    <b style={{ fontSize: "12px", color: "#f3e8ff" }}>
+                      🌐 {link.platform.trim() || `Trang web đọc / xem #${idx + 1}`}
+                    </b>
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: "11px",
+                        color: "#a78bfa",
+                        marginTop: "3px",
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {link.url.trim() || "Chưa nhập URL"}
+                    </span>
+                    {link.note && (
+                      <span style={{ display: "block", fontSize: "10px", color: "#9e93ad", marginTop: "2px" }}>
+                        Ghi chú: {link.note}
+                      </span>
+                    )}
+                  </div>
+                  {canEditWork && (
+                    <button
+                      className="icon-btn"
+                      style={{ width: "30px", height: "30px" }}
+                      title="Chỉnh sửa đường dẫn web này"
+                      onClick={() => setEditingWorkModal(true)}
+                    >
+                      <Icon name="edit" size={13} />
+                    </button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (navigator.clipboard && link.url.trim()) {
+                        navigator.clipboard.writeText(link.url.trim());
+                        setDetailToast(`Đã sao chép link web “${link.platform.trim() || link.url.trim()}” vào bộ nhớ tạm!`);
+                      }
+                    }}
+                  >
+                    Copy link
+                  </Button>
+                  <Button
+                    icon="arrow"
+                    onClick={() => {
+                      const targetUrl = link.url.trim();
+                      if (targetUrl) {
+                        window.open(targetUrl.startsWith("http") ? targetUrl : `https://${targetUrl}`, "_blank", "noopener,noreferrer");
+                        setDetailToast(`Đang mở trang web “${link.platform.trim() || targetUrl}” trong tab mới...`);
+                      } else {
+                        setDetailToast("Đường dẫn web này chưa có URL hợp lệ.");
+                      }
+                    }}
+                  >
+                    Mở web đọc
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
           <SectionTitle eyebrow="DANH SÁCH NỘI DUNG" title={`Mùa & ${currentItem.type === "Truyện" ? "Chương" : "Tập"} (${chapters.length})`} />
           {canEditWork && (
