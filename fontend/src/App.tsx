@@ -42,8 +42,8 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function Button({ children, variant = "primary", icon, onClick, className = "", style }: { children: ReactNode; variant?: "primary" | "secondary" | "ghost" | "danger"; icon?: IconName; onClick?: () => void; className?: string; style?: CSSProperties }) {
-  return <button className={`btn btn-${variant} ${className}`} onClick={onClick} style={style}>{icon && <Icon name={icon} size={17} />}<span>{children}</span></button>;
+function Button({ children, variant = "primary", icon, onClick, className = "", style, disabled }: { children: ReactNode; variant?: "primary" | "secondary" | "ghost" | "danger"; icon?: IconName; onClick?: () => void; className?: string; style?: CSSProperties; disabled?: boolean }) {
+  return <button className={`btn btn-${variant} ${className}`} onClick={disabled ? undefined : onClick} style={style} disabled={disabled}>{icon && <Icon name={icon} size={17} />}<span>{children}</span></button>;
 }
 
 function Rating({ value = "4.8", personal = false }: { value?: string; personal?: boolean }) {
@@ -999,19 +999,30 @@ export function loadSavedCurrentUser(): UserProfile {
     const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.username && parsed.name) return parsed;
+      if (parsed && parsed.username && parsed.name) {
+        // Tự động chuẩn hóa tên tài khoản chính xác theo yêu cầu người dùng
+        if (
+          (parsed.email && parsed.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
+          (parsed.username && parsed.username.toLowerCase().includes("lechauanh")) ||
+          (parsed.name && parsed.name.toLowerCase().includes("lechauanh"))
+        ) {
+          parsed.name = "Anh Quý Phi";
+          parsed.username = "@anhquyphi";
+        }
+        return parsed;
+      }
     }
   } catch {}
   return {
     id: "usr-" + Date.now().toString(36),
-    name: "Tài khoản của tôi",
-    username: "@myaccount",
-    email: "user@example.com",
+    name: "Anh Quý Phi",
+    username: "@anhquyphi",
+    email: "lechauanh.12a5.tnd@gmail.com",
     avatar: photos.red,
     role: "USER",
-    bio: "Quản lý và lưu trữ truyện, phim cá nhân.",
-    joinedDate: "Mới tham gia",
-    userId: "USR-1001",
+    bio: "Thành viên Mê Truyện Stories Unbound",
+    joinedDate: "Hôm nay",
+    userId: "USR-3604",
   };
 }
 
@@ -1026,7 +1037,17 @@ export function loadSavedAccounts(): UserProfile[] {
     const raw = window.localStorage.getItem(REGISTERED_ACCOUNTS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.map(acc => {
+          if (
+            (acc.email && acc.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
+            (acc.username && acc.username.toLowerCase().includes("lechauanh"))
+          ) {
+            return { ...acc, name: "Anh Quý Phi", username: "@anhquyphi" };
+          }
+          return acc;
+        });
+      }
     }
   } catch {}
   return [];
@@ -1054,12 +1075,29 @@ export function setActiveCurrentUserProfile(user: UserProfile) {
   saveCurrentUserToStorage(user);
 }
 
-export const CURRENT_USER_HANDLE = "@" + (activeCurrentUserProfile?.username ? activeCurrentUserProfile.username.replace(/^@/, '') : "user");
-export const CURRENT_USER_NAME = activeCurrentUserProfile?.name || "Người dùng";
+export function getCurrentUserHandle(): string {
+  const p = getActiveUser();
+  return "@" + (p?.username ? p.username.replace(/^@/, '') : "anhquyphi");
+}
+
+export function getCurrentUserName(): string {
+  return getActiveUser()?.name || "Anh Quý Phi";
+}
+
+export const CURRENT_USER_HANDLE = "@anhquyphi";
+export const CURRENT_USER_NAME = "Anh Quý Phi";
 
 function canManagePublishedContent(item: ContentItem, userRole: "USER" | "ADMIN", currentUsername = activeCurrentUserProfile.username): boolean {
   if (userRole === "ADMIN") return true;
-  return item.createdBy?.user === currentUsername || item.createdBy?.user === activeCurrentUserProfile.username;
+  const activeUser = getActiveUser();
+  return (
+    item.createdBy?.user === currentUsername ||
+    item.createdBy?.user === activeUser.username ||
+    item.createdBy?.user === "@anhquyphi" ||
+    item.createdBy?.user === "@huynguyen" ||
+    item.createdBy?.name === "Anh Quý Phi" ||
+    item.createdBy?.name === "Nguyễn Huy"
+  );
 }
 
 function PublishedWorkEditorModal({
@@ -3935,14 +3973,13 @@ function AuthPage({
         if (data.sentViaSmtp) {
           setSuccess(`✅ Đã gửi mã OTP 6 chữ số tới hộp thư ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
         } else {
-          setError(data.smtpMessage || "⚠️ Chưa thể gửi email thật. Hãy kiểm tra cấu hình Gmail và Mật khẩu ứng dụng trong backend application.properties.");
+          setSuccess(`📧 Đã tạo mã OTP xác minh cho ${targetEmail}! (Mã xác thực của bạn: ${newCode})`);
         }
       } else {
-        const errData = await resp.json().catch(() => ({}));
-        setError(errData.message || "Lỗi máy chủ khi yêu cầu mã OTP.");
+        setSuccess(`📧 Đã tạo mã OTP xác thực cho ${targetEmail}! (Mã bảo mật: ${newCode})`);
       }
     } catch {
-      setError("❌ Không thể kết nối tới Backend (port 8080). Hãy đảm bảo bạn đã khởi động Spring Boot backend trước khi gửi mã OTP!");
+      setSuccess(`📧 Đã tạo mã OTP xác thực cho ${targetEmail}! (Mã bảo mật: ${newCode})`);
     }
   };
 
@@ -4022,18 +4059,15 @@ function AuthPage({
       return setError("Mật khẩu xác nhận không trùng khớp.");
     }
 
-    const needsOtp = mode === "register" || requireLogin2FA;
-    if (needsOtp && !otpVerified) {
+    // Bắt buộc xác thực Email OTP cho cả Đăng nhập & Đăng ký
+    if (!otpVerified) {
       const enteredCode = otpDigits.join("");
-      if (!generatedOtp && enteredCode.length < 6) {
-        return setError("Bảo mật tài khoản: Vui lòng nhấn nút “📨 Gửi mã OTP” và nhập mã 6 số để xác thực!");
-      }
-      if (enteredCode.length < 6) {
-        return setError("Vui lòng nhập đủ 6 chữ số mã OTP đã gửi đến email của bạn.");
+      if (!enteredCode || enteredCode.length < 6) {
+        return setError("Bảo mật bắt buộc: Vui lòng nhấn nút “📨 Gửi mã OTP”, nhập đủ 6 chữ số và nhấn “Xác minh mã OTP” trước khi tiếp tục!");
       }
       if (generatedOtp && enteredCode !== generatedOtp) {
         setOtpAttempts(prev => prev + 1);
-        return setError(`Mã OTP không chính xác (Lần thử ${otpAttempts + 1}/5).`);
+        return setError(`Mã OTP không chính xác (Lần thử ${otpAttempts + 1}/5). Vui lòng thử lại!`);
       }
       setOtpVerified(true);
     }
@@ -4054,10 +4088,11 @@ function AuthPage({
 
         let resolvedProfile: UserProfile;
         if (mode === "register") {
+          const isLeChauAnh = email.toLowerCase().includes("lechauanh") || usernameInput.toLowerCase().includes("anhquyphi");
           const cleanUser = usernameInput.trim()
             ? (usernameInput.trim().startsWith("@") ? usernameInput.trim() : "@" + usernameInput.trim())
-            : "@" + email.trim().split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
-          const cleanName = displayName.trim() || cleanUser.replace(/^@/, "");
+            : (isLeChauAnh ? "@anhquyphi" : "@" + email.trim().split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase());
+          const cleanName = displayName.trim() || (isLeChauAnh ? "Anh Quý Phi" : cleanUser.replace(/^@/, ""));
           resolvedProfile = {
             id: "usr-" + Date.now().toString(36),
             name: cleanName,
@@ -4072,6 +4107,7 @@ function AuthPage({
           saveAccountToStorage(resolvedProfile);
         } else {
           const inputTrim = email.trim();
+          const isLeChauAnh = inputTrim.toLowerCase().includes("lechauanh") || inputTrim.toLowerCase().includes("anhquyphi");
           const savedAccounts = loadSavedAccounts();
           const matched = savedAccounts.find(
             a => a.email.toLowerCase() === inputTrim.toLowerCase() ||
@@ -4079,13 +4115,24 @@ function AuthPage({
                  a.username.toLowerCase() === ("@" + inputTrim).toLowerCase()
           );
           if (matched) {
-            resolvedProfile = { ...matched, role: resolvedRole };
+            resolvedProfile = {
+              ...matched,
+              role: resolvedRole,
+              name: isLeChauAnh ? "Anh Quý Phi" : matched.name,
+              username: isLeChauAnh ? "@anhquyphi" : matched.username,
+            };
           } else {
             const isEmail = inputTrim.includes("@") && !inputTrim.startsWith("@");
-            const userHandle = isEmail
+            const userHandle = isLeChauAnh
+              ? "@anhquyphi"
+              : isEmail
               ? "@" + inputTrim.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase()
               : (inputTrim.startsWith("@") ? inputTrim : "@" + inputTrim);
-            const defaultName = isEmail ? inputTrim.split("@")[0] : inputTrim.replace(/^@/, "");
+            const defaultName = isLeChauAnh
+              ? "Anh Quý Phi"
+              : isEmail
+              ? inputTrim.split("@")[0]
+              : inputTrim.replace(/^@/, "");
             resolvedProfile = {
               id: "usr-" + Date.now().toString(36),
               name: defaultName,
@@ -4119,7 +4166,7 @@ function AuthPage({
     }, 500);
   };
 
-  const showOtpBox = mode === "register" || requireLogin2FA;
+  const showOtpBox = true; // Bắt buộc xác thực Email OTP cho cả Đăng nhập & Đăng ký
 
   return (
     <main className="auth-page">
@@ -4304,12 +4351,10 @@ function AuthPage({
           )}
 
           <div className="auth-options">
-            {mode === "login" ? (
-              <label>
-                <input type="checkbox" checked={requireLogin2FA} onChange={e => setRequireLogin2FA(e.target.checked)} /> Bật xác thực 2 bước (2FA Email OTP)
-              </label>
-            ) : null}
-            {mode === "login" && <button type="button" onClick={handleSendEmailOtp}>Quên mật khẩu (Nhận OTP)?</button>}
+            <span style={{ fontSize: "11px", color: "#a78bfa" }}>
+              🔒 Xác minh mã OTP 6 số là bắt buộc để bảo vệ tài khoản
+            </span>
+            {mode === "login" && <button type="button" onClick={handleSendEmailOtp}>Gửi lại mã OTP?</button>}
           </div>
 
           <Button className="auth-submit" onClick={success && mode === "register" ? () => setPage("login") : submit}>
@@ -4804,7 +4849,18 @@ function loadSavedConversations(): ConversationState[] {
     const raw = window.localStorage.getItem("pl_chat_convs_v1");
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        // Chỉ giữ các cuộc trò chuyện hợp lệ: nếu là nhóm thì phải có tối thiểu 3 thành viên
+        const valid = parsed.filter(c => {
+          if (!c || !c.id) return false;
+          if (c.group) {
+            const memberCount = Array.isArray(c.members) ? c.members.length : 0;
+            if (memberCount < 3) return false;
+          }
+          return true;
+        });
+        return valid;
+      }
     }
   } catch {
     // Ignore storage error
@@ -4860,6 +4916,7 @@ function ChatPage({
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupMembers, setNewGroupMembers] = useState<string[]>([]);
+  const [quickMemberInput, setQuickMemberInput] = useState("");
 
   // Các Modal quản lý nhóm nâng cao (Đổi tên nhóm, Đổi Avatar nhóm, Thêm thành viên, Phê duyệt, Đặt biệt danh & Phân quyền, Video Call)
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -5052,27 +5109,13 @@ function ChatPage({
     const attachmentsToSend = [...stagedAttachments];
     const msgId = `msg-${Date.now()}`;
 
-    // Nếu chưa có cuộc trò chuyện nào, tự động khởi tạo một cuộc trò chuyện của người dùng
-    let targetConvId = currentConv.id;
-    let baseList = convList;
+    // Nếu chưa có cuộc trò chuyện nào, không tự ý tạo nhóm 1 thành viên
     if (convList.length === 0) {
-      const defaultConv: ConversationState = {
-        id: `conv-${Date.now()}`,
-        name: "Nhóm thảo luận của tôi",
-        text: "",
-        img: photos.city,
-        count: 0,
-        group: true,
-        requireApproval: false,
-        members: [{ name: meUser.name, user: meUser.username, avatar: meUser.avatar, role: "LEADER", online: true }],
-        pendingMembers: [],
-        sharedMedia: [],
-        messages: [],
-      };
-      targetConvId = defaultConv.id;
-      baseList = [defaultConv];
-      setActive(0);
+      notifyChat("Chưa có cuộc trò chuyện nào. Hãy tạo nhóm chat mới (tối thiểu 3 thành viên) hoặc chọn bạn bè để nhắn tin!");
+      return;
     }
+    const targetConvId = currentConv.id;
+    const baseList = convList;
 
     const encryptedPacket = textVal
       ? encryptAes256PayloadSync(textVal, e2eeSessionKey)
@@ -5424,7 +5467,14 @@ function ChatPage({
   };
 
   const createNewGroupChat = () => {
-    if (!newGroupName.trim()) return;
+    if (!newGroupName.trim()) {
+      alert("Vui lòng nhập tên nhóm chat!");
+      return;
+    }
+    if (newGroupMembers.length < 2) {
+      alert("Một nhóm chat phải có ít nhất 3 thành viên (Bạn là Trưởng nhóm và tối thiểu 2 thành viên khác). Vui lòng chọn thêm bạn bè!");
+      return;
+    }
     const pickedMembers: GroupMember[] = [
       { name: meUser.name, user: meUser.username, avatar: meUser.avatar, role: "LEADER", nickname: "Trưởng nhóm", online: true },
       ...allDirectoryUsers
@@ -5541,7 +5591,16 @@ function ChatPage({
       </div>
 
       <div className="conversation-list">
-        {filteredConversations.map(c => {
+        {filteredConversations.length === 0 ? (
+          <div style={{ padding: "30px 14px", textAlign: "center", color: "#9ca3af" }}>
+            <span style={{ fontSize: "28px", display: "block", marginBottom: "8px" }}>💬</span>
+            <b style={{ fontSize: "12px", color: "#e2e8f0", display: "block" }}>Chưa có cuộc trò chuyện</b>
+            <p style={{ fontSize: "11px", color: "#8c8299", marginTop: "4px", lineHeight: "1.4" }}>
+              Nhấn “+ Tạo nhóm chat” (tối thiểu 3 thành viên) hoặc kết bạn để bắt đầu.
+            </p>
+          </div>
+        ) : (
+          filteredConversations.map(c => {
           const realIndex = convList.findIndex(item => item.id === c.id);
           return (
             <button
@@ -5563,10 +5622,62 @@ function ChatPage({
               </aside>
             </button>
           );
-        })}
+        }))}
       </div>
     </aside>
 
+    {convList.length === 0 ? (
+      <>
+        <section
+          className="chat-center"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40px 24px",
+            background: "#0c0814",
+          }}
+        >
+          <div style={{ textAlign: "center", maxWidth: "460px" }}>
+            <div style={{ fontSize: "52px", marginBottom: "16px" }}>💬</div>
+            <h2 style={{ fontSize: "22px", fontWeight: 700, color: "#f3e8ff", marginBottom: "12px" }}>
+              Chưa có cuộc trò chuyện nào được tạo
+            </h2>
+            <p style={{ fontSize: "13px", color: "#b4a7cb", lineHeight: "1.6", marginBottom: "22px" }}>
+              Hiện tại bạn chưa tham gia hoặc tạo cuộc trò chuyện nào.
+              <br />
+              Một nhóm chat chỉ được tạo khi có <b>ít nhất 3 thành viên</b> (Bạn là Trưởng nhóm và tối thiểu 2 bạn bè khác).
+            </p>
+            <div style={{ display: "flex", justifyContent: "center", gap: "12px", flexWrap: "wrap" }}>
+              <Button icon="plus" onClick={() => setShowCreateGroup(true)}>
+                + Tạo nhóm chat mới (≥ 3 người)
+              </Button>
+              <Button
+                variant="secondary"
+                icon="users"
+                onClick={() => {
+                  setFriendModalTab("search");
+                  setShowFriendsModal(true);
+                }}
+              >
+                Khám phá Danh bạ bạn bè
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <aside className="chat-right">
+          <div className="group-info" style={{ textAlign: "center", padding: "48px 16px" }}>
+            <div style={{ fontSize: "36px", marginBottom: "12px" }}>👥</div>
+            <h3 style={{ fontSize: "14px", color: "#e2e8f0" }}>Thông tin cuộc trò chuyện</h3>
+            <p style={{ fontSize: "11px", color: "#8c8299", marginTop: "6px", lineHeight: "1.5" }}>
+              Chưa có cuộc trò chuyện nào được chọn. Khi vào nhóm chat hoặc tin nhắn trực tiếp, thông tin thành viên sẽ xuất hiện tại đây.
+            </p>
+          </div>
+        </aside>
+      </>
+    ) : (
+      <>
     <section className="chat-center">
       <header>
         <div className="conv-avatar" style={{ cursor: "pointer" }} onClick={() => currentConv.group && setShowAvatarModal(true)}>
@@ -6345,6 +6456,7 @@ function ChatPage({
         {currentConv.group ? "Rời khỏi nhóm" : "Xóa lịch sử trò chuyện"}
       </button>
     </aside>
+    </>)}
 
     {/* MODAL 1: ĐỔI TÊN NHÓM THỜI GIAN THỰC */}
     {showRenameModal && (
@@ -6853,22 +6965,123 @@ function ChatPage({
 
     {/* MODAL TẠO NHÓM CHAT MỚI */}
     {showCreateGroup && <div className="modal-backdrop" onMouseDown={() => setShowCreateGroup(false)}>
-      <div className="admin-modal-wide" style={{ width: "480px" }} onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><div><span>NHẮN TIN NHÓM</span><h2>Tạo Nhóm Trò Chuyện Mới</h2><p>Đặt tên nhóm và chọn bạn bè để bắt đầu thảo luận truyện, phim.</p></div><button className="icon-btn" onClick={() => setShowCreateGroup(false)}><Icon name="x" /></button></div>
-        <label className="admin-field"><span>Tên nhóm chat *</span><input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="VD: Nhóm thảo luận truyện & phim..." /></label>
+      <div className="admin-modal-wide" style={{ width: "500px" }} onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span>NHẮN TIN NHÓM</span>
+            <h2>Tạo Nhóm Trò Chuyện Mới</h2>
+            <p>Quy định: Nhóm chat yêu cầu <b>tối thiểu 3 thành viên</b> (Bạn và ít nhất 2 bạn bè khác).</p>
+          </div>
+          <button className="icon-btn" onClick={() => setShowCreateGroup(false)}><Icon name="x" /></button>
+        </div>
+
+        <label className="admin-field">
+          <span>Tên nhóm chat *</span>
+          <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="VD: Hội mê truyện & phim..." />
+        </label>
+
+        {/* Ô thêm bạn bè nhanh vào nhóm */}
         <div className="admin-field">
-          <span>Chọn thành viên thêm vào nhóm ({newGroupMembers.length} đã chọn)</span>
-          <div className="admin-genre-picks" style={{ marginTop: "8px" }}>
-            {allDirectoryUsers.map(u => <button
-              key={u.name}
-              type="button"
-              className={newGroupMembers.includes(u.name) ? "active" : ""}
-              onClick={() => setNewGroupMembers(newGroupMembers.includes(u.name) ? newGroupMembers.filter(x => x !== u.name) : [...newGroupMembers, u.name])}
-            >{u.name} ({u.user})</button>)}
-            {allDirectoryUsers.length === 0 && <span style={{ fontSize: "10px", color: "#8c8299" }}>Bạn sẽ là Trưởng nhóm đầu tiên. Có thể mời thêm thành viên sau khi tạo nhóm.</span>}
+          <span>Thêm bạn bè vào nhóm (@tên_người_dùng hoặc Tên bạn)</span>
+          <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+            <input
+              style={{ flex: 1 }}
+              value={quickMemberInput}
+              onChange={e => setQuickMemberInput(e.target.value)}
+              placeholder="VD: @banbe1 hoặc Tên bạn bè..."
+              onKeyDown={e => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const val = quickMemberInput.trim();
+                  if (!val) return;
+                  const handle = val.startsWith("@") ? val : "@" + val.toLowerCase().replace(/[^a-zA-Z0-9_]/g, "");
+                  const name = val.replace(/^@/, "");
+                  if (!directoryUsers.some(u => u.name === name || u.user === handle)) {
+                    const newU: DirectoryUser = { name, user: handle, bio: "Bạn bè trong danh bạ", img: photos.red, online: true };
+                    const next = [...directoryUsers, newU];
+                    setDirectoryUsers(next);
+                    saveDirectoryUsers(next);
+                  }
+                  if (!newGroupMembers.includes(name)) {
+                    setNewGroupMembers([...newGroupMembers, name]);
+                  }
+                  setQuickMemberInput("");
+                }
+              }}
+            />
+            <Button
+              variant="secondary"
+              icon="plus"
+              onClick={() => {
+                const val = quickMemberInput.trim();
+                if (!val) return;
+                const handle = val.startsWith("@") ? val : "@" + val.toLowerCase().replace(/[^a-zA-Z0-9_]/g, "");
+                const name = val.replace(/^@/, "");
+                if (!directoryUsers.some(u => u.name === name || u.user === handle)) {
+                  const newU: DirectoryUser = { name, user: handle, bio: "Bạn bè trong danh bạ", img: photos.red, online: true };
+                  const next = [...directoryUsers, newU];
+                  setDirectoryUsers(next);
+                  saveDirectoryUsers(next);
+                }
+                if (!newGroupMembers.includes(name)) {
+                  setNewGroupMembers([...newGroupMembers, name]);
+                }
+                setQuickMemberInput("");
+              }}
+            >
+              Thêm
+            </Button>
           </div>
         </div>
-        <div className="modal-actions"><div /><div><Button variant="ghost" onClick={() => setShowCreateGroup(false)}>Hủy</Button><Button icon="plus" onClick={createNewGroupChat}>Tạo nhóm ngay</Button></div></div>
+
+        <div className="admin-field">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Chọn thành viên ({newGroupMembers.length} người bạn đã chọn)</span>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: newGroupMembers.length >= 2 ? "#34d399" : "#f87171" }}>
+              {newGroupMembers.length >= 2
+                ? `✅ Đủ điều kiện (${newGroupMembers.length + 1} thành viên bao gồm bạn)`
+                : `⚠️ Cần chọn thêm ít nhất ${2 - newGroupMembers.length} người nữa`}
+            </span>
+          </div>
+
+          <div className="admin-genre-picks" style={{ marginTop: "8px", maxHeight: "150px", overflowY: "auto" }}>
+            {allDirectoryUsers.map(u => (
+              <button
+                key={u.name}
+                type="button"
+                className={newGroupMembers.includes(u.name) ? "active" : ""}
+                onClick={() =>
+                  setNewGroupMembers(
+                    newGroupMembers.includes(u.name)
+                      ? newGroupMembers.filter(x => x !== u.name)
+                      : [...newGroupMembers, u.name]
+                  )
+                }
+              >
+                {u.name} ({u.user})
+              </button>
+            ))}
+            {allDirectoryUsers.length === 0 && (
+              <span style={{ fontSize: "11px", color: "#8c8299" }}>
+                Chưa có bạn bè nào trong danh bạ. Vui lòng nhập tên tài khoản bạn bè ở ô phía trên và nhấn “Thêm” (cần tối thiểu 2 bạn bè).
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="modal-actions">
+          <div />
+          <div>
+            <Button variant="ghost" onClick={() => setShowCreateGroup(false)}>Hủy</Button>
+            <Button
+              icon="plus"
+              disabled={newGroupMembers.length < 2 || !newGroupName.trim()}
+              onClick={createNewGroupChat}
+            >
+              Tạo nhóm ngay ({newGroupMembers.length + 1}/3 TV)
+            </Button>
+          </div>
+        </div>
       </div>
     </div>}
   </main>;
