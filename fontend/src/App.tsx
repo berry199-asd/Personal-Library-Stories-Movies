@@ -59,6 +59,8 @@ type NotificationItem = { id: number; type: "CHAPTER" | "COMMENT" | "SHARE" | "F
 function Navbar({
   page,
   setPage,
+  userRole,
+  onSwitchRole,
   onOpenSearch,
   notifications,
   onMarkAllRead,
@@ -66,6 +68,8 @@ function Navbar({
 }: {
   page: string;
   setPage: (page: string) => void;
+  userRole: "USER" | "ADMIN";
+  onSwitchRole: (role: "USER" | "ADMIN") => void;
   onOpenSearch: () => void;
   notifications: NotificationItem[];
   onMarkAllRead: () => void;
@@ -77,11 +81,25 @@ function Navbar({
   const unreadCount = notifications.filter(n => n.unread).length;
   const shownNotices = notifications.filter(n => noticeTab === "ALL" || n.type === noticeTab);
 
+  // Mục "Quản trị" CHỈ xuất hiện khi tài khoản có vai trò ADMIN
+  const navItems: [string, string][] = [
+    ["home", "Trang chủ"],
+    ["manga", "Truyện"],
+    ["movies", "Phim"],
+    ["library", "Thư viện của tôi"],
+    ["chat", "Tin nhắn"],
+    ...(userRole === "ADMIN" ? ([["admin", "Quản trị"]] as [string, string][]) : []),
+  ];
+
   return <header className="navbar">
     <Brand />
     <nav className="navlinks">
-      {[["home", "Trang chủ"], ["manga", "Truyện"], ["movies", "Phim"], ["library", "Thư viện của tôi"], ["chat", "Tin nhắn"], ["admin", "Quản trị"]].map(([id, label], i) =>
-        <button key={`${label}-${i}`} className={page === id ? "active" : ""} onClick={() => setPage(id)}>{id === "chat" && <Icon name="message" size={14} />}{id === "admin" && <Icon name="settings" size={14} />}{label}</button>
+      {navItems.map(([id, label], i) =>
+        <button key={`${label}-${i}`} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
+          {id === "chat" && <Icon name="message" size={14} />}
+          {id === "admin" && <Icon name="settings" size={14} />}
+          {label}
+        </button>
       )}
     </nav>
     <div className="nav-actions">
@@ -124,11 +142,34 @@ function Navbar({
       <div className="account-wrap">
         <button className="avatar" onClick={() => setAccountOpen(!accountOpen)}><img src={photos.red} alt="Ảnh đại diện" /><i /></button>
         {accountOpen && <div className="account-menu">
-          <div className="account-summary"><img src={photos.red} alt="" /><div><b>Nguyễn Huy</b><span>@huynguyen</span></div></div>
+          <div className="account-summary">
+            <img src={photos.red} alt="" />
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <b>{userRole === "ADMIN" ? "Nguyễn Huy" : "Lan Anh"}</b>
+                <span className={`badge-pill ${userRole === "ADMIN" ? "role-admin" : "active"}`}>{userRole}</span>
+              </div>
+              <span>{userRole === "ADMIN" ? "@admin_huy" : "@lananh"}</span>
+            </div>
+          </div>
           <button onClick={() => { setPage("account"); setAccountOpen(false); }}><Icon name="users" size={16} />Thông tin tài khoản</button>
           <button onClick={() => { setPage("public-profile"); setAccountOpen(false); }}><Icon name="share" size={16} />Thư viện công khai</button>
           <button onClick={() => { setPage("notifications"); setAccountOpen(false); }}><Icon name="bell" size={16} />Trung tâm thông báo</button>
+          {userRole === "ADMIN" && (
+            <button onClick={() => { setPage("admin"); setAccountOpen(false); }}><Icon name="settings" size={16} />Bảng điều khiển Quản trị</button>
+          )}
           <button onClick={() => { setPage("settings"); setAccountOpen(false); }}><Icon name="settings" size={16} />Setting</button>
+          <button
+            style={{ color: "#c4a5ff", borderTop: "1px solid #2b2236", marginTop: "4px", paddingTop: "8px" }}
+            onClick={() => {
+              const nextRole = userRole === "ADMIN" ? "USER" : "ADMIN";
+              onSwitchRole(nextRole);
+              setAccountOpen(false);
+            }}
+          >
+            <Icon name="lock" size={16} />
+            {userRole === "ADMIN" ? "Chuyển sang quyền USER" : "Chuyển sang quyền ADMIN"}
+          </button>
           <button className="logout" onClick={() => { setPage("login"); setAccountOpen(false); }}><Icon name="arrow" size={16} />Đăng xuất</button>
         </div>}
       </div>
@@ -136,18 +177,28 @@ function Navbar({
   </header>;
 }
 
-type ContentItem = { title: string; sub: string; img: string; status: string; score: string; type: "Truyện" | "Phim"; genres: string[] };
+type ContentItem = {
+  title: string;
+  sub: string;
+  img: string;
+  status: string;
+  score: string;
+  type: "Truyện" | "Phim";
+  genres: string[];
+  sharedFrom?: { name: string; user: string; sharedAt?: string };
+};
 const libraryItems: ContentItem[] = [
   { title: "Nightfall City", sub: "S. Kuroda", img: photos.red, status: "Đang đọc / xem", score: "4.9", type: "Truyện", genres: ["Action", "Mystery", "Sci-Fi"] },
   { title: "Thành Phố Mưa", sub: "Anime Series", img: photos.rain, status: "Đang ra", score: "4.7", type: "Phim", genres: ["Animation", "Drama", "Romance"] },
-  { title: "Lồng Đèn Đỏ", sub: "Yuki Nakama", img: photos.lantern, status: "Hoàn thành", score: "4.8", type: "Truyện", genres: ["Historical", "Mystery", "Supernatural"] },
-  { title: "Ký Ức Ngõ Hẻm", sub: "Movie · 2024", img: photos.alley, status: "Đang ra", score: "4.6", type: "Phim", genres: ["Crime", "Psychological", "Thriller"] },
-  { title: "Ngày Ta Gặp Lại", sub: "M. Tanaka", img: photos.street, status: "Hoàn thành", score: "4.9", type: "Truyện", genres: ["Romance", "Slice of Life", "Josei"] },
+  { title: "Lồng Đèn Đỏ", sub: "Yuki Nakama", img: photos.lantern, status: "Hoàn thành", score: "4.8", type: "Truyện", genres: ["Historical", "Mystery", "Supernatural"], sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "Hôm qua" } },
+  { title: "Ký Ức Ngõ Hẻm", sub: "Movie · 2024", img: photos.alley, status: "Đang ra", score: "4.6", type: "Phim", genres: ["Crime", "Psychological", "Thriller"], sharedFrom: { name: "Minh Trần", user: "@minhtran", sharedAt: "2 ngày trước" } },
+  { title: "Ngày Ta Gặp Lại", sub: "M. Tanaka", img: photos.street, status: "Hoàn thành", score: "4.9", type: "Truyện", genres: ["Romance", "Slice of Life", "Josei"], sharedFrom: { name: "Thu Hà", user: "@hanguyen", sharedAt: "3 ngày trước" } },
   { title: "Ánh Sáng Cuối Hè", sub: "Movie · 2023", img: photos.city, status: "Drop", score: "4.3", type: "Phim", genres: ["Drama", "Family"] },
   { title: "Võ Đài Linh Hồn", sub: "K. Yamato", img: photos.hero, status: "Đang ra", score: "4.5", type: "Truyện", genres: ["Action", "Martial Arts", "Shounen"] },
-  { title: "Phía Sau Hoàng Hôn", sub: "Movie · 2025", img: photos.lantern, status: "Đang đọc / xem", score: "4.7", type: "Phim", genres: ["Mystery", "Sci-Fi"] },
+  { title: "Phía Sau Hoàng Hôn", sub: "Movie · 2025", img: photos.lantern, status: "Đang đọc / xem", score: "4.7", type: "Phim", genres: ["Mystery", "Sci-Fi"], sharedFrom: { name: "Tuấn Minh", user: "@tuanminh", sharedAt: "5 ngày trước" } },
   { title: "Học Viện Ánh Trăng", sub: "A. Mori", img: photos.rain, status: "Đang ra", score: "4.4", type: "Truyện", genres: ["School Life", "Fantasy", "Shoujo"] },
-  { title: "Bản Giao Hưởng Cuối", sub: "Movie · 2022", img: photos.street, status: "Hoàn thành", score: "4.8", type: "Phim", genres: ["Musical", "Romance"] },
+  { title: "Bản Giao Hưởng Cuối", sub: "Movie · 2022", img: photos.street, status: "Hoàn thành", score: "4.8", type: "Phim", genres: ["Musical", "Romance"], sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "1 tuần trước" } },
+  { title: "Thành Phố Không Ngủ", sub: "Movie · 2024", img: photos.lantern, status: "Muốn đọc / xem", score: "4.7", type: "Phim", genres: ["Sci-Fi", "Mystery", "Drama"], sharedFrom: { name: "Lan Anh", user: "@lananh", sharedAt: "Lưu từ khung Chat" } },
 ];
 
 const mangaGenres = ["BL", "BG", "GL", "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Psychological", "Romance", "School Life", "Slice of Life", "Supernatural", "Thriller", "Martial Arts", "Isekai", "Sci-Fi", "Sports", "Shounen", "Shoujo", "Seinen", "Josei"];
@@ -247,6 +298,8 @@ function LibraryPage({
   favorites,
   toggleFavorite,
   items = libraryItems,
+  onRemoveFromLibrary,
+  onRestoreToLibrary,
   onOpenPublicProfile,
   onOpenShareToChat,
 }: {
@@ -254,6 +307,8 @@ function LibraryPage({
   favorites: string[];
   toggleFavorite: (title: string) => void;
   items?: ContentItem[];
+  onRemoveFromLibrary?: (title: string) => void;
+  onRestoreToLibrary?: (item: ContentItem) => void;
   onOpenPublicProfile?: (username: string) => void;
   onOpenShareToChat?: (item: ContentItem) => void;
 }) {
@@ -261,34 +316,69 @@ function LibraryPage({
   const [modal, setModal] = useState(false);
   const [view, setView] = useState("all");
   const [libSearch, setLibSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"Tất cả" | "Truyện" | "Phim">("Tất cả");
+  const [sortBy, setSortBy] = useState<"newest" | "rating" | "az">("newest");
   const [libToast, setLibToast] = useState("");
+  const [lastRemovedItem, setLastRemovedItem] = useState<ContentItem | null>(null);
 
-  // Quản lý danh mục riêng (Tạo mới & Chỉnh sửa)
+  // Quản lý danh mục riêng (Tạo mới, Chỉnh sửa, Xóa & Thêm truyện/phim vào danh mục)
   const [categories, setCategories] = useState([
-    { name: "Kệ đêm mưa", icon: "☾", description: "Những câu chuyện dịu dàng cho ngày mưa.", count: 8 },
-    { name: "Cyberpunk", icon: "◇", description: "Tương lai, neon và những ký ức bị đánh cắp.", count: 6 },
-    { name: "Đọc cuối tuần", icon: "◫", description: "Danh sách để dành cho ngày nghỉ.", count: 12 },
-    { name: "Phim chữa lành", icon: "✦", description: "Nhẹ nhàng, ấm áp và đầy hy vọng.", count: 5 },
-    { name: "Trinh thám", icon: "⌕", description: "Bí ẩn cần được giải đáp.", count: 9 },
-    { name: "Xem cùng bạn", icon: "♙", description: "Bộ sưu tập được chia sẻ với bạn bè.", count: 4 },
+    { name: "Kệ đêm mưa", icon: "☾", description: "Những câu chuyện dịu dàng cho ngày mưa." },
+    { name: "Cyberpunk", icon: "◇", description: "Tương lai, neon và những ký ức bị đánh cắp." },
+    { name: "Đọc cuối tuần", icon: "◫", description: "Danh sách để dành cho ngày nghỉ." },
+    { name: "Phim chữa lành", icon: "✦", description: "Nhẹ nhàng, ấm áp và đầy hy vọng." },
+    { name: "Trinh thám", icon: "⌕", description: "Bí ẩn cần được giải đáp." },
+    { name: "Xem cùng bạn", icon: "♙", description: "Bộ sưu tập được lưu & chia sẻ với bạn bè." },
   ]);
   const [categoryModal, setCategoryModal] = useState<{ index: number | null; name: string; icon: string; description: string } | null>(null);
+  const [assigningCategoryName, setAssigningCategoryName] = useState<string | null>(null);
+  const [quickAssignItem, setQuickAssignItem] = useState<ContentItem | null>(null);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<ContentItem | null>(null);
 
-  // Chỉnh sửa Ghi chú cá nhân, Điểm đánh giá 1-5 sao, Trạng thái đọc/xem & Danh mục riêng cho từng bộ
-  const [personalMeta, setPersonalMeta] = useState<Record<string, { note: string; rating: number; readingStatus: string; category: string }>>({
-    "Nightfall City": { note: "Một thế giới lôi cuốn, càng đọc càng khó dứt ra...", rating: 5, readingStatus: "Đang đọc / xem", category: "Cyberpunk" },
-    "Thành Phố Mưa": { note: "Phần hình ảnh rất đẹp, nhịp kể chậm nhưng cuốn hút...", rating: 4, readingStatus: "Đang đọc / xem", category: "Kệ đêm mưa" },
-    "Lồng Đèn Đỏ": { note: "Bối cảnh cổ trang pha lẫn bí ẩn cực kỳ ấn tượng.", rating: 5, readingStatus: "Đã hoàn thành", category: "Trinh thám" },
+  // Dữ liệu cá nhân độc lập cho từng bộ: Ghi chú, Điểm 1-5 sao, Trạng thái đọc/xem, Quyền riêng tư & Danh sách Danh mục riêng (hỗ trợ nhiều danh mục)
+  const [personalMeta, setPersonalMeta] = useState<Record<string, {
+    note: string;
+    rating: number;
+    readingStatus: string;
+    categories: string[];
+    privacy: "PRIVATE" | "SHARED" | "PEOPLE";
+  }>>({
+    "Nightfall City": { note: "Một thế giới lôi cuốn, càng đọc càng khó dứt ra...", rating: 5, readingStatus: "Đang đọc / xem", categories: ["Cyberpunk", "Trinh thám"], privacy: "SHARED" },
+    "Thành Phố Mưa": { note: "Phần hình ảnh rất đẹp, nhịp kể chậm nhưng cuốn hút...", rating: 4, readingStatus: "Đang đọc / xem", categories: ["Kệ đêm mưa", "Phim chữa lành"], privacy: "PRIVATE" },
+    "Lồng Đèn Đỏ": { note: "Lưu từ thư viện của @lananh — Bối cảnh cổ trang pha lẫn bí ẩn cực kỳ ấn tượng.", rating: 5, readingStatus: "Hoàn thành", categories: ["Trinh thám", "Xem cùng bạn"], privacy: "SHARED" },
+    "Ký Ức Ngõ Hẻm": { note: "Lưu từ chia sẻ của @minhtran — Phim trinh thám tâm lý đáng xem cuối tuần.", rating: 4, readingStatus: "Đang đọc / xem", categories: ["Trinh thám", "Đọc cuối tuần"], privacy: "PRIVATE" },
+    "Ngày Ta Gặp Lại": { note: "Lưu từ @hanguyen — Nhẹ nhàng, sâu lắng, đọc xong rất ấm lòng.", rating: 5, readingStatus: "Hoàn thành", categories: ["Kệ đêm mưa", "Đọc cuối tuần"], privacy: "SHARED" },
+    "Ánh Sáng Cuối Hè": { note: "Tạm dừng ở phút 45 để hôm sau xem tiếp.", rating: 4, readingStatus: "Drop", categories: ["Phim chữa lành"], privacy: "PRIVATE" },
+    "Võ Đài Linh Hồn": { note: "Các trận đấu mãn nhãn, nét vẽ cực kỳ có lực.", rating: 4, readingStatus: "Muốn đọc / xem", categories: ["Đọc cuối tuần"], privacy: "PRIVATE" },
+    "Phía Sau Hoàng Hôn": { note: "Lưu từ @tuanminh — Ý tưởng sci-fi rất độc đáo.", rating: 5, readingStatus: "Đang đọc / xem", categories: ["Cyberpunk", "Xem cùng bạn"], privacy: "PEOPLE" },
+    "Học Viện Ánh Trăng": { note: "Truyện phép thuật học đường giải trí nhẹ nhàng.", rating: 4, readingStatus: "Muốn đọc / xem", categories: ["Đọc cuối tuần"], privacy: "PRIVATE" },
+    "Bản Giao Hưởng Cuối": { note: "Lưu từ @lananh — Nhạc phim thực sự đỉnh cao.", rating: 5, readingStatus: "Hoàn thành", categories: ["Phim chữa lành", "Xem cùng bạn"], privacy: "SHARED" },
+    "Thành Phố Không Ngủ": { note: "Lưu từ thẻ chia sẻ trong nhóm Chat — Sẽ xem vào tối thứ 7.", rating: 5, readingStatus: "Muốn đọc / xem", categories: ["Cyberpunk", "Xem cùng bạn"], privacy: "SHARED" },
   });
-  const [editingEntry, setEditingEntry] = useState<{ item: ContentItem; note: string; rating: number; readingStatus: string; category: string } | null>(null);
 
-  const openEditEntry = (item: ContentItem, i: number) => {
-    const current = personalMeta[item.title] || {
-      note: i % 2 ? "Phần hình ảnh rất đẹp, nhịp kể chậm nhưng cuốn hút..." : "Một thế giới lôi cuốn, càng đọc càng khó dứt ra...",
+  const getItemMeta = (item: ContentItem) => {
+    return personalMeta[item.title] || {
+      note: item.sharedFrom
+        ? `Đã lưu từ chia sẻ của ${item.sharedFrom.name} (${item.sharedFrom.user}).`
+        : "Một tác phẩm đáng chú ý trong bộ sưu tập cá nhân của tôi.",
       rating: 4,
-      readingStatus: item.status,
-      category: categories[0]?.name || "Kệ đêm mưa",
+      readingStatus: item.status === "Đang ra" ? "Đang đọc / xem" : item.status,
+      categories: item.sharedFrom ? ["Xem cùng bạn"] : ["Đọc cuối tuần"],
+      privacy: "PRIVATE" as const,
     };
+  };
+
+  const [editingEntry, setEditingEntry] = useState<{
+    item: ContentItem;
+    note: string;
+    rating: number;
+    readingStatus: string;
+    categories: string[];
+    privacy: "PRIVATE" | "SHARED" | "PEOPLE";
+  } | null>(null);
+
+  const openEditEntry = (item: ContentItem) => {
+    const current = getItemMeta(item);
     setEditingEntry({ item, ...current });
   };
 
@@ -300,129 +390,681 @@ function LibraryPage({
         note: editingEntry.note,
         rating: editingEntry.rating,
         readingStatus: editingEntry.readingStatus,
-        category: editingEntry.category,
+        categories: editingEntry.categories,
+        privacy: editingEntry.privacy,
       },
     });
-    setLibToast(`Đã cập nhật ghi chú & đánh giá cá nhân cho “${editingEntry.item.title}”.`);
+    setLibToast(`Đã lưu cập nhật bản ghi cá nhân & danh mục cho “${editingEntry.item.title}”.`);
     setEditingEntry(null);
+  };
+
+  // Thêm / Gỡ một tác phẩm vào một danh mục riêng
+  const toggleItemInCategory = (item: ContentItem, categoryName: string) => {
+    const current = getItemMeta(item);
+    const exists = current.categories.includes(categoryName);
+    const nextCategories = exists
+      ? current.categories.filter(c => c !== categoryName)
+      : [...current.categories, categoryName];
+
+    setPersonalMeta({
+      ...personalMeta,
+      [item.title]: {
+        ...current,
+        categories: nextCategories,
+      },
+    });
+    setLibToast(
+      exists
+        ? `Đã gỡ “${item.title}” khỏi danh mục “${categoryName}”.`
+        : `Đã thêm “${item.title}” vào danh mục “${categoryName}”.`
+    );
+  };
+
+  // Xóa tác phẩm khỏi Thư viện cá nhân
+  const handleDeleteFromLibrary = (item: ContentItem) => {
+    setLastRemovedItem(item);
+    onRemoveFromLibrary?.(item.title);
+    setConfirmDeleteItem(null);
+    setLibToast(`Đã xóa “${item.title}” khỏi Thư viện cá nhân của bạn.`);
   };
 
   const saveCategoryModal = () => {
     if (!categoryModal || !categoryModal.name.trim()) return;
+    const trimmedName = categoryModal.name.trim();
     if (categoryModal.index === null) {
-      setCategories([{ name: categoryModal.name.trim(), icon: categoryModal.icon || "✦", description: categoryModal.description.trim() || "Danh mục tự tạo của bạn.", count: 1 }, ...categories]);
-      setLibToast(`Đã tạo danh mục riêng “${categoryModal.name}”.`);
+      setCategories([{ name: trimmedName, icon: categoryModal.icon || "✦", description: categoryModal.description.trim() || "Danh mục tự tạo của bạn." }, ...categories]);
+      setLibToast(`Đã tạo danh mục riêng “${trimmedName}”. Hãy thêm truyện/phim vào danh mục này!`);
     } else {
-      setCategories(categories.map((c, idx) => idx === categoryModal.index ? { ...c, name: categoryModal.name.trim(), icon: categoryModal.icon, description: categoryModal.description.trim() } : c));
-      setLibToast(`Đã cập nhật danh mục “${categoryModal.name}”.`);
+      const oldName = categories[categoryModal.index]?.name;
+      setCategories(categories.map((c, idx) => idx === categoryModal.index ? { ...c, name: trimmedName, icon: categoryModal.icon, description: categoryModal.description.trim() } : c));
+      if (oldName && oldName !== trimmedName) {
+        const updatedMeta = { ...personalMeta };
+        Object.keys(updatedMeta).forEach(title => {
+          updatedMeta[title] = {
+            ...updatedMeta[title],
+            categories: updatedMeta[title].categories.map(cat => cat === oldName ? trimmedName : cat),
+          };
+        });
+        setPersonalMeta(updatedMeta);
+        if (tab === oldName) setTab(trimmedName);
+      }
+      setLibToast(`Đã cập nhật danh mục “${trimmedName}”.`);
     }
     setCategoryModal(null);
-    setView("categories");
   };
 
+  const handleDeleteCategory = (catName: string, idx: number) => {
+    setCategories(categories.filter((_, index) => index !== idx));
+    const updatedMeta = { ...personalMeta };
+    Object.keys(updatedMeta).forEach(title => {
+      updatedMeta[title] = {
+        ...updatedMeta[title],
+        categories: updatedMeta[title].categories.filter(cat => cat !== catName),
+      };
+    });
+    setPersonalMeta(updatedMeta);
+    if (tab === catName) setTab("Tất cả");
+    setLibToast(`Đã xóa danh mục “${catName}” (Các tác phẩm vẫn được giữ nguyên trong Thư viện).`);
+  };
+
+  // Đếm số lượng tác phẩm thực tế trong từng danh mục & trạng thái
+  const getCategoryCount = (catName: string) =>
+    items.filter(item => getItemMeta(item).categories.includes(catName)).length;
+
+  const sharedFromOthersItems = items.filter(item => Boolean(item.sharedFrom));
+  const activeReadingItems = items.filter(item => {
+    const st = getItemMeta(item).readingStatus;
+    return st === "Đang đọc / xem" || st === "Đang ra";
+  });
+
   const views = [
-    { id: "all", value: items.length + 35, label: "Tổng tác phẩm" },
-    { id: "favorites", value: favorites.length, label: "Yêu thích" },
+    { id: "all", value: String(items.length).padStart(2, "0"), label: "Tổng tác phẩm" },
+    { id: "favorites", value: String(items.filter(i => favorites.includes(i.title)).length).padStart(2, "0"), label: "Yêu thích ♥" },
+    { id: "shared", value: String(sharedFromOthersItems.length).padStart(2, "0"), label: "Lưu từ chia sẻ 🌐" },
     { id: "categories", value: String(categories.length).padStart(2, "0"), label: "Danh mục riêng" },
-    { id: "active", value: "08", label: "Đang đọc / xem" },
+    { id: "active", value: String(activeReadingItems.length).padStart(2, "0"), label: "Đang đọc / xem" },
   ];
-  const viewTitles: Record<string, string> = { all: "Tất cả tác phẩm", favorites: "Tác phẩm yêu thích", categories: "Danh mục riêng của bạn", active: "Đang đọc / xem" };
-  const shownItems = (view === "favorites" ? items.filter(item => favorites.includes(item.title)) : view === "active" ? items.filter(item => item.status === "Đang đọc / xem" || item.status === "Đang ra") : items)
-    .filter(item => !libSearch || item.title.toLowerCase().includes(libSearch.toLowerCase()));
+
+  const isCustomCategoryTab = categories.some(c => c.name === tab);
+
+  // Sàng lọc thực sự theo cả View, Tab (Trạng thái / Yêu thích / Lưu từ chia sẻ / Danh mục riêng), Loại và Từ khóa
+  const filteredItems = items
+    .filter(item => {
+      const meta = getItemMeta(item);
+      if (view === "favorites" && !favorites.includes(item.title)) return false;
+      if (view === "shared" && !item.sharedFrom) return false;
+      if (view === "active" && meta.readingStatus !== "Đang đọc / xem" && meta.readingStatus !== "Đang ra") return false;
+
+      if (tab === "Yêu thích") return favorites.includes(item.title);
+      if (tab === "Lưu từ chia sẻ") return Boolean(item.sharedFrom);
+      if (tab === "Đang đọc / xem") return meta.readingStatus === "Đang đọc / xem" || meta.readingStatus === "Đang ra";
+      if (tab === "Muốn đọc / xem") return meta.readingStatus === "Muốn đọc / xem";
+      if (tab === "Đã hoàn thành") return meta.readingStatus === "Hoàn thành";
+      if (tab === "Drop") return meta.readingStatus === "Drop";
+      if (isCustomCategoryTab) return meta.categories.includes(tab);
+      return true;
+    })
+    .filter(item => typeFilter === "Tất cả" || item.type === typeFilter)
+    .filter(item => !libSearch || item.title.toLowerCase().includes(libSearch.toLowerCase()) || item.sub.toLowerCase().includes(libSearch.toLowerCase()));
+
+  const shownItems = [...filteredItems].sort((a, b) => {
+    if (sortBy === "rating") return getItemMeta(b).rating - getItemMeta(a).rating;
+    if (sortBy === "az") return a.title.localeCompare(b.title, "vi");
+    return 0;
+  });
+
+  const systemTabs: { key: string; label: string; count: number; badge?: string }[] = [
+    { key: "Tất cả", label: "Tất cả", count: items.length },
+    { key: "Yêu thích", label: "Yêu thích", count: items.filter(i => favorites.includes(i.title)).length, badge: "♥" },
+    { key: "Lưu từ chia sẻ", label: "Lưu từ chia sẻ", count: sharedFromOthersItems.length, badge: "🌐" },
+    { key: "Đang đọc / xem", label: "Đang đọc / xem", count: activeReadingItems.length },
+    { key: "Muốn đọc / xem", label: "Muốn đọc / xem", count: items.filter(i => getItemMeta(i).readingStatus === "Muốn đọc / xem").length },
+    { key: "Đã hoàn thành", label: "Đã hoàn thành", count: items.filter(i => getItemMeta(i).readingStatus === "Hoàn thành").length },
+  ];
 
   return <main className="inner-page">
     <div className="page-shell">
       <div className="library-head">
-        <div><span>KHÔNG GIAN CỦA BẠN</span><h1>Thư Viện Cá Nhân</h1><p>Những câu chuyện bạn đã chọn lưu giữ, ghi chú riêng và phân loại theo sở thích.</p></div>
         <div>
+          <span>KHÔNG GIAN CỦA BẠN</span>
+          <h1>Thư Viện Cá Nhân</h1>
+          <p>Quản lý truyện/phim của bạn, phân loại theo danh mục riêng và lưu giữ các tác phẩm hay được bạn bè chia sẻ.</p>
+        </div>
+        <div>
+          <Button variant="secondary" icon="share" onClick={() => onOpenPublicProfile?.("@lananh")}>Khám phá thư viện bạn bè</Button>
           <Button variant="secondary" icon="plus" onClick={() => setCategoryModal({ index: null, name: "", icon: "☾", description: "" })}>Tạo danh mục riêng</Button>
-          <Button variant="secondary" icon="plus" onClick={() => setPage("manga")}>Thêm từ kho cộng đồng</Button>
+          <Button variant="secondary" icon="plus" onClick={() => setPage("manga")}>Thêm từ kho chung</Button>
           <Button icon="plus" onClick={() => setPage("publish")}>Đăng truyện / phim</Button>
         </div>
       </div>
-      {libToast && <div className="success-banner" style={{ marginTop: "18px" }}><Icon name="check" /> {libToast}<button onClick={() => setLibToast("")}>×</button></div>}
-      <div className="stats-row interactive-stats">{views.map(item => <button className={view === item.id ? "active" : ""} onClick={() => setView(item.id)} key={item.id}><b>{item.value}</b><span>{item.label}</span></button>)}</div>
-      <div className="category-tabs">{["Tất cả", "Yêu thích", "Đang đọc / xem", "Muốn đọc / xem", "Đã hoàn thành", ...categories.slice(0, 2).map(c => c.name)].map((x, i) => <button className={tab === x ? "active" : ""} onClick={() => setTab(x)} key={x}>{x}{i === 1 && <span>♥</span>}{i >= 5 && <small>RIÊNG</small>}</button>)}</div>
-      <section className="recent-history"><SectionTitle eyebrow="HOẠT ĐỘNG GẦN ĐÂY" title="Lịch sử đọc / xem gần đây" action="Xem toàn bộ" /><div className="history-track">{items.slice(0, 10).map((item, i) => <button className="history-card" key={item.title} onClick={() => setPage("detail")}><img src={item.img} alt={item.title} /><div><span>{item.type === "Truyện" ? "MANGA" : "MOVIE"} · {i < 2 ? "Vừa xong" : `${i + 1} giờ trước`}</span><b>{item.title}</b><p>{item.type === "Truyện" ? `Chương ${85 - i}` : `Tập ${Math.max(1, 10 - i)}`}</p><div className="progress"><i style={{ width: `${88 - i * 6}%` }} /></div></div></button>)}</div></section>
-      <div className="library-toolbar"><p><b>{viewTitles[view]}</b> · {view === "categories" ? `${categories.length} danh mục` : `${shownItems.length} tác phẩm`}</p>{view !== "categories" && <div><label><Icon name="search" size={16} /><input value={libSearch} onChange={e => setLibSearch(e.target.value)} placeholder="Tìm trong thư viện..." /></label><button>Sắp xếp: Mới nhất <Icon name="chevron" size={15} /></button></div>}</div>
-      {view === "categories" ? <div className="category-grid">{categories.map((category, i) => <article className="category-card" key={category.name}><div className="category-icon">{category.icon}</div><div><span>DANH MỤC RIÊNG</span><h3>{category.name}</h3><p>{category.description}</p><b>{category.count} tác phẩm</b></div><div className="category-actions"><Button variant="secondary" onClick={() => { setTab(category.name); setView("all"); }}>Mở danh mục</Button><button title="Chỉnh sửa danh mục" onClick={() => setCategoryModal({ index: i, name: category.name, icon: category.icon, description: category.description })}><Icon name="edit" size={15} /></button><button title="Xóa danh mục" onClick={() => setCategories(categories.filter((_, index) => index !== i))}><Icon name="x" size={15} /></button></div></article>)}</div> :
-      <div className="personal-grid">
-        {shownItems.map((item, i) => {
-          const meta = personalMeta[item.title];
-          const stars = meta ? "★".repeat(meta.rating) + "☆".repeat(5 - meta.rating) : "★★★★☆";
-          return <article className="personal-card" key={`${item.title}-${i}`}>
-            <div className="personal-poster">
-              <img src={item.img} alt={item.title} onClick={() => setPage("detail")} style={{ cursor: "pointer" }} />
-              <span className={`status ${(meta?.readingStatus || item.status) === "Hoàn thành" ? "done" : ""}`}>{meta?.readingStatus || item.status}</span>
-              <FavoriteButton active={favorites.includes(item.title)} toggle={() => toggleFavorite(item.title)} />
-              <button className="more" title="Chỉnh sửa ghi chú, đánh giá & danh mục riêng" onClick={() => openEditEntry(item, i)}><Icon name="edit" size={14} /></button>
-            </div>
-            <div className="personal-body">
-              <div className="title-row"><div><h3 onClick={() => setPage("detail")} style={{ cursor: "pointer" }}>{item.title}</h3><p>{item.sub} {meta?.category && <span style={{ color: "#a984e5" }}>· #{meta.category}</span>}</p></div><div className="personal-rating">{stars}</div></div>
-              <div className="note" onClick={() => openEditEntry(item, i)} style={{ cursor: "pointer" }} title="Nhấn để sửa ghi chú cá nhân">
-                <span>GHI CHÚ CỦA TÔI ✎</span>
-                <p>“{meta?.note || (i % 2 ? "Phần hình ảnh rất đẹp, nhịp kể chậm nhưng cuốn hút..." : "Một thế giới lôi cuốn, càng đọc càng khó dứt ra...")}”</p>
+
+      {libToast && (
+        <div className="success-banner" style={{ marginTop: "18px" }}>
+          <Icon name="check" />
+          <span>{libToast}</span>
+          {lastRemovedItem && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                onRestoreToLibrary?.(lastRemovedItem);
+                setLibToast(`Đã khôi phục “${lastRemovedItem.title}” trở lại Thư viện cá nhân!`);
+                setLastRemovedItem(null);
+              }}
+            >
+              Hoàn tác (Khôi phục)
+            </Button>
+          )}
+          <button onClick={() => { setLibToast(""); setLastRemovedItem(null); }}>×</button>
+        </div>
+      )}
+
+      {/* Hàng thẻ thống kê tương tác */}
+      <div className="stats-row interactive-stats">
+        {views.map(item => (
+          <button
+            className={view === item.id ? "active" : ""}
+            onClick={() => {
+              setView(item.id);
+              if (item.id === "favorites") setTab("Yêu thích");
+              else if (item.id === "shared") setTab("Lưu từ chia sẻ");
+              else if (item.id === "active") setTab("Đang đọc / xem");
+              else if (item.id === "all") setTab("Tất cả");
+            }}
+            key={item.id}
+          >
+            <b>{item.value}</b>
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Thanh Tab Sàng lọc theo Trạng thái, Lưu từ chia sẻ & Toàn bộ Danh mục riêng */}
+      <div className="category-tabs">
+        {systemTabs.map(t => (
+          <button
+            key={t.key}
+            className={view !== "categories" && tab === t.key ? "active" : ""}
+            onClick={() => { setView("all"); setTab(t.key); }}
+          >
+            {t.badge && <span>{t.badge}</span>}
+            {t.label}
+            <span className="tab-count">{t.count}</span>
+          </button>
+        ))}
+        {categories.map(cat => (
+          <button
+            key={cat.name}
+            className={view !== "categories" && tab === cat.name ? "active" : ""}
+            onClick={() => { setView("all"); setTab(cat.name); }}
+          >
+            <span>{cat.icon}</span>
+            {cat.name}
+            <small>RIÊNG</small>
+            <span className="tab-count">{getCategoryCount(cat.name)}</span>
+          </button>
+        ))}
+      </div>
+
+      <section className="recent-history">
+        <SectionTitle eyebrow="HOẠT ĐỘNG GẦN ĐÂY" title="Lịch sử đọc / xem gần đây" action="Xem toàn bộ" />
+        <div className="history-track">
+          {items.slice(0, 10).map((item, i) => (
+            <button className="history-card" key={item.title} onClick={() => setPage("detail")}>
+              <img src={item.img} alt={item.title} />
+              <div>
+                <span>{item.type === "Truyện" ? "MANGA" : "MOVIE"} · {i < 2 ? "Vừa xong" : `${i + 1} giờ trước`}</span>
+                <b>{item.title}</b>
+                <p>{item.type === "Truyện" ? `Chương ${85 - i}` : `Tập ${Math.max(1, 10 - i)}`}</p>
+                <div className="progress"><i style={{ width: `${88 - i * 6}%` }} /></div>
               </div>
-              {i === 2 && <div className="shared-by" onClick={() => onOpenPublicProfile?.("@lananh")} style={{ cursor: "pointer" }}>Được chia sẻ bởi <b>@lananh (Xem thư viện ↗)</b></div>}
-              {view === "active" && <div className="active-progress"><span>{item.type === "Truyện" ? `Chương ${85 - i}/100` : `Tập ${8 + i}/12`}</span><div className="progress"><i style={{ width: `${78 - i * 8}%` }} /></div><Button variant="secondary" icon="play" onClick={() => setPage("detail")}>{item.type === "Truyện" ? "Đọc tiếp" : "Xem tiếp"}</Button></div>}
-              <div style={{ display: "flex", gap: "6px", marginTop: "auto" }}>
-                <button className={`privacy ${i === 2 ? "community" : i === 4 ? "people" : ""}`} style={{ flex: 1, marginTop: 0 }} onClick={() => setModal(true)}>{i === 2 ? "◎ Chia sẻ cộng đồng" : i === 4 ? "♙ Chia sẻ riêng" : "▣ Riêng tư"}<Icon name="chevron" size={14} /></button>
-                <button className="icon-btn" style={{ width: "32px", height: "32px" }} title="Gửi chia sẻ qua Tin nhắn" onClick={() => onOpenShareToChat?.(item)}><Icon name="send" size={14} /></button>
-              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="library-toolbar">
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <p style={{ margin: 0 }}>
+            <b>{view === "categories" ? "Quản lý Danh mục riêng" : `Đang lọc: ${tab}`}</b> ·{" "}
+            {view === "categories" ? `${categories.length} danh mục` : `${shownItems.length} tác phẩm`}
+          </p>
+          {view !== "categories" && isCustomCategoryTab && (
+            <Button variant="secondary" icon="plus" onClick={() => setAssigningCategoryName(tab)}>
+              Thêm truyện/phim vào “{tab}”
+            </Button>
+          )}
+          {view !== "categories" && tab === "Lưu từ chia sẻ" && (
+            <Button variant="secondary" icon="share" onClick={() => onOpenPublicProfile?.("@lananh")}>
+              + Lưu thêm từ thư viện bạn bè
+            </Button>
+          )}
+        </div>
+
+        {view !== "categories" && (
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <div className="segment">
+              {(["Tất cả", "Truyện", "Phim"] as const).map(tp => (
+                <button key={tp} className={typeFilter === tp ? "active" : ""} onClick={() => setTypeFilter(tp)}>{tp}</button>
+              ))}
             </div>
-          </article>;
-        })}
-      </div>}
+            <label>
+              <Icon name="search" size={16} />
+              <input value={libSearch} onChange={e => setLibSearch(e.target.value)} placeholder="Tìm tên, tác giả trong thư viện..." />
+            </label>
+            <button onClick={() => setSortBy(sortBy === "newest" ? "rating" : sortBy === "rating" ? "az" : "newest")}>
+              Sắp xếp: {sortBy === "newest" ? "Mới nhất" : sortBy === "rating" ? "Điểm cá nhân ★" : "Tên A → Z"} <Icon name="chevron" size={15} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* GIAO DIỆN QUẢN LÝ DANH MỤC RIÊNG */}
+      {view === "categories" ? (
+        <div className="category-grid">
+          {categories.map((category, i) => {
+            const count = getCategoryCount(category.name);
+            return (
+              <article className="category-card" key={category.name}>
+                <div className="category-icon">{category.icon}</div>
+                <div>
+                  <span>DANH MỤC RIÊNG</span>
+                  <h3>{category.name}</h3>
+                  <p>{category.description}</p>
+                  <b>{count} tác phẩm trong danh mục</b>
+                </div>
+                <div className="category-actions">
+                  <Button variant="secondary" onClick={() => { setTab(category.name); setView("all"); }}>
+                    Xem ({count})
+                  </Button>
+                  <Button icon="plus" onClick={() => setAssigningCategoryName(category.name)}>
+                    Thêm tác phẩm
+                  </Button>
+                  <button title="Chỉnh sửa danh mục" onClick={() => setCategoryModal({ index: i, name: category.name, icon: category.icon, description: category.description })}>
+                    <Icon name="edit" size={15} />
+                  </button>
+                  <button title="Xóa danh mục" onClick={() => handleDeleteCategory(category.name, i)}>
+                    <Icon name="x" size={15} />
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : shownItems.length === 0 ? (
+        <div className="empty-results">
+          <Icon name="book" size={28} />
+          <b>Chưa có tác phẩm nào trong mục “{tab}”</b>
+          <p>
+            {isCustomCategoryTab
+              ? `Bạn có thể nhấn nút bên dưới để chọn thêm truyện hoặc phim từ thư viện vào danh mục “${tab}”.`
+              : "Hãy thử đổi bộ lọc hoặc lưu thêm tác phẩm mới từ kho cộng đồng và thư viện bạn bè."}
+          </p>
+          <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginTop: "10px" }}>
+            {isCustomCategoryTab && (
+              <Button icon="plus" onClick={() => setAssigningCategoryName(tab)}>
+                + Thêm truyện/phim vào “{tab}”
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => { setTab("Tất cả"); setView("all"); setTypeFilter("Tất cả"); setLibSearch(""); }}>
+              Xem tất cả thư viện
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="personal-grid">
+          {shownItems.map((item, i) => {
+            const meta = getItemMeta(item);
+            const stars = "★".repeat(meta.rating) + "☆".repeat(5 - meta.rating);
+            return (
+              <article className="personal-card" key={`${item.title}-${i}`}>
+                <div className="personal-poster">
+                  <img src={item.img} alt={item.title} onClick={() => setPage("detail")} style={{ cursor: "pointer" }} />
+                  <span className={`status ${meta.readingStatus === "Hoàn thành" ? "done" : meta.readingStatus === "Drop" ? "drop" : ""}`}>
+                    {meta.readingStatus}
+                  </span>
+                  <FavoriteButton active={favorites.includes(item.title)} toggle={() => toggleFavorite(item.title)} />
+                  <button className="more" title="Chỉnh sửa ghi chú, đánh giá & danh mục riêng" onClick={() => openEditEntry(item)}>
+                    <Icon name="edit" size={14} />
+                  </button>
+                </div>
+
+                <div className="personal-body">
+                  <div className="title-row">
+                    <div>
+                      <h3 onClick={() => setPage("detail")} style={{ cursor: "pointer" }}>{item.title}</h3>
+                      <p>{item.type} · {item.sub}</p>
+                    </div>
+                    <div className="personal-rating" title={`Điểm cá nhân: ${meta.rating}/5 sao`}>{stars}</div>
+                  </div>
+
+                  {/* Danh sách các Danh mục riêng của tác phẩm + Nút gỡ nhanh khỏi danh mục + Nút thêm vào danh mục */}
+                  <div className="lib-cat-chips">
+                    {meta.categories.map(catName => (
+                      <span key={catName} className="lib-cat-chip" onClick={() => { setTab(catName); setView("all"); }} style={{ cursor: "pointer" }}>
+                        #{catName}
+                        <button
+                          type="button"
+                          title={`Gỡ khỏi danh mục ${catName}`}
+                          onClick={e => {
+                            e.stopPropagation();
+                            toggleItemInCategory(item, catName);
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      className="lib-cat-add"
+                      title="Thêm hoặc gỡ khỏi các danh mục riêng"
+                      onClick={() => setQuickAssignItem(item)}
+                    >
+                      + Danh mục
+                    </button>
+                  </div>
+
+                  {/* Nhãn hiển thị nếu tác phẩm được lưu từ phần chia sẻ của người khác */}
+                  {item.sharedFrom && (
+                    <div
+                      className="shared-source-box"
+                      onClick={() => onOpenPublicProfile?.(item.sharedFrom!.user)}
+                      title={`Xem thư viện công khai của ${item.sharedFrom.name}`}
+                    >
+                      <span>🌐 Lưu từ chia sẻ của <b>{item.sharedFrom.name} ({item.sharedFrom.user})</b></span>
+                      <span>Xem hồ sơ ↗</span>
+                    </div>
+                  )}
+
+                  <div className="note" onClick={() => openEditEntry(item)} style={{ cursor: "pointer" }} title="Nhấn để sửa ghi chú cá nhân">
+                    <span>GHI CHÚ CỦA TÔI ✎</span>
+                    <p>“{meta.note}”</p>
+                  </div>
+
+                  {/* Nếu đang xem trong 1 tab Danh mục riêng cụ thể, hiển thị nút gỡ nhanh khỏi danh mục đó */}
+                  {isCustomCategoryTab && (
+                    <button
+                      type="button"
+                      className="btn-remove-cat"
+                      onClick={() => toggleItemInCategory(item, tab)}
+                    >
+                      <Icon name="x" size={12} /> Gỡ khỏi danh mục “{tab}”
+                    </button>
+                  )}
+
+                  {view === "active" && (
+                    <div className="active-progress">
+                      <span>{item.type === "Truyện" ? `Chương ${85 - i}/100` : `Tập ${8 + i}/12`}</span>
+                      <div className="progress"><i style={{ width: `${78 - i * 8}%` }} /></div>
+                      <Button variant="secondary" icon="play" onClick={() => setPage("detail")}>
+                        {item.type === "Truyện" ? "Đọc tiếp" : "Xem tiếp"}
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="card-bottom-actions">
+                    <button
+                      className={`privacy ${meta.privacy === "SHARED" ? "community" : meta.privacy === "PEOPLE" ? "people" : ""}`}
+                      style={{ flex: 1, marginTop: 0 }}
+                      onClick={() => setModal(true)}
+                    >
+                      {meta.privacy === "SHARED" ? "◎ Chia sẻ cộng đồng" : meta.privacy === "PEOPLE" ? "♙ Chia sẻ riêng" : "▣ Riêng tư"}
+                      <Icon name="chevron" size={14} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      style={{ width: "30px", height: "30px" }}
+                      title="Gửi chia sẻ qua Tin nhắn Chat"
+                      onClick={() => onOpenShareToChat?.(item)}
+                    >
+                      <Icon name="send" size={14} />
+                    </button>
+                    <button
+                      className="btn-remove-lib"
+                      title="Xóa tác phẩm này khỏi Thư viện cá nhân"
+                      onClick={() => setConfirmDeleteItem(item)}
+                    >
+                      <Icon name="x" size={14} />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
+
     {modal && <ShareModal close={() => setModal(false)} />}
 
-    {/* MODAL TẠO / SỬA DANH MỤC CÁ NHÂN */}
-    {categoryModal && <div className="modal-backdrop" onMouseDown={() => setCategoryModal(null)}>
-      <div className="admin-modal-wide" style={{ width: "460px" }} onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><div><span>PHÂN LOẠI CÁ NHÂN</span><h2>{categoryModal.index === null ? "Tạo Danh Mục Riêng" : "Chỉnh sửa Danh Mục"}</h2><p>Tự tạo kệ sách/phim theo chủ đề yêu thích của riêng bạn.</p></div><button className="icon-btn" onClick={() => setCategoryModal(null)}><Icon name="x" /></button></div>
-        <label className="admin-field"><span>Tên danh mục *</span><input value={categoryModal.name} onChange={e => setCategoryModal({ ...categoryModal, name: e.target.value })} placeholder="VD: Kệ truyện trinh thám cày đêm..." /></label>
-        <div className="admin-field">
-          <span>Chọn biểu tượng (Icon)</span>
-          <div className="icon-picker">
-            {["☾", "◇", "◫", "✦", "⌕", "♙", "♥", "⚡"].map(ic => <button key={ic} type="button" className={categoryModal.icon === ic ? "active" : ""} onClick={() => setCategoryModal({ ...categoryModal, icon: ic })}>{ic}</button>)}
+    {/* MODAL 1: TẠO / SỬA DANH MỤC CÁ NHÂN */}
+    {categoryModal && (
+      <div className="modal-backdrop" onMouseDown={() => setCategoryModal(null)}>
+        <div className="admin-modal-wide" style={{ width: "460px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>PHÂN LOẠI CÁ NHÂN</span>
+              <h2>{categoryModal.index === null ? "Tạo Danh Mục Riêng" : "Chỉnh sửa Danh Mục"}</h2>
+              <p>Tự tạo kệ sách/phim theo chủ đề yêu thích của riêng bạn.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setCategoryModal(null)}><Icon name="x" /></button>
+          </div>
+          <label className="admin-field">
+            <span>Tên danh mục *</span>
+            <input value={categoryModal.name} onChange={e => setCategoryModal({ ...categoryModal, name: e.target.value })} placeholder="VD: Kệ truyện trinh thám cày đêm..." />
+          </label>
+          <div className="admin-field">
+            <span>Chọn biểu tượng (Icon)</span>
+            <div className="icon-picker">
+              {["☾", "◇", "◫", "✦", "⌕", "♙", "♥", "⚡"].map(ic => (
+                <button key={ic} type="button" className={categoryModal.icon === ic ? "active" : ""} onClick={() => setCategoryModal({ ...categoryModal, icon: ic })}>{ic}</button>
+              ))}
+            </div>
+          </div>
+          <label className="admin-field">
+            <span>Mô tả ngắn</span>
+            <textarea value={categoryModal.description} onChange={e => setCategoryModal({ ...categoryModal, description: e.target.value })} placeholder="Mô tả cho danh mục này..." />
+          </label>
+          <div className="modal-actions">
+            <div />
+            <div>
+              <Button variant="ghost" onClick={() => setCategoryModal(null)}>Hủy</Button>
+              <Button icon="check" onClick={saveCategoryModal}>Lưu danh mục</Button>
+            </div>
           </div>
         </div>
-        <label className="admin-field"><span>Mô tả ngắn</span><textarea value={categoryModal.description} onChange={e => setCategoryModal({ ...categoryModal, description: e.target.value })} placeholder="Mô tả cho danh mục này..." /></label>
-        <div className="modal-actions"><div /><div><Button variant="ghost" onClick={() => setCategoryModal(null)}>Hủy</Button><Button icon="check" onClick={saveCategoryModal}>Lưu danh mục</Button></div></div>
       </div>
-    </div>}
+    )}
 
-    {/* MODAL SỬA GHI CHÚ CÁ NHÂN, ĐÁNH GIÁ SAO & TRẠNG THÁI TRONG THƯ VIỆN */}
-    {editingEntry && <div className="modal-backdrop" onMouseDown={() => setEditingEntry(null)}>
-      <div className="admin-modal-wide" style={{ width: "500px" }} onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><div><span>DỮ LIỆU CÁ NHÂN ĐỘC LẬP</span><h2>Tùy chỉnh Bản lưu Cá nhân</h2><p>“{editingEntry.item.title}” — Thay đổi tại đây không ảnh hưởng tới dữ liệu gốc của người khác.</p></div><button className="icon-btn" onClick={() => setEditingEntry(null)}><Icon name="x" /></button></div>
-        <div className="admin-field-two">
-          <label className="admin-field"><span>Trạng thái đọc / xem</span>
-            <select value={editingEntry.readingStatus} onChange={e => setEditingEntry({ ...editingEntry, readingStatus: e.target.value })}>
-              <option value="Muốn đọc / xem">Muốn đọc / xem (PLAN_TO_READ)</option>
-              <option value="Đang đọc / xem">Đang đọc / xem (READING)</option>
-              <option value="Hoàn thành">Đã hoàn thành (COMPLETED)</option>
-              <option value="Drop">Đã tạm bỏ (DROPPED)</option>
-            </select>
-          </label>
-          <label className="admin-field"><span>Thuộc danh mục riêng</span>
-            <select value={editingEntry.category} onChange={e => setEditingEntry({ ...editingEntry, category: e.target.value })}>
-              {categories.map(c => <option key={c.name} value={c.name}>{c.icon} {c.name}</option>)}
-            </select>
-          </label>
-        </div>
-        <div className="admin-field">
-          <span>Đánh giá cá nhân ({editingEntry.rating} / 5 sao)</span>
-          <div className="star-picker">
-            {[1, 2, 3, 4, 5].map(num => <button key={num} type="button" className={editingEntry.rating >= num ? "active" : ""} onClick={() => setEditingEntry({ ...editingEntry, rating: num })}>★ {num}</button>)}
+    {/* MODAL 2: THÊM / GỠ NHANH DANH MỤC CHO 1 TÁC PHẨM */}
+    {quickAssignItem && (
+      <div className="modal-backdrop" onMouseDown={() => setQuickAssignItem(null)}>
+        <div className="admin-modal-wide" style={{ width: "480px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>PHÂN LOẠI VÀO KỆ RIÊNG</span>
+              <h2>Gán Danh Mục: {quickAssignItem.title}</h2>
+              <p>Chọn một hoặc nhiều danh mục riêng cho tác phẩm này.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setQuickAssignItem(null)}><Icon name="x" /></button>
+          </div>
+          <div className="assign-list">
+            {categories.map(cat => {
+              const assigned = getItemMeta(quickAssignItem).categories.includes(cat.name);
+              return (
+                <div key={cat.name} className={`assign-row ${assigned ? "assigned" : ""}`}>
+                  <div className="assign-row-left">
+                    <div className="category-icon" style={{ width: "34px", height: "34px", fontSize: "15px" }}>{cat.icon}</div>
+                    <div>
+                      <b>{cat.name}</b>
+                      <span>{cat.description}</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant={assigned ? "secondary" : "primary"}
+                    icon={assigned ? "check" : "plus"}
+                    onClick={() => toggleItemInCategory(quickAssignItem, cat.name)}
+                  >
+                    {assigned ? "Đã có (Gỡ ra)" : "Thêm vào"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="modal-actions">
+            <Button variant="secondary" icon="plus" onClick={() => { setQuickAssignItem(null); setCategoryModal({ index: null, name: "", icon: "✦", description: "" }); }}>
+              + Tạo danh mục mới
+            </Button>
+            <Button icon="check" onClick={() => setQuickAssignItem(null)}>Hoàn tất</Button>
           </div>
         </div>
-        <label className="admin-field"><span>Ghi chú cá nhân của bạn</span>
-          <textarea value={editingEntry.note} onChange={e => setEditingEntry({ ...editingEntry, note: e.target.value })} placeholder="Viết cảm nhận riêng, số tập đang dừng, hoặc lời nhắc cho bản thân..." />
-        </label>
-        <div className="modal-actions"><div /><div><Button variant="ghost" onClick={() => setEditingEntry(null)}>Hủy</Button><Button icon="check" onClick={saveEditEntry}>Lưu vào thư viện</Button></div></div>
       </div>
-    </div>}
+    )}
+
+    {/* MODAL 3: THÊM HÀNG LOẠT TRUYỆN / PHIM VÀO 1 DANH MỤC CỤ THỂ */}
+    {assigningCategoryName && (
+      <div className="modal-backdrop" onMouseDown={() => setAssigningCategoryName(null)}>
+        <div className="admin-modal-wide" style={{ width: "540px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>QUẢN LÝ TÁC PHẨM TRONG DANH MỤC</span>
+              <h2>Danh mục: “{assigningCategoryName}”</h2>
+              <p>Chọn các bộ truyện/phim trong thư viện để thêm vào hoặc gỡ khỏi danh mục này.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setAssigningCategoryName(null)}><Icon name="x" /></button>
+          </div>
+          <div className="assign-list">
+            {items.map(item => {
+              const inCat = getItemMeta(item).categories.includes(assigningCategoryName);
+              return (
+                <div key={item.title} className={`assign-row ${inCat ? "assigned" : ""}`}>
+                  <div className="assign-row-left">
+                    <img src={item.img} alt={item.title} />
+                    <div>
+                      <b>{item.title}</b>
+                      <span>{item.type} · {item.sub} {item.sharedFrom ? `· 🌐 Từ ${item.sharedFrom.user}` : ""}</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant={inCat ? "secondary" : "primary"}
+                    icon={inCat ? "check" : "plus"}
+                    onClick={() => toggleItemInCategory(item, assigningCategoryName)}
+                  >
+                    {inCat ? "Đã có (Gỡ khỏi mục)" : "Thêm vào danh mục"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="modal-actions">
+            <div />
+            <Button icon="check" onClick={() => { setTab(assigningCategoryName); setView("all"); setAssigningCategoryName(null); }}>
+              Xem danh mục “{assigningCategoryName}”
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL 4: XÁC NHẬN XÓA KHỎI THƯ VIỆN CÁ NHÂN */}
+    {confirmDeleteItem && (
+      <div className="modal-backdrop" onMouseDown={() => setConfirmDeleteItem(null)}>
+        <div className="confirm-dialog" onMouseDown={e => e.stopPropagation()}>
+          <div className="danger-symbol"><Icon name="flag" /></div>
+          <h2>Xóa khỏi Thư viện?</h2>
+          <p>
+            Bạn có chắc muốn xóa <b>“{confirmDeleteItem.title}”</b> khỏi Thư viện cá nhân? Toàn bộ ghi chú riêng và phân loại danh mục của bộ này sẽ bị gỡ bỏ.
+          </p>
+          <div>
+            <Button variant="ghost" onClick={() => setConfirmDeleteItem(null)}>Hủy</Button>
+            <Button variant="danger" onClick={() => handleDeleteFromLibrary(confirmDeleteItem)}>Xóa khỏi thư viện</Button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL 5: SỬA GHI CHÚ CÁ NHÂN, ĐÁNH GIÁ SAO, TRẠNG THÁI & DANH MỤC TRONG THƯ VIỆN */}
+    {editingEntry && (
+      <div className="modal-backdrop" onMouseDown={() => setEditingEntry(null)}>
+        <div className="admin-modal-wide" style={{ width: "520px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>DỮ LIỆU CÁ NHÂN ĐỘC LẬP</span>
+              <h2>Tùy chỉnh Bản lưu Cá nhân</h2>
+              <p>“{editingEntry.item.title}” — Thay đổi tại đây không ảnh hưởng tới dữ liệu gốc của người khác.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setEditingEntry(null)}><Icon name="x" /></button>
+          </div>
+          <div className="admin-field-two">
+            <label className="admin-field">
+              <span>Trạng thái đọc / xem</span>
+              <select value={editingEntry.readingStatus} onChange={e => setEditingEntry({ ...editingEntry, readingStatus: e.target.value })}>
+                <option value="Muốn đọc / xem">Muốn đọc / xem (PLAN_TO_READ)</option>
+                <option value="Đang đọc / xem">Đang đọc / xem (READING)</option>
+                <option value="Hoàn thành">Đã hoàn thành (COMPLETED)</option>
+                <option value="Drop">Đã tạm bỏ (DROPPED)</option>
+              </select>
+            </label>
+            <label className="admin-field">
+              <span>Quyền hiển thị bản lưu này</span>
+              <select value={editingEntry.privacy} onChange={e => setEditingEntry({ ...editingEntry, privacy: e.target.value as "PRIVATE" | "SHARED" | "PEOPLE" })}>
+                <option value="PRIVATE">▣ Riêng tư (Chỉ mình tôi)</option>
+                <option value="SHARED">◎ Chia sẻ cộng đồng (Công khai)</option>
+                <option value="PEOPLE">♙ Chia sẻ riêng cho bạn bè</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="admin-field">
+            <span>Thuộc các Danh mục riêng ({editingEntry.categories.length} đã chọn)</span>
+            <div className="admin-genre-picks" style={{ marginTop: "6px" }}>
+              {categories.map(c => {
+                const active = editingEntry.categories.includes(c.name);
+                return (
+                  <button
+                    key={c.name}
+                    type="button"
+                    className={active ? "active" : ""}
+                    onClick={() => {
+                      const next = active
+                        ? editingEntry.categories.filter(x => x !== c.name)
+                        : [...editingEntry.categories, c.name];
+                      setEditingEntry({ ...editingEntry, categories: next });
+                    }}
+                  >
+                    {c.icon} {c.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="admin-field">
+            <span>Đánh giá cá nhân ({editingEntry.rating} / 5 sao)</span>
+            <div className="star-picker">
+              {[1, 2, 3, 4, 5].map(num => (
+                <button key={num} type="button" className={editingEntry.rating >= num ? "active" : ""} onClick={() => setEditingEntry({ ...editingEntry, rating: num })}>
+                  ★ {num}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="admin-field">
+            <span>Ghi chú cá nhân của bạn</span>
+            <textarea value={editingEntry.note} onChange={e => setEditingEntry({ ...editingEntry, note: e.target.value })} placeholder="Viết cảm nhận riêng, số tập đang dừng, hoặc lời nhắc cho bản thân..." />
+          </label>
+          <div className="modal-actions">
+            <Button variant="danger" onClick={() => { const target = editingEntry.item; setEditingEntry(null); setConfirmDeleteItem(target); }}>
+              Xóa khỏi thư viện
+            </Button>
+            <div>
+              <Button variant="ghost" onClick={() => setEditingEntry(null)}>Hủy</Button>
+              <Button icon="check" onClick={saveEditEntry}>Lưu vào thư viện</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
   </main>;
 }
 
@@ -613,7 +1255,15 @@ function SettingsPage({ setPage }: { setPage: (page: string) => void }) {
   </div>{confirm && <div className="modal-backdrop"><div className="confirm-dialog"><div className="danger-symbol"><Icon name="flag" /></div><h2>{confirm} tài khoản?</h2><p>Hành động này có ảnh hưởng lớn đến tài khoản và dữ liệu của bạn. Bạn có chắc muốn tiếp tục?</p><div><Button variant="ghost" onClick={() => setConfirm("")}>Hủy</Button><Button variant="danger" onClick={() => { setConfirm(""); setPage("login"); }}>Xác nhận</Button></div></div></div>}</main>;
 }
 
-function AuthPage({ mode, setPage, onAuthenticated }: { mode: "login" | "register"; setPage: (page: string) => void; onAuthenticated: () => void }) {
+function AuthPage({
+  mode,
+  setPage,
+  onAuthenticated,
+}: {
+  mode: "login" | "register";
+  setPage: (page: string) => void;
+  onAuthenticated: (role: "USER" | "ADMIN") => void;
+}) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -621,31 +1271,67 @@ function AuthPage({ mode, setPage, onAuthenticated }: { mode: "login" | "registe
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  const detectRoleFromInput = (input: string): "USER" | "ADMIN" => {
+    const normalized = input.trim().toLowerCase();
+    return normalized.includes("admin") || normalized === "huy.nguyen@example.com" || normalized === "@huynguyen"
+      ? "ADMIN"
+      : "USER";
+  };
+
   const submit = () => {
     setError(""); setSuccess("");
     if (!email || !password) return setError("Vui lòng điền đầy đủ các trường bắt buộc.");
-    if (email.includes("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError("Định dạng email không hợp lệ.");
+    if (email.includes("@") && !email.startsWith("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError("Định dạng email không hợp lệ.");
     if (mode === "register" && password !== confirmPassword) return setError("Mật khẩu xác nhận không trùng khớp.");
     setLoading(true);
+    const resolvedRole = mode === "login" ? detectRoleFromInput(email) : "USER";
     window.setTimeout(() => {
       setLoading(false);
       if (mode === "login" && email.toLowerCase().includes("wrong")) setError("Email hoặc mật khẩu không chính xác.");
       else {
-        setSuccess(mode === "login" ? "Đăng nhập thành công. Đang chuyển đến trang chủ..." : "Đăng ký thành công! Bạn có thể đăng nhập ngay.");
-        if (mode === "login") window.setTimeout(() => { onAuthenticated(); setPage("home"); }, 700);
+        setSuccess(
+          mode === "login"
+            ? `Đăng nhập thành công (${resolvedRole === "ADMIN" ? "Quản trị viên - ADMIN" : "Người dùng - USER"}). Đang chuyển trang...`
+            : "Đăng ký thành công! Bạn có thể đăng nhập ngay."
+        );
+        if (mode === "login") window.setTimeout(() => { onAuthenticated(resolvedRole); setPage("home"); }, 600);
       }
-    }, 650);
+    }, 550);
   };
   return <main className="auth-page"><div className="auth-visual"><img src={photos.hero} alt="" /><div className="auth-overlay" /><div><Brand /><p>“Mỗi câu chuyện là một thế giới.<br />Hãy lưu giữ thế giới của riêng bạn.”</p><span>HƠN 12.000 TÁC PHẨM ĐANG CHỜ BẠN</span></div></div>
     <section className="auth-panel"><div className="auth-form"><span>{mode === "login" ? "CHÀO MỪNG TRỞ LẠI" : "TẠO TÀI KHOẢN"}</span><h1>{mode === "login" ? "Tiếp tục hành trình" : "Bắt đầu câu chuyện"}</h1><p>{mode === "login" ? "Đăng nhập để trở lại thư viện của bạn." : "Tham gia cộng đồng yêu truyện và điện ảnh."}</p>
       {error && <div className="form-error">! {error}</div>}
       {success && <div className="form-success"><Icon name="check" size={15} /> {success}</div>}
       {mode === "register" && <><label className="auth-field"><span>Tên hiển thị</span><input placeholder="Nguyễn Huy" /></label><label className="auth-field"><span>Tên người dùng</span><input placeholder="@username" /></label></>}
-      <label className="auth-field"><span>Email {mode === "login" && "hoặc tên người dùng"}</span><input value={email} onChange={e => setEmail(e.target.value)} type="text" placeholder={mode === "login" ? "Email hoặc @username" : "you@example.com"} /></label>
+      <label className="auth-field"><span>Email {mode === "login" && "hoặc tên người dùng"}</span><input value={email} onChange={e => setEmail(e.target.value)} type="text" placeholder={mode === "login" ? "VD: user@library.local hoặc admin@library.local" : "you@example.com"} /></label>
       <label className="auth-field"><span>Mật khẩu</span><div><input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Tối thiểu 8 ký tự" /><button onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Ẩn" : "Hiện"}</button></div></label>
       {mode === "register" && <label className="auth-field"><span>Xác nhận mật khẩu</span><input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Nhập lại mật khẩu" /></label>}
       <div className="auth-options"><label><input type="checkbox" /> {mode === "login" ? "Ghi nhớ đăng nhập" : "Tôi đồng ý với Điều khoản & Chính sách"}</label>{mode === "login" && <button>Quên mật khẩu?</button>}</div>
-      <Button className="auth-submit" onClick={success ? () => { if (mode === "login") onAuthenticated(); setPage(mode === "login" ? "home" : "login"); } : submit}>{loading ? "Đang xử lý..." : success ? mode === "login" ? "Vào trang chủ" : "Đến đăng nhập" : mode === "login" ? "Đăng nhập" : "Đăng ký"}</Button>
+      <Button className="auth-submit" onClick={success ? () => { if (mode === "login") onAuthenticated(detectRoleFromInput(email)); setPage(mode === "login" ? "home" : "login"); } : submit}>{loading ? "Đang xử lý..." : success ? mode === "login" ? "Vào trang chủ" : "Đến đăng nhập" : mode === "login" ? "Đăng nhập" : "Đăng ký"}</Button>
+      {mode === "login" && (
+        <div style={{ marginTop: "14px", padding: "12px", borderRadius: "10px", background: "#140f1e", border: "1px solid #2f2540" }}>
+          <div style={{ fontSize: "9px", color: "#9c8fb0", marginBottom: "8px", fontWeight: 600, textAlign: "center" }}>
+            ĐĂNG NHẬP NHANH THEO PHÂN QUYỀN (DEMO ROLE):
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            <Button
+              variant="secondary"
+              icon="users"
+              onClick={() => { onAuthenticated("USER"); setPage("home"); }}
+            >
+              Người dùng (USER)
+            </Button>
+            <Button
+              variant="secondary"
+              icon="settings"
+              onClick={() => { onAuthenticated("ADMIN"); setPage("admin"); }}
+            >
+              Quản trị (ADMIN)
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="auth-switch">{mode === "login" ? "Chưa có tài khoản?" : "Đã có tài khoản?"}<button onClick={() => setPage(mode === "login" ? "register" : "login")}>{mode === "login" ? "Đăng ký ngay" : "Đăng nhập"}</button></div>
     </div></section>
   </main>;
@@ -1757,16 +2443,41 @@ function PublicProfilePage({
   const [toast, setToast] = useState("");
   const [isFriend, setIsFriend] = useState(true);
 
-  const sharedItems = items
-    .filter((_, idx) => idx % 3 !== 2) // Ẩn các mục Riêng tư (Private) của người dùng đó
+  const friendExclusiveItems: ContentItem[] = [
+    {
+      title: "Hành Tinh Pha Lê",
+      type: "Phim",
+      sub: "Movie · 2025",
+      genres: ["Sci-Fi", "Adventure"],
+      score: "4.9",
+      status: "Hoàn thành",
+      img: photos.city,
+      sharedFrom: { name: profile.name, user: profile.user, sharedAt: "Vừa lưu" },
+    },
+    {
+      title: "Tiệm Cầm Đồ Thời Gian",
+      type: "Truyện",
+      sub: "K. Takahashi",
+      genres: ["Fantasy", "Mystery", "Drama"],
+      score: "4.8",
+      status: "Muốn đọc / xem",
+      img: photos.lantern,
+      sharedFrom: { name: profile.name, user: profile.user, sharedAt: "Vừa lưu" },
+    },
+  ];
+
+  const sharedItems = [...friendExclusiveItems, ...items.filter((_, idx) => idx % 3 !== 2)]
     .filter(item => filterType === "Tất cả" || item.type === filterType);
 
   const handleCopyToMyLibrary = (item: ContentItem) => {
     if (!savedTitles.includes(item.title)) {
       setSavedTitles([...savedTitles, item.title]);
-      onSaveSharedItem(item);
     }
-    setToast(`Đã lưu bản sao tham chiếu “${item.title}” từ thư viện của ${profile.name} về Thư viện cá nhân của bạn!`);
+    onSaveSharedItem({
+      ...item,
+      sharedFrom: { name: profile.name, user: profile.user, sharedAt: "Vừa lưu" },
+    });
+    setToast(`Đã lưu “${item.title}” từ chia sẻ của ${profile.name} (${profile.user}) vào Thư viện của tôi!`);
     window.setTimeout(() => setToast(""), 3800);
   };
 
@@ -2200,6 +2911,7 @@ function ReportModal({
 export default function App() {
   const [page, setPage] = useState("login");
   const [authenticated, setAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState<"USER" | "ADMIN">("USER");
   const [favorites, setFavorites] = useState<string[]>(["Nightfall City", "Lồng Đèn Đỏ"]);
   const [allContents, setAllContents] = useState<ContentItem[]>(libraryItems);
   const [publishedTitle, setPublishedTitle] = useState("");
@@ -2227,7 +2939,32 @@ export default function App() {
   };
 
   const toggleFavorite = (title: string) => setFavorites(current => current.includes(title) ? current.filter(x => x !== title) : [...current, title]);
-  const navigate = (target: string) => { if (target === "login") setAuthenticated(false); setPage(target); };
+
+  const navigate = (target: string) => {
+    if (target === "login") {
+      setAuthenticated(false);
+      setPage(target);
+      return;
+    }
+    if (target === "admin" && userRole !== "ADMIN") {
+      showGlobalToast("Bạn đang đăng nhập với quyền Người dùng (USER). Mục Quản trị chỉ dành riêng cho Quản trị viên (ADMIN)!");
+      setPage("home");
+      return;
+    }
+    setPage(target);
+  };
+
+  const handleSwitchRole = (nextRole: "USER" | "ADMIN") => {
+    setUserRole(nextRole);
+    if (nextRole === "USER" && page === "admin") {
+      setPage("home");
+    }
+    showGlobalToast(
+      nextRole === "ADMIN"
+        ? "Đã chuyển sang quyền Quản trị viên (ADMIN) — Mục Quản trị đã được hiển thị trên thanh điều hướng."
+        : "Đã chuyển sang quyền Người dùng (USER) — Mục Quản trị đã được ẩn khỏi giao diện."
+    );
+  };
 
   const openPublicProfile = (username: string) => {
     setPublicProfileUser(username);
@@ -2243,11 +2980,26 @@ export default function App() {
     setPage(item.targetPage);
   };
 
-  if (!authenticated || page === "login" || page === "register") return <div className="app"><AuthPage mode={page === "register" ? "register" : "login"} setPage={navigate} onAuthenticated={() => setAuthenticated(true)} /></div>;
+  if (!authenticated || page === "login" || page === "register") {
+    return (
+      <div className="app">
+        <AuthPage
+          mode={page === "register" ? "register" : "login"}
+          setPage={navigate}
+          onAuthenticated={role => {
+            setUserRole(role);
+            setAuthenticated(true);
+          }}
+        />
+      </div>
+    );
+  }
   return <div className="app">
     <Navbar
       page={page}
       setPage={navigate}
+      userRole={userRole}
+      onSwitchRole={handleSwitchRole}
       onOpenSearch={() => setSearchOpen(true)}
       notifications={notifications}
       onMarkAllRead={markAllNotificationsRead}
@@ -2269,6 +3021,8 @@ export default function App() {
         items={allContents}
         onOpenPublicProfile={openPublicProfile}
         onOpenShareToChat={item => setShareModalItem(item)}
+        onRemoveFromLibrary={title => setAllContents(prev => prev.filter(x => x.title !== title))}
+        onRestoreToLibrary={item => setAllContents(prev => (prev.some(x => x.title === item.title) ? prev : [item, ...prev]))}
       />
     )}
     {page === "detail" && (
@@ -2295,9 +3049,13 @@ export default function App() {
         setPage={navigate}
         items={allContents}
         onSaveSharedItem={item => {
-          if (!allContents.some(x => x.title === item.title)) {
-            setAllContents([item, ...allContents]);
-          }
+          setAllContents(prev => {
+            const exists = prev.some(x => x.title === item.title);
+            if (exists) {
+              return prev.map(x => (x.title === item.title ? { ...x, sharedFrom: item.sharedFrom ?? x.sharedFrom } : x));
+            }
+            return [item, ...prev];
+          });
         }}
         onOpenShareToChat={item => setShareModalItem(item)}
       />
@@ -2310,7 +3068,7 @@ export default function App() {
         onReadNotification={markNotificationRead}
       />
     )}
-    {page === "admin" && <AdminPage setPage={navigate} contents={allContents} setContents={setAllContents} />}
+    {page === "admin" && userRole === "ADMIN" && <AdminPage setPage={navigate} contents={allContents} setContents={setAllContents} />}
     {page === "publish" && <PublishPage setPage={navigate} onPublish={item => { setAllContents(current => [item, ...current]); setPublishedTitle(item.title); navigate("detail"); }} />}
 
     {searchOpen && (
