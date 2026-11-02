@@ -984,6 +984,7 @@ export type UserProfile = {
   name: string;
   username: string;
   email: string;
+  password?: string;
   avatar: string;
   role: "USER" | "ADMIN";
   bio?: string;
@@ -1018,6 +1019,7 @@ export function loadSavedCurrentUser(): UserProfile {
     name: "Anh Quý Phi",
     username: "@anhquyphi",
     email: "lechauanh.12a5.tnd@gmail.com",
+    password: "doraemon1234@",
     avatar: photos.red,
     role: "USER",
     bio: "Thành viên Mê Truyện Stories Unbound",
@@ -3947,13 +3949,43 @@ function AuthPage({
     setSuccess("");
     const targetEmail = email.trim();
     if (!targetEmail) {
-      setError("Vui lòng nhập địa chỉ Email trước khi nhận mã OTP.");
+      setError("Vui lòng nhập địa chỉ Email hoặc Tên người dùng trước khi nhận mã OTP.");
       return;
     }
     if (targetEmail.includes("@") && !targetEmail.startsWith("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
       setError("Định dạng email không hợp lệ để gửi mã OTP.");
       return;
     }
+
+    // Ở chế độ Đăng nhập: Kiểm tra xem tài khoản có tồn tại không trước khi gửi OTP
+    if (mode === "login") {
+      const savedAccounts = loadSavedAccounts();
+      const isMainAcc = targetEmail.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
+                        targetEmail.toLowerCase() === "@anhquyphi" ||
+                        targetEmail.toLowerCase() === "anhquyphi";
+      const exists = isMainAcc || savedAccounts.some(
+        a => a.email.toLowerCase() === targetEmail.toLowerCase() ||
+             a.username.toLowerCase() === targetEmail.toLowerCase() ||
+             a.username.toLowerCase() === ("@" + targetEmail).toLowerCase()
+      );
+      if (!exists) {
+        setError(`❌ Tài khoản “${targetEmail}” chưa từng được đăng ký trong hệ thống! Vui lòng chuyển sang tab Đăng ký để tạo tài khoản mới.`);
+        return;
+      }
+    }
+
+    // Ở chế độ Đăng ký: Kiểm tra xem email đã được đăng ký chưa
+    if (mode === "register") {
+      const savedAccounts = loadSavedAccounts();
+      const alreadyExists = savedAccounts.some(
+        a => a.email.toLowerCase() === targetEmail.toLowerCase()
+      );
+      if (alreadyExists) {
+        setError(`❌ Email “${targetEmail}” đã tồn tại trong hệ thống! Vui lòng chuyển sang tab Đăng nhập.`);
+        return;
+      }
+    }
+
     const newCode = generateSecureOtp6();
     setGeneratedOtp(newCode);
     setOtpDigits(["", "", "", "", "", ""]);
@@ -4088,16 +4120,28 @@ function AuthPage({
 
         let resolvedProfile: UserProfile;
         if (mode === "register") {
-          const isLeChauAnh = email.toLowerCase().includes("lechauanh") || usernameInput.toLowerCase().includes("anhquyphi");
+          const inputEmail = email.trim().toLowerCase();
           const cleanUser = usernameInput.trim()
             ? (usernameInput.trim().startsWith("@") ? usernameInput.trim() : "@" + usernameInput.trim())
-            : (isLeChauAnh ? "@anhquyphi" : "@" + email.trim().split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase());
+            : "@" + inputEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
+          const savedAccounts = loadSavedAccounts();
+          const isExisted = savedAccounts.some(
+            a => a.email.toLowerCase() === inputEmail ||
+                 a.username.toLowerCase() === cleanUser.toLowerCase()
+          );
+          if (isExisted) {
+            setError(`❌ Email “${inputEmail}” hoặc Tên người dùng “${cleanUser}” đã được đăng ký trước đó! Vui lòng chuyển sang tab Đăng nhập.`);
+            return;
+          }
+
+          const isLeChauAnh = inputEmail.includes("lechauanh") || usernameInput.toLowerCase().includes("anhquyphi");
           const cleanName = displayName.trim() || (isLeChauAnh ? "Anh Quý Phi" : cleanUser.replace(/^@/, ""));
           resolvedProfile = {
             id: "usr-" + Date.now().toString(36),
             name: cleanName,
             username: cleanUser,
-            email: email.trim().toLowerCase(),
+            email: inputEmail,
+            password: password.trim(),
             avatar: photos.red,
             role: "USER",
             bio: "Thành viên Mê Truyện Stories Unbound",
@@ -4109,43 +4153,46 @@ function AuthPage({
           const inputTrim = email.trim();
           const isLeChauAnh = inputTrim.toLowerCase().includes("lechauanh") || inputTrim.toLowerCase().includes("anhquyphi");
           const savedAccounts = loadSavedAccounts();
-          const matched = savedAccounts.find(
+          let matched = savedAccounts.find(
             a => a.email.toLowerCase() === inputTrim.toLowerCase() ||
                  a.username.toLowerCase() === inputTrim.toLowerCase() ||
                  a.username.toLowerCase() === ("@" + inputTrim).toLowerCase()
           );
-          if (matched) {
-            resolvedProfile = {
-              ...matched,
-              role: resolvedRole,
-              name: isLeChauAnh ? "Anh Quý Phi" : matched.name,
-              username: isLeChauAnh ? "@anhquyphi" : matched.username,
-            };
-          } else {
-            const isEmail = inputTrim.includes("@") && !inputTrim.startsWith("@");
-            const userHandle = isLeChauAnh
-              ? "@anhquyphi"
-              : isEmail
-              ? "@" + inputTrim.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase()
-              : (inputTrim.startsWith("@") ? inputTrim : "@" + inputTrim);
-            const defaultName = isLeChauAnh
-              ? "Anh Quý Phi"
-              : isEmail
-              ? inputTrim.split("@")[0]
-              : inputTrim.replace(/^@/, "");
-            resolvedProfile = {
-              id: "usr-" + Date.now().toString(36),
-              name: defaultName,
-              username: userHandle,
-              email: isEmail ? inputTrim : `${defaultName}@library.local`,
+
+          if (!matched && isLeChauAnh) {
+            matched = {
+              id: "usr-anhquyphi",
+              name: "Anh Quý Phi",
+              username: "@anhquyphi",
+              email: "lechauanh.12a5.tnd@gmail.com",
+              password: "doraemon1234@",
               avatar: photos.red,
-              role: resolvedRole,
+              role: "USER",
               bio: "Thành viên Mê Truyện Stories Unbound",
               joinedDate: "Hôm nay",
-              userId: "USR-" + Math.floor(1000 + Math.random() * 9000),
+              userId: "USR-3604",
             };
-            saveAccountToStorage(resolvedProfile);
+            saveAccountToStorage(matched);
           }
+
+          // Chặn tuyệt đối nếu tài khoản chưa từng được đăng ký trong hệ thống
+          if (!matched) {
+            setError(`❌ Tài khoản “${inputTrim}” chưa được đăng ký trong hệ thống! Vui lòng chuyển sang tab “Đăng ký ngay” để tạo tài khoản.`);
+            return;
+          }
+
+          // Kiểm tra mật khẩu khớp với mật khẩu đã đăng ký
+          if (matched.password && matched.password !== password.trim()) {
+            setError("❌ Mật khẩu không chính xác! Vui lòng kiểm tra lại mật khẩu bạn đã đăng ký.");
+            return;
+          }
+
+          resolvedProfile = {
+            ...matched,
+            role: resolvedRole,
+            name: isLeChauAnh ? "Anh Quý Phi" : matched.name,
+            username: isLeChauAnh ? "@anhquyphi" : matched.username,
+          };
         }
 
         setActiveCurrentUserProfile(resolvedProfile);
