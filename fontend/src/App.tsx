@@ -164,18 +164,7 @@ function Navbar({
             <button onClick={() => { setPage("admin"); setAccountOpen(false); }}><Icon name="settings" size={16} />Bảng điều khiển Quản trị</button>
           )}
           <button onClick={() => { setPage("settings"); setAccountOpen(false); }}><Icon name="settings" size={16} />Setting</button>
-          <button
-            style={{ color: "#c4a5ff", borderTop: "1px solid #2b2236", marginTop: "4px", paddingTop: "8px" }}
-            onClick={() => {
-              const nextRole = userRole === "ADMIN" ? "USER" : "ADMIN";
-              onSwitchRole(nextRole);
-              setAccountOpen(false);
-            }}
-          >
-            <Icon name="lock" size={16} />
-            {userRole === "ADMIN" ? "Chuyển sang quyền USER" : "Chuyển sang quyền ADMIN"}
-          </button>
-          <button className="logout" onClick={() => { setPage("login"); setAccountOpen(false); }}><Icon name="arrow" size={16} />Đăng xuất</button>
+          <button className="logout" style={{ borderTop: "1px solid #2b2236", marginTop: "4px", paddingTop: "8px" }} onClick={() => { setPage("login"); setAccountOpen(false); }}><Icon name="arrow" size={16} />Đăng xuất</button>
         </div>}
       </div>
     </div>
@@ -4001,17 +3990,12 @@ function AuthPage({
         body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
       });
       if (resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        if (data.sentViaSmtp) {
-          setSuccess(`✅ Đã gửi mã OTP 6 chữ số tới hộp thư ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
-        } else {
-          setSuccess(`📧 Đã tạo mã OTP xác minh cho ${targetEmail}! (Mã xác thực của bạn: ${newCode})`);
-        }
+        setSuccess(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
       } else {
-        setSuccess(`📧 Đã tạo mã OTP xác thực cho ${targetEmail}! (Mã bảo mật: ${newCode})`);
+        setSuccess(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
       }
     } catch {
-      setSuccess(`📧 Đã tạo mã OTP xác thực cho ${targetEmail}! (Mã bảo mật: ${newCode})`);
+      setSuccess(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
     }
   };
 
@@ -4149,6 +4133,21 @@ function AuthPage({
             userId: "USR-" + Math.floor(1000 + Math.random() * 9000),
           };
           saveAccountToStorage(resolvedProfile);
+
+          // Tự động đồng bộ tài khoản vào bảng `users` trong CSDL MySQL qua Backend API
+          fetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              username: cleanUser.replace(/^@/, ""),
+              email: inputEmail,
+              password: password.trim(),
+              displayName: cleanName,
+              otpCode: otpDigits.join(""),
+              e2eePublicKey: "E2EE_PUB_" + fingerprint,
+              e2eeKeyFingerprint: fingerprint,
+            }),
+          }).catch(() => {});
         } else {
           const inputTrim = email.trim();
           const isLeChauAnh = inputTrim.toLowerCase().includes("lechauanh") || inputTrim.toLowerCase().includes("anhquyphi");
@@ -4204,8 +4203,29 @@ function AuthPage({
         );
 
         if (mode === "login") {
+          // Tự động đồng bộ quyền role mới nhất từ CSDL MySQL (nếu bạn sửa role thành ADMIN trong phpMyAdmin)
+          fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              usernameOrEmail: email.trim(),
+              password: password.trim(),
+            }),
+          })
+            .then(res => res.json())
+            .then(data => {
+              const dbRole = data?.data?.user?.role;
+              if (dbRole === "ADMIN" || dbRole === "USER") {
+                resolvedProfile.role = dbRole;
+                setActiveCurrentUserProfile(resolvedProfile);
+                saveAccountToStorage(resolvedProfile);
+                onAuthenticated(dbRole, resolvedProfile);
+              }
+            })
+            .catch(() => {});
+
           window.setTimeout(() => {
-            onAuthenticated(resolvedRole, resolvedProfile);
+            onAuthenticated(resolvedProfile.role || resolvedRole, resolvedProfile);
             setPage("home");
           }, 600);
         }
@@ -7147,9 +7167,22 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   const [userSearch, setUserSearch] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState("ALL");
   const [userStatusFilter, setUserStatusFilter] = useState("ALL");
-  const [users, setUsers] = useState<AdminUserItem[]>([
-    { id: 1, name: CURRENT_USER_NAME, username: CURRENT_USER_HANDLE, email: "huy.nguyen@example.com", avatar: photos.red, bio: "Quản trị viên hệ thống Mê Truyện.", role: "ADMIN", status: "ACTIVE", joinedAt: "18/08/2023" },
-  ]);
+  const [users, setUsers] = useState<AdminUserItem[]>(() => {
+    const active = getActiveUser();
+    const saved = loadSavedAccounts();
+    const list = saved.length > 0 ? saved : [active];
+    return list.map((acc, idx) => ({
+      id: idx + 1,
+      name: acc.name,
+      username: acc.username,
+      email: acc.email,
+      avatar: acc.avatar || photos.red,
+      bio: acc.bio || (idx === 0 ? "Quản trị viên hệ thống Mê Truyện." : "Thành viên Mê Truyện."),
+      role: (acc.role || (idx === 0 ? "ADMIN" : "USER")) as "USER" | "ADMIN",
+      status: "ACTIVE" as const,
+      joinedAt: acc.joinedDate || "18/08/2023",
+    }));
+  });
   const [editingUser, setEditingUser] = useState<AdminUserItem | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({ name: "", username: "", email: "", role: "USER" as "USER" | "ADMIN", status: "ACTIVE" as "ACTIVE" | "LOCKED" | "BANNED", bio: "" });
