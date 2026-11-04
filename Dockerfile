@@ -4,12 +4,15 @@
 FROM maven:3.9.6-eclipse-temurin-17 AS builder
 WORKDIR /workspace
 
+# Cấu hình mirror Google Cloud Maven Central để tránh lỗi rate limit 429 Too Many Requests từ repo.maven.apache.org
+COPY backend/settings.xml /root/.m2/settings.xml
+
 # Sao chép mã nguồn backend
 COPY backend/pom.xml .
 COPY backend/src ./src
 
-# Đóng gói file .jar (bỏ qua unit tests để build nhanh)
-RUN mvn clean package -DskipTests
+# Đóng gói file .jar (bỏ qua unit tests để build nhanh, dùng Google mirror)
+RUN mvn clean package -DskipTests -s /root/.m2/settings.xml
 
 # ==========================================
 # 2. Giai đoạn Thực thi (Runtime Stage)
