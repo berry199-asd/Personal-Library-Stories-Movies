@@ -16,14 +16,30 @@ public interface ContentService {
             ContentStatus status,
             Long genreId,
             Long currentUserId,
+            String currentUsername,
             Pageable pageable
     );
+
+    default PageResponse<ContentResponse> searchContents(
+            String keyword,
+            ContentType contentType,
+            ContentStatus status,
+            Long genreId,
+            Long currentUserId,
+            Pageable pageable
+    ) {
+        return searchContents(keyword, contentType, status, genreId, currentUserId, null, pageable);
+    }
 
     PageResponse<ContentResponse> getAllContentsForAdmin(Pageable pageable);
 
     PageResponse<ContentResponse> getMyPublishedContents(Long userId, Pageable pageable);
 
-    ContentResponse getContentDetail(Long id, Long currentUserId, boolean isAdmin);
+    ContentResponse getContentDetail(Long id, Long currentUserId, String currentUsername, boolean isAdmin);
+
+    default ContentResponse getContentDetail(Long id, Long currentUserId, boolean isAdmin) {
+        return getContentDetail(id, currentUserId, null, isAdmin);
+    }
 
     ContentResponse createContent(ContentRequest request, Long creatorUserId);
 

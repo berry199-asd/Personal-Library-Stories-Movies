@@ -16,6 +16,69 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
     @Override
     public void run(String... args) {
         migratePosterUrlToLongText();
+        migrateSharedUsersColumn();
+        migrateUserAvatarUrlToLongText();
+        migrateClientMessageIdColumn();
+        migrateMessageAttachmentColumns();
+    }
+
+    public synchronized void migrateSharedUsersColumn() {
+        try {
+            log.info("Checking contents table schema for shared_users column...");
+            jdbcTemplate.execute("ALTER TABLE contents ADD COLUMN shared_users TEXT");
+            log.info("Successfully added contents.shared_users column.");
+        } catch (Exception ex) {
+            log.info("contents.shared_users already exists or error handled: {}", ex.getMessage());
+        }
+    }
+
+    public synchronized void migrateUserAvatarUrlToLongText() {
+        try {
+            log.info("Checking users table schema for avatar_url LONGTEXT...");
+            jdbcTemplate.execute("ALTER TABLE users MODIFY COLUMN avatar_url LONGTEXT");
+            log.info("Successfully updated users.avatar_url to LONGTEXT.");
+        } catch (Exception ex) {
+            log.warn("Notice in migrateUserAvatarUrlToLongText: {}", ex.getMessage());
+        }
+    }
+
+    public synchronized void migrateClientMessageIdColumn() {
+        try {
+            log.info("Checking messages table schema for client_message_id column...");
+            jdbcTemplate.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS client_message_id VARCHAR(100)");
+            log.info("Successfully ensured messages.client_message_id exists.");
+        } catch (Exception ex) {
+            log.warn("Notice in migrateClientMessageIdColumn: {}", ex.getMessage());
+        }
+    }
+
+    public synchronized void migrateMessageAttachmentColumns() {
+        try {
+            log.info("Checking messages and message_attachments schema for image attachments...");
+            try {
+                jdbcTemplate.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_url LONGTEXT");
+            } catch (Exception ex) {
+                log.warn("Notice adding messages.attachment_url: {}", ex.getMessage());
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255)");
+            } catch (Exception ex) {
+                log.warn("Notice adding messages.attachment_name: {}", ex.getMessage());
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50)");
+            } catch (Exception ex) {
+                log.warn("Notice adding messages.attachment_type: {}", ex.getMessage());
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE message_attachments MODIFY COLUMN external_url LONGTEXT");
+            } catch (Exception ex) {
+                log.warn("Notice modifying message_attachments.external_url: {}", ex.getMessage());
+            }
+            log.info("Successfully updated schema for chat attachments.");
+        } catch (Exception ex) {
+            log.warn("Notice in migrateMessageAttachmentColumns: {}", ex.getMessage());
+        }
     }
 
     public synchronized void migratePosterUrlToLongText() {

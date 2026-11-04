@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,39 @@ public class ContentServiceImpl implements ContentService {
     private final SeasonRepository seasonRepository;
     private final ReviewRepository reviewRepository;
     private final UserRepository userRepository;
+    private final JdbcTemplate jdbcTemplate;
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<ContentResponse> searchContents(
+            String keyword,
+            ContentType contentType,
+            ContentStatus status,
+            Long genreId,
+            Long currentUserId,
+            String currentUsername,
+            Pageable pageable
+    ) {
+        String normalizedKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        String normalizedUsername = (currentUsername != null && !currentUsername.isBlank())
+                ? currentUsername.trim().replace("@", "").toLowerCase()
+                : null;
+        Page<Content> page = contentRepository.searchAccessibleContents(
+                normalizedKeyword,
+                contentType,
+                status,
+                genreId,
+                currentUserId,
+                normalizedUsername,
+                pageable
+        );
+        Page<ContentResponse> mapped = page.map(c -> ContentResponse.fromEntity(
+                c,
+                reviewRepository.calculateAverageRating(c.getId()),
+                true
+        ));
+        return PageResponse.fromPage(mapped);
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -45,21 +79,7 @@ public class ContentServiceImpl implements ContentService {
             Long currentUserId,
             Pageable pageable
     ) {
-        String normalizedKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
-        Page<Content> page = contentRepository.searchAccessibleContents(
-                normalizedKeyword,
-                contentType,
-                status,
-                genreId,
-                currentUserId,
-                pageable
-        );
-        Page<ContentResponse> mapped = page.map(c -> ContentResponse.fromEntity(
-                c,
-                reviewRepository.calculateAverageRating(c.getId()),
-                true
-        ));
-        return PageResponse.fromPage(mapped);
+        return searchContents(keyword, contentType, status, genreId, currentUserId, null, pageable);
     }
 
     @Override
@@ -100,21 +120,41 @@ public class ContentServiceImpl implements ContentService {
 
     @Override
     @Transactional(readOnly = true)
-    public ContentResponse getContentDetail(Long id, Long currentUserId, boolean isAdmin) {
+    public ContentResponse getContentDetail(Long id, Long currentUserId, String currentUsername, boolean isAdmin) {
         Content content = contentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy truyện/phim #" + id));
 
-        if (!isAdmin && content.getVisibility() == ContentVisibility.PRIVATE) {
+        if (!isAdmin) {
             boolean isCreator = currentUserId != null
                     && content.getCreatedBy() != null
                     && content.getCreatedBy().getId().equals(currentUserId);
-            if (!isCreator) {
-                throw new BadRequestException("Nội dung này đang ở chế độ Riêng tư (Private)");
+
+            if (content.getVisibility() == ContentVisibility.PRIVATE) {
+                if (!isCreator) {
+                    throw new BadRequestException("Nội dung này đang ở chế độ Riêng tư (Private)");
+                }
+            } else if (content.getVisibility() == ContentVisibility.SHARED) {
+                boolean isShared = false;
+                if (currentUsername != null && content.getSharedUsers() != null) {
+                    String clean = currentUsername.trim().replace("@", "").toLowerCase();
+                    isShared = java.util.Arrays.stream(content.getSharedUsers().toLowerCase().split(","))
+                            .map(s -> s.trim().replace("@", ""))
+                            .anyMatch(u -> u.equals(clean));
+                }
+                if (!isCreator && !isShared) {
+                    throw new BadRequestException("Nội dung này được chia sẻ riêng, bạn không có quyền truy cập");
+                }
             }
         }
 
         Double avgRating = reviewRepository.calculateAverageRating(content.getId());
         return ContentResponse.fromEntity(content, avgRating, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ContentResponse getContentDetail(Long id, Long currentUserId, boolean isAdmin) {
+        return getContentDetail(id, currentUserId, null, isAdmin);
     }
 
     @Override
@@ -128,6 +168,11 @@ public class ContentServiceImpl implements ContentService {
             genres.addAll(genreRepository.findAllById(request.getGenreIds()));
         }
 
+        String sharedUsersStr = null;
+        if (request.getSharedWithUsers() != null && !request.getSharedWithUsers().isEmpty()) {
+            sharedUsersStr = String.join(",", request.getSharedWithUsers());
+        }
+
         Content content = Content.builder()
                 .title(request.getTitle().trim())
                 .contentType(request.getContentType())
@@ -138,6 +183,7 @@ public class ContentServiceImpl implements ContentService {
                 .status(request.getStatus() != null ? request.getStatus() : ContentStatus.ONGOING)
                 .externalMainLink(request.getExternalMainLink())
                 .visibility(request.getVisibility() != null ? request.getVisibility() : ContentVisibility.PUBLIC)
+                .sharedUsers(sharedUsersStr)
                 .createdBy(creator)
                 .genres(genres)
                 .build();
@@ -191,6 +237,9 @@ public class ContentServiceImpl implements ContentService {
         if (request.getStatus() != null) content.setStatus(request.getStatus());
         if (request.getExternalMainLink() != null) content.setExternalMainLink(request.getExternalMainLink());
         if (request.getVisibility() != null) content.setVisibility(request.getVisibility());
+        if (request.getSharedWithUsers() != null) {
+            content.setSharedUsers(String.join(",", request.getSharedWithUsers()));
+        }
 
         if (request.getGenreIds() != null) {
             Set<Genre> genres = new HashSet<>(genreRepository.findAllById(request.getGenreIds()));
@@ -236,7 +285,85 @@ public class ContentServiceImpl implements ContentService {
         Content content = contentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy truyện/phim #" + id));
         verifyOwnerOrAdmin(content, actorUserId, isAdmin);
-        contentRepository.delete(content);
+        deleteContentCascade(id);
+    }
+
+    private void deleteContentCascade(Long contentId) {
+        log.info("Executing safe cascade delete for content #{}", contentId);
+        try {
+            jdbcTemplate.update("UPDATE messages SET shared_content_id = NULL WHERE shared_content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice updating messages for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("UPDATE message_attachments SET content_id = NULL WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice updating message_attachments for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM reading_progress WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting reading_progress for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM reviews WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting reviews for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM sharing_permissions WHERE user_library_id IN (SELECT id FROM user_libraries WHERE content_id = ?)", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting sharing_permissions for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM user_libraries WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting user_libraries for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM user_favorites WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting user_favorites for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM reports WHERE target_type = 'CONTENT' AND target_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting reports for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM chapters WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting chapters for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM seasons WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting seasons for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM content_links WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting content_links for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM content_genres WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting content_genres for content #{}: {}", contentId, e.getMessage());
+        }
+
+        int affected = jdbcTemplate.update("DELETE FROM contents WHERE id = ?", contentId);
+        log.info("Successfully deleted content #{} from MySQL, affected rows: {}", contentId, affected);
     }
 
     @Override

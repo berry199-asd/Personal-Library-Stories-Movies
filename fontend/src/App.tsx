@@ -269,18 +269,38 @@ export type UserProfile = {
 
 const CURRENT_USER_STORAGE_KEY = "pl_current_user_v2";
 const REGISTERED_ACCOUNTS_KEY = "pl_registered_accounts_v2";
-// Tự động dọn sạch blacklist local cũ để 2 tài khoản/profile luôn đồng bộ dữ liệu thật từ Cloud TiDB
-try {
-  window.localStorage.removeItem("pl_deleted_titles_v1");
-  window.localStorage.removeItem("pl_deleted_titles");
-} catch {}
+const DELETED_TITLES_STORAGE_KEY = "pl_deleted_titles_v2";
 
 export function getDeletedTitles(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(DELETED_TITLES_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set(arr.map(t => String(t).trim().toLowerCase()));
+      }
+    }
+  } catch {}
   return new Set();
 }
 
-export function addDeletedTitle(_title: string) {}
-export function removeDeletedTitle(_title: string) {}
+export function addDeletedTitle(title: string) {
+  if (!title || !title.trim()) return;
+  try {
+    const current = getDeletedTitles();
+    current.add(title.trim().toLowerCase());
+    window.localStorage.setItem(DELETED_TITLES_STORAGE_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+export function removeDeletedTitle(title: string) {
+  if (!title || !title.trim()) return;
+  try {
+    const current = getDeletedTitles();
+    current.delete(title.trim().toLowerCase());
+    window.localStorage.setItem(DELETED_TITLES_STORAGE_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
 
 export function mapGenresToIds(genres?: string[]): number[] {
   if (!genres || !Array.isArray(genres)) return [];
@@ -316,6 +336,9 @@ export function packContentDescription(item: Partial<ContentItem>): string {
     personalNote: item.personalNote || "",
     genres: Array.isArray(item.genres) ? item.genres : [],
     externalLinks: (item.externalLinks || []).filter(l => (l.url && l.url.trim()) || (l.platform && l.platform.trim())),
+    sharedWithUsers: Array.isArray(item.sharedWithUsers) ? item.sharedWithUsers : [],
+    visibility: item.visibility || "PUBLIC",
+    allowComments: item.allowComments ?? true,
   };
   return JSON.stringify(meta);
 }
@@ -333,6 +356,9 @@ export function unpackContentDescription(rawDesc?: string): {
   personalNote: string;
   genres: string[];
   externalLinks: ExternalLinkItem[];
+  sharedWithUsers: string[];
+  visibility: "PUBLIC" | "PRIVATE" | "SHARED";
+  allowComments: boolean;
 } {
   const fallback = {
     shortDescription: "",
@@ -347,6 +373,9 @@ export function unpackContentDescription(rawDesc?: string): {
     personalNote: "",
     genres: [] as string[],
     externalLinks: [] as ExternalLinkItem[],
+    sharedWithUsers: [] as string[],
+    visibility: "PUBLIC" as const,
+    allowComments: true,
   };
 
   if (!rawDesc || !rawDesc.trim()) return fallback;
@@ -369,6 +398,9 @@ export function unpackContentDescription(rawDesc?: string): {
         personalNote: parsed.personalNote || "",
         genres: Array.isArray(parsed.genres) ? parsed.genres : [],
         externalLinks: Array.isArray(parsed.externalLinks) ? parsed.externalLinks : [],
+        sharedWithUsers: Array.isArray(parsed.sharedWithUsers) ? parsed.sharedWithUsers : [],
+        visibility: parsed.visibility === "PRIVATE" ? "PRIVATE" : parsed.visibility === "SHARED" ? "SHARED" : "PUBLIC",
+        allowComments: parsed.allowComments ?? true,
       };
     } catch {}
   }
@@ -786,13 +818,28 @@ function FilterCollection({
   const sourcePool = compact
     ? savedItems
     : Array.from(new Map([...pool, ...savedItems].map(item => [item.title, item])).values());
-  const filtered = sourcePool.filter(
-    item =>
+  const activeUser = getActiveUser();
+  const myUsername = (activeUser?.username || "").trim().toLowerCase().replace(/^@/, "");
+  const isAdmin = activeUser?.role === "ADMIN" || activeUser?.username === "@anhquyphi";
+
+  const filtered = sourcePool.filter(item => {
+    if (item.visibility === "PRIVATE") {
+      if (!isUserItemOwner(item, activeUser) && !isAdmin) return false;
+    } else if (item.visibility === "SHARED") {
+      const isOwner = isUserItemOwner(item, activeUser);
+      const isShared = Array.isArray(item.sharedWithUsers) && item.sharedWithUsers.some(
+        u => u.trim().toLowerCase().replace(/^@/, "") === myUsername
+      );
+      if (!isOwner && !isAdmin && !isShared) return false;
+    }
+
+    return (
       item.title.toLocaleLowerCase("vi").includes(search.toLocaleLowerCase("vi")) &&
       (type === "Tất cả" || item.type === type) &&
       (status === "Tất cả" || item.status === status) &&
       genres.every(g => item.genres.includes(g))
-  );
+    );
+  });
   const chooseType = (value: string) => {
     setType(value);
     setGenres(current => current.filter(g => (value === "Truyện" ? mangaGenres : value === "Phim" ? movieGenres : allGenres).includes(g)));
@@ -2812,6 +2859,7 @@ function DetailPage({
   favorites = [],
   userRole = "USER",
   currentUser,
+  setPage,
   onUpdateProgress,
   onUpdatePublishedContent,
   onDeletePublishedContent,
@@ -2828,6 +2876,7 @@ function DetailPage({
   favorites?: string[];
   userRole?: "USER" | "ADMIN";
   currentUser?: UserProfile;
+  setPage?: (page: string) => void;
   onUpdateProgress?: (title: string, nextUnit: number, maxUnits: number) => void;
   onUpdatePublishedContent?: (oldTitle: string, updated: ContentItem) => void;
   onDeletePublishedContent?: (title: string) => void;
@@ -2876,11 +2925,50 @@ function DetailPage({
   }
 
   const currentItem: ContentItem = matchedItem;
+  const myUsername = (activeUser?.username || "").trim().toLowerCase().replace(/^@/, '');
+  const isOwner = isUserItemOwner(currentItem, activeUser);
+  const isAdmin = userRole === "ADMIN" || activeUser?.role === "ADMIN" || activeUser?.username === "@anhquyphi";
+  const isSharedAllowed = Array.isArray(currentItem.sharedWithUsers) &&
+    currentItem.sharedWithUsers.some(u => u.trim().toLowerCase().replace(/^@/, '') === myUsername);
+
+  if (currentItem.visibility === "PRIVATE" && !isOwner && !isAdmin) {
+    return (
+      <main className="inner-page">
+        <div className="page-shell">
+          <div className="empty-results" style={{ height: "320px" }}>
+            <Icon name="lock" size={32} />
+            <b>Tác phẩm đang ở chế độ Riêng tư (Private)</b>
+            <p>Chỉ người sở hữu tác phẩm mới có quyền truy cập và xem nội dung này.</p>
+            <div style={{ marginTop: "12px" }}>
+              <Button onClick={() => setPage ? setPage("home") : undefined}>Về trang chủ</Button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (currentItem.visibility === "SHARED" && !isOwner && !isAdmin && !isSharedAllowed) {
+    return (
+      <main className="inner-page">
+        <div className="page-shell">
+          <div className="empty-results" style={{ height: "320px" }}>
+            <Icon name="share" size={32} />
+            <b>Tác phẩm được chia sẻ riêng</b>
+            <p>Nội dung này chỉ dành cho những người dùng được người tạo cấp quyền truy cập.</p>
+            <div style={{ marginTop: "12px" }}>
+              <Button onClick={() => setPage ? setPage("home") : undefined}>Về trang chủ</Button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const comments: ContentCommentItem[] = currentItem.commentsList || [];
 
   const inLibrary = savedItems.some(x => x.title === currentItem.title);
   const liked = favorites.includes(currentItem.title);
-  const isOwner = isUserItemOwner(currentItem, activeUser);
   const canEditWork = canManagePublishedContent(currentItem, userRole, activeUser);
   const chapters = currentItem.chaptersList || [];
   const availableSeasons = Array.from(new Set(chapters.map(c => c.season || "Mùa 1")));
@@ -3501,6 +3589,26 @@ function AccountPage({
     onUpdateCurrentUser?.(updated);
     setShowAvatarModal(false);
     setSaved(true);
+
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const cleanUser = (profile.username || "anhquyphi").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        fetch(`${backendBase}/api/users/profile?username=${encodeURIComponent(cleanUser)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            displayName: profile.name,
+            avatarUrl: finalAvatar,
+            bio: profile.bio || ""
+          })
+        }).catch(err => console.warn("Sync avatar to backend failed:", err));
+      }
+    } catch {}
   };
 
   const handleSaveProfile = () => {
@@ -3515,6 +3623,26 @@ function AccountPage({
     onUpdateCurrentUser?.(updated);
     setEditing(false);
     setSaved(true);
+
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const cleanUser = (profile.username || "anhquyphi").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        fetch(`${backendBase}/api/users/profile?username=${encodeURIComponent(cleanUser)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            displayName: updated.name,
+            avatarUrl: updated.avatar,
+            bio: updated.bio
+          })
+        }).catch(err => console.warn("Sync profile to backend failed:", err));
+      }
+    } catch {}
   };
 
   return (
@@ -5416,6 +5544,7 @@ type ChatAttachment = {
 
 type ChatMessageItem = {
   id: string;
+  clientMessageId?: string;
   senderName: string;
   senderUser: string;
   senderAvatar: string;
@@ -5473,6 +5602,20 @@ function loadSavedConversations(): ConversationState[] {
             if (memberCount < 3) return false;
           }
           return true;
+        }).map(c => {
+          if (Array.isArray(c.messages)) {
+            const seen = new Set<string>();
+            const deduped: ChatMessageItem[] = [];
+            for (const m of c.messages) {
+              const key = m.id || m.clientMessageId || `${m.senderUser}_${m.text}_${m.time}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                deduped.push(m);
+              }
+            }
+            return { ...c, messages: deduped };
+          }
+          return c;
         });
         return valid;
       }
@@ -5635,17 +5778,61 @@ function ChatPage({
             if (msgRes.ok) {
               const msgData = await msgRes.json();
               const serverMsgs = msgData?.data;
-              if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+              if (Array.isArray(serverMsgs)) {
                 setConvList(prev => {
                   return prev.map(c => {
                     if (c.id === currentConv.id) {
-                      const existingIds = new Set(c.messages.map(m => m.id));
-                      const newOnes: ChatMessageItem[] = [];
+                      let messages = [...c.messages];
+                      let changed = false;
+                      const incomingMedia: Array<{ id: string; kind: "IMAGE" | "VIDEO"; url: string; title: string }> = [];
+
                       for (const sm of serverMsgs) {
-                        if (!existingIds.has(sm.id)) {
-                          const isMine = (sm.sender || "").toLowerCase().replace(/^@/, '') === meUser.username.toLowerCase().replace(/^@/, '');
-                          newOnes.push({
+                        const parsedAttachments: ChatAttachment[] | undefined = (sm.attachmentUrl && sm.attachmentUrl.trim()) ? [{
+                          id: `att-${sm.id}`,
+                          kind: (sm.attachmentType as "IMAGE" | "VIDEO" | "FILE") || "IMAGE",
+                          name: sm.attachmentName || "Ảnh đính kèm",
+                          url: sm.attachmentUrl,
+                          sizeLabel: "ẢNH ĐÍNH KÈM",
+                        }] : undefined;
+
+                        if (parsedAttachments) {
+                          for (const pa of parsedAttachments) {
+                            if (pa.kind === "IMAGE" || pa.kind === "VIDEO") {
+                              incomingMedia.push({
+                                id: pa.id,
+                                kind: pa.kind,
+                                url: pa.url,
+                                title: pa.name
+                              });
+                            }
+                          }
+                        }
+
+                        const isMine = (sm.sender || "").toLowerCase().replace(/^@/, '') === meUser.username.toLowerCase().replace(/^@/, '');
+
+                        // Match existing message: direct ID, clientMessageId, or recent optimistic message from sender
+                        const existingIdx = messages.findIndex(m =>
+                          m.id === sm.id ||
+                          (sm.clientMessageId && (m.clientMessageId === sm.clientMessageId || m.id === sm.clientMessageId)) ||
+                          (isMine && m.isMe && !m.systemEvent && (m.id.startsWith("msg-") && m.id.length > 15) && (m.text === sm.text || m.cipherText === sm.cipherText))
+                        );
+
+                        if (existingIdx !== -1) {
+                          const currentM = messages[existingIdx];
+                          if (currentM.id !== sm.id || (sm.clientMessageId && currentM.clientMessageId !== sm.clientMessageId) || (!currentM.attachments && parsedAttachments)) {
+                            messages[existingIdx] = {
+                              ...currentM,
+                              id: sm.id,
+                              clientMessageId: sm.clientMessageId || currentM.clientMessageId,
+                              status: "Đã gửi",
+                              attachments: currentM.attachments || parsedAttachments,
+                            };
+                            changed = true;
+                          }
+                        } else {
+                          messages.push({
                             id: sm.id,
+                            clientMessageId: sm.clientMessageId,
                             senderName: sm.senderName || sm.sender,
                             senderUser: sm.sender,
                             senderAvatar: isMine ? meUser.avatar : (peer?.avatar || photos.red),
@@ -5653,17 +5840,35 @@ function ChatPage({
                             time: sm.time || nowTimeStr(),
                             text: sm.text,
                             cipherText: sm.cipherText,
-                            status: "Đã gửi"
+                            status: "Đã gửi",
+                            attachments: parsedAttachments,
                           });
+                          changed = true;
                         }
                       }
-                      if (newOnes.length > 0) {
-                        const mergedMessages = [...c.messages, ...newOnes];
-                        const lastMsg = mergedMessages[mergedMessages.length - 1];
+
+                      // Ensure strict deduplication in memory
+                      const seen = new Set<string>();
+                      const deduped: ChatMessageItem[] = [];
+                      for (const m of messages) {
+                        const key = m.id || m.clientMessageId || `${m.senderUser}_${m.text}_${m.time}`;
+                        if (!seen.has(key)) {
+                          seen.add(key);
+                          deduped.push(m);
+                        } else {
+                          changed = true;
+                        }
+                      }
+
+                      if (changed) {
+                        const lastMsg = deduped[deduped.length - 1];
+                        const existingMediaIds = new Set(c.sharedMedia.map(m => m.url));
+                        const uniqueNewMedia = incomingMedia.filter(m => !existingMediaIds.has(m.url));
                         return {
                           ...c,
-                          text: lastMsg?.text || c.text,
-                          messages: mergedMessages
+                          text: lastMsg?.text || (lastMsg?.attachments?.length ? "Đã gửi một hình ảnh" : c.text),
+                          sharedMedia: [...uniqueNewMedia, ...c.sharedMedia],
+                          messages: deduped
                         };
                       }
                     }
@@ -5832,7 +6037,7 @@ function ChatPage({
     if (!message.trim() && stagedAttachments.length === 0) return;
     const textVal = message.trim();
     const attachmentsToSend = [...stagedAttachments];
-    const msgId = `msg-${Date.now()}`;
+    const msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
     // Nếu chưa có cuộc trò chuyện nào, không tự ý tạo nhóm 1 thành viên
     if (convList.length === 0) {
@@ -5848,6 +6053,7 @@ function ChatPage({
 
     const newMsg: ChatMessageItem = {
       id: msgId,
+      clientMessageId: msgId,
       senderName: meUser.name,
       senderUser: meUser.username,
       senderAvatar: meUser.avatar,
@@ -5867,10 +6073,10 @@ function ChatPage({
     const summaryText =
       textVal ||
       (attachmentsToSend[0]?.kind === "IMAGE"
-        ? "🖼️ Bạn: Đã gửi hình ảnh"
+        ? "Đã gửi một hình ảnh"
         : attachmentsToSend[0]?.kind === "VIDEO"
-        ? "🎬 Bạn: Đã gửi video"
-        : `📎 Bạn: Đã gửi tệp ${attachmentsToSend[0]?.name}`);
+        ? "Đã gửi một video"
+        : `Đã gửi tệp ${attachmentsToSend[0]?.name}`);
 
     const newMediaItems = attachmentsToSend
       .filter(a => a.kind === "IMAGE" || a.kind === "VIDEO")
@@ -5901,6 +6107,7 @@ function ChatPage({
     );
     const peerUserHandle = peerMember?.user || (!currentConv.group ? currentConv.name : null);
     if (peerUserHandle && !currentConv.group) {
+      const firstAtt = attachmentsToSend[0];
       fetch(`${getBackendApiBase()}/api/conversations/send-direct-message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -5909,8 +6116,28 @@ function ChatPage({
           toUser: peerUserHandle,
           text: textVal || summaryText,
           cipherText: encryptedPacket?.cipherText || "",
+          clientMessageId: msgId,
+          attachmentUrl: firstAtt?.url || "",
+          attachmentName: firstAtt?.name || "",
+          attachmentType: firstAtt?.kind || "",
         }),
-      }).catch(err => console.warn("Failed sending direct message to cloud:", err));
+      })
+      .then(res => res.json())
+      .then(data => {
+        const serverId = data?.data?.id;
+        if (serverId) {
+          broadcastAndSetConvList(prev => prev.map(c => {
+            if (c.id === targetConvId) {
+              return {
+                ...c,
+                messages: c.messages.map(m => (m.id === msgId ? { ...m, id: serverId, clientMessageId: msgId } : m))
+              };
+            }
+            return c;
+          }));
+        }
+      })
+      .catch(err => console.warn("Failed sending direct message to cloud:", err));
     }
 
     setMessage("");
@@ -6297,11 +6524,20 @@ function ChatPage({
     };
   };
 
-  const visibleMessages = currentConv.messages.filter(m =>
-    !inChatSearch.trim() ||
-    (m.text && m.text.toLowerCase().includes(inChatSearch.toLowerCase())) ||
-    m.senderName.toLowerCase().includes(inChatSearch.toLowerCase())
-  );
+  const visibleMessages = (() => {
+    const raw = currentConv.messages.filter(m =>
+      !inChatSearch.trim() ||
+      (m.text && m.text.toLowerCase().includes(inChatSearch.toLowerCase())) ||
+      m.senderName.toLowerCase().includes(inChatSearch.toLowerCase())
+    );
+    const seen = new Set<string>();
+    return raw.filter(m => {
+      const key = m.id || m.clientMessageId || `${m.senderUser}_${m.text}_${m.time}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
 
   const onlineMembersCount = currentConv.members.filter(m => m.online).length;
 
@@ -6744,7 +6980,9 @@ function ChatPage({
                   <>
                     {m.text && (
                       <>
-                        <p>{m.text}</p>
+                        {!(m.attachments && m.attachments.length > 0 && (m.text === "Đã gửi một hình ảnh" || m.text === "🖼️ Bạn: Đã gửi hình ảnh" || m.text === "🖼️ [Hình ảnh]")) && (
+                          <p>{m.text}</p>
+                        )}
                         {showCiphertextMode && (
                           <div
                             style={{
@@ -6788,7 +7026,13 @@ function ChatPage({
                           if (att.kind === "IMAGE") {
                             return (
                               <div className="att-image-card" key={att.id} onClick={() => setLightboxImage(att.url)}>
-                                <img src={att.url} alt={att.name} />
+                                <img
+                                  src={att.url}
+                                  alt={att.name}
+                                  onError={e => {
+                                    (e.currentTarget as HTMLImageElement).src = photos.city;
+                                  }}
+                                />
                                 <span>🔍 {att.name} ({att.sizeLabel})</span>
                               </div>
                             );
@@ -7901,17 +8145,30 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           const data = await res.json();
           const items = data?.data?.items;
           if (Array.isArray(items) && items.length > 0) {
-            setUsers(items.map((u: any, idx: number) => ({
-              id: u.id || idx + 1,
-              name: u.displayName || u.username,
-              username: u.username.startsWith("@") ? u.username : "@" + u.username,
-              email: u.email,
-              avatar: u.avatarUrl || photos.red,
-              bio: u.bio || (u.role === "ADMIN" ? "Quản trị viên hệ thống Mê Truyện." : "Thành viên Mê Truyện."),
-              role: (u.role === "ADMIN" ? "ADMIN" : "USER") as "USER" | "ADMIN",
-              status: "ACTIVE" as const,
-              joinedAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : "Hôm nay",
-            })));
+            const savedAccounts = loadSavedAccounts();
+            const active = getActiveUser();
+            setUsers(items.map((u: any, idx: number) => {
+              const uHandle = (u.username || "").toLowerCase().replace(/^@/, "");
+              const matchedLocal = savedAccounts.find(a => (a.username || "").toLowerCase().replace(/^@/, "") === uHandle)
+                || (((active.username || "").toLowerCase().replace(/^@/, "") === uHandle) ? active : null);
+              const customAvatar = (u.avatarUrl && u.avatarUrl.trim())
+                ? u.avatarUrl
+                : (matchedLocal?.avatar && matchedLocal.avatar.trim())
+                ? matchedLocal.avatar
+                : photos.red;
+
+              return {
+                id: u.id || idx + 1,
+                name: u.displayName || u.username,
+                username: u.username.startsWith("@") ? u.username : "@" + u.username,
+                email: u.email,
+                avatar: customAvatar,
+                bio: u.bio || (u.role === "ADMIN" ? "Quản trị viên hệ thống Mê Truyện." : "Thành viên Mê Truyện."),
+                role: (u.role === "ADMIN" ? "ADMIN" : "USER") as "USER" | "ADMIN",
+                status: "ACTIVE" as const,
+                joinedAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : "Hôm nay",
+              };
+            }));
           }
         }
       } catch {}
@@ -7970,6 +8227,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   );
   const [editingContent, setEditingContent] = useState<AdminContentItem | null>(null);
   const [managingChaptersFor, setManagingChaptersFor] = useState<AdminContentItem | null>(null);
+  const [confirmDeleteContent, setConfirmDeleteContent] = useState<{ id: number; title: string } | null>(null);
 
   // 3. STATE QUẢN LÝ THỂ LOẠI & DANH MỤC HỆ THỐNG
   const [genreList, setGenreList] = useState([
@@ -8050,6 +8308,25 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
     if (!editingUser) return;
     setUsers(users.map(u => u.id === editingUser.id ? editingUser : u));
     showToast(`Đã cập nhật thông tin và phân quyền cho tài khoản ${editingUser.username}.`);
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const cleanUser = (editingUser.username || "").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        fetch(`${backendBase}/api/users/profile?username=${encodeURIComponent(cleanUser)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            displayName: editingUser.name,
+            avatarUrl: editingUser.avatar,
+            bio: editingUser.bio || ""
+          })
+        }).catch(err => console.warn("Sync edited user to backend failed:", err));
+      }
+    } catch {}
     setEditingUser(null);
   };
 
@@ -8115,23 +8392,55 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   };
 
   const deleteContent = async (id: number, title: string) => {
-    addDeletedTitle(title);
-    const updated = adminContents.filter(c => c.id !== id);
-    syncGlobalContents(updated);
-    showToast(`Đã xóa tác phẩm “${title}” khỏi hệ thống.`);
-
     try {
       const backendBase = getBackendApiBase();
+      const token = window.localStorage.getItem("personal_library_access_token");
+      const activeUser = getActiveUser();
+      const cleanUsername = (activeUser.username || "anhquyphi").replace(/^@/, "");
+
       if (backendBase) {
-        await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title)}&actorUsername=${encodeURIComponent(getActiveUser().username)}`, {
+        const authHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        };
+
+        // Ưu tiên 1: Gọi endpoint Quản trị viên xóa theo ID
+        let res = await fetch(`${backendBase}/api/admin/contents/${id}`, {
           method: "DELETE",
-          headers: {
-            ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-          }
+          headers: authHeaders
         });
+
+        // Ưu tiên 2: Fallback endpoint contents/{id}
+        if (!res.ok) {
+          res = await fetch(`${backendBase}/api/contents/${id}?actorUsername=${encodeURIComponent(cleanUsername)}`, {
+            method: "DELETE",
+            headers: authHeaders
+          });
+        }
+
+        // Ưu tiên 3: Fallback xóa theo tiêu đề
+        if (!res.ok) {
+          res = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title)}&actorUsername=${encodeURIComponent(cleanUsername)}`, {
+            method: "DELETE",
+            headers: authHeaders
+          });
+        }
+
+        if (!res.ok) {
+          showToast(`Lỗi khi xóa tác phẩm trên máy chủ (Mã: ${res.status}). Vui lòng thử lại.`);
+          return;
+        }
       }
+
+      // Chỉ cập nhật giao diện sau khi CSDL MySQL đã xác nhận xóa thành công
+      addDeletedTitle(title);
+      removeCustomCover(title);
+      const updated = adminContents.filter(c => c.id !== id && c.title !== title);
+      syncGlobalContents(updated);
+      showToast(`Đã xóa vĩnh viễn tác phẩm “${title}” khỏi hệ thống và CSDL MySQL.`);
     } catch (err) {
-      console.warn("Admin delete content on cloud failed:", err);
+      console.warn("Admin delete content failed:", err);
+      showToast("Lỗi kết nối khi xóa tác phẩm.");
     }
   };
 
@@ -8286,7 +8595,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           <td>#{u.id}</td>
           <td>
             <div className="admin-user-cell">
-              <img src={u.avatar} alt={u.name} />
+              <img src={u.avatar} alt={u.name} onError={e => { (e.currentTarget as HTMLImageElement).src = photos.red; }} />
               <div><b>{u.name}</b> <span style={{ color: "#9c70f8" }}>{u.username}</span><br /><small style={{ color: "#756b80", fontSize: "8px" }}>{u.bio}</small></div>
             </div>
           </td>
@@ -8356,7 +8665,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
             })}>Chỉnh sửa</Button>
             <Button variant="secondary" icon="plus" onClick={() => setManagingChaptersFor({ ...item, chapters: item.chapters.map(c => ({ ...c })) })}>Cập nhật Chương/Tập</Button>
             <Button variant="ghost" onClick={() => setPage("detail")}>Xem trang</Button>
-            <Button variant="danger" onClick={() => deleteContent(item.id, item.title)}>Xóa</Button>
+            <Button variant="danger" onClick={() => setConfirmDeleteContent({ id: item.id, title: item.title })}>Xóa</Button>
           </div></td>
         </tr>)}</tbody>
       </table>
@@ -8442,6 +8751,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           <label className="admin-field"><span>Username</span><input value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} /></label>
         </div>
         <label className="admin-field"><span>Địa chỉ Email</span><input value={editingUser.email} onChange={e => setEditingUser({ ...editingUser, email: e.target.value })} /></label>
+        <label className="admin-field"><span>Ảnh đại diện (Avatar URL hoặc Base64)</span><input value={editingUser.avatar || ""} onChange={e => setEditingUser({ ...editingUser, avatar: e.target.value })} placeholder="https://... hoặc data:image/..." /></label>
         <div className="admin-field-two">
           <label className="admin-field"><span>Vai trò hệ thống (Role)</span>
             <select value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value as "USER" | "ADMIN" })}>
@@ -9014,6 +9324,30 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
         </div>
       </div>
     </div>}
+
+    {/* MODAL 5: XÁC NHẬN XÓA TÁC PHẨM KHỎI HỆ THỐNG */}
+    {confirmDeleteContent && (
+      <div className="modal-backdrop" onMouseDown={() => setConfirmDeleteContent(null)}>
+        <div className="confirm-dialog publish-confirm" onMouseDown={e => e.stopPropagation()}>
+          <div className="danger-symbol"><Icon name="x" /></div>
+          <h2>Xác nhận xóa vĩnh viễn?</h2>
+          <p>
+            Bạn có chắc chắn muốn xóa tác phẩm “<b>{confirmDeleteContent.title}</b>” khỏi toàn bộ hệ thống?
+            Toàn bộ chương, tập phim, đánh giá và dữ liệu liên quan sẽ bị xóa khỏi cơ sở dữ liệu MySQL và không thể khôi phục.
+          </p>
+          <div>
+            <Button variant="ghost" onClick={() => setConfirmDeleteContent(null)}>Hủy bỏ</Button>
+            <Button variant="danger" onClick={() => {
+              const target = confirmDeleteContent;
+              setConfirmDeleteContent(null);
+              deleteContent(target.id, target.title);
+            }}>
+              Xác nhận xóa vĩnh viễn
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
   </div></main>;
 }
 
@@ -9576,7 +9910,11 @@ function mapBackendContentToItem(c: any): ContentItem {
     personalNote: unpacked.personalNote,
     mainLink: extLink || (finalExtLinks[0]?.url) || "",
     externalLinks: finalExtLinks,
-    visibility: c.visibility || "PUBLIC",
+    visibility: (c.visibility as any) || unpacked.visibility || "PUBLIC",
+    sharedWithUsers: (Array.isArray(c.sharedWithUsers) && c.sharedWithUsers.length > 0)
+      ? c.sharedWithUsers
+      : (Array.isArray(unpacked.sharedWithUsers) ? unpacked.sharedWithUsers : []),
+    allowComments: unpacked.allowComments ?? true,
     createdBy: {
       name: c.createdByUsername || "Người đăng",
       user: createdByHandle,
@@ -9670,9 +10008,19 @@ export default function App() {
   const [globalToast, setGlobalToast] = useState("");
 
   const userLibraryItems = useMemo(() => {
-    return allContents.filter(item =>
-      isUserItemOwner(item, currentUser) || userSavedTitles.includes(item.title)
-    );
+    return allContents.filter(item => {
+      const isOwner = isUserItemOwner(item, currentUser);
+      if (isOwner) return true;
+      if (item.visibility === "PRIVATE") return false;
+      if (item.visibility === "SHARED") {
+        const myName = (currentUser.username || "").trim().toLowerCase().replace(/^@/, "");
+        const isShared = Array.isArray(item.sharedWithUsers) && item.sharedWithUsers.some(
+          u => u.trim().toLowerCase().replace(/^@/, "") === myName
+        );
+        return isShared && userSavedTitles.includes(item.title);
+      }
+      return userSavedTitles.includes(item.title);
+    });
   }, [allContents, currentUser, userSavedTitles]);
 
   useEffect(() => {
@@ -9712,8 +10060,17 @@ export default function App() {
         const backendBase = getBackendApiBase();
         if (!backendBase) return;
 
-        // 1. Lấy toàn bộ tác phẩm hiện có trên Cloud TiDB
-        const res = await fetch(`${backendBase}/api/contents?page=0&size=100`);
+        const token = window.localStorage.getItem("personal_library_access_token");
+        const cleanCreator = (currentUser.username || "berry").replace(/^@/, "");
+        const authHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        };
+
+        // 1. Lấy toàn bộ tác phẩm hiện có trên Cloud TiDB (kèm username và token để lấy đúng quyền xem PRIVATE & SHARED)
+        const res = await fetch(`${backendBase}/api/contents?page=0&size=100&currentUsername=${encodeURIComponent(cleanCreator)}`, {
+          headers: authHeaders
+        });
         if (!res.ok) return;
 
         const data = await res.json();
@@ -9735,14 +10092,11 @@ export default function App() {
           if (!existsOnServer) {
             hasUploaded = true;
             const creator = (local.createdBy && local.createdBy.user) ? local.createdBy.user : (currentUser.username || "berry");
-            const cleanCreator = creator.replace(/^@/, "");
+            const creatorClean = creator.replace(/^@/, "");
             try {
-              await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(cleanCreator)}`, {
+              await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(creatorClean)}`, {
                 method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-                },
+                headers: authHeaders,
                 body: JSON.stringify({
                   title: local.title,
                   contentType: local.type === "Phim" ? (local.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
@@ -9753,6 +10107,7 @@ export default function App() {
                   status: local.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
                   externalMainLink: local.mainLink || (local.chaptersList && local.chaptersList[0]?.url) || "",
                   visibility: local.visibility || "PUBLIC",
+                  sharedWithUsers: local.sharedWithUsers || [],
                   genreIds: mapGenresToIds(local.genres),
                   chapters: (local.chaptersList || []).map((ch, idx) => ({
                     chapterNumber: parseFloat(ch.number) || (idx + 1),
@@ -9771,7 +10126,9 @@ export default function App() {
 
         // 3. Nếu vừa upload thêm truyện mới, tải lại danh sách mới nhất từ server
         if (hasUploaded) {
-          const updatedRes = await fetch(`${backendBase}/api/contents?page=0&size=100`);
+          const updatedRes = await fetch(`${backendBase}/api/contents?page=0&size=100&currentUsername=${encodeURIComponent(cleanCreator)}`, {
+            headers: authHeaders
+          });
           if (updatedRes.ok) {
             const updatedData = await updatedRes.json();
             const updatedItems = updatedData?.data?.items || [];
@@ -9925,6 +10282,7 @@ export default function App() {
           status: updated.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
           externalMainLink: updated.mainLink || (updated.externalLinks && updated.externalLinks[0]?.url) || "",
           visibility: updated.visibility || "PUBLIC",
+          sharedWithUsers: updated.sharedWithUsers || [],
           genreIds: mapGenresToIds(updated.genres),
           chapters: (updated.chaptersList || []).map((ch, idx) => ({
             chapterNumber: parseFloat(ch.number) || (idx + 1),
@@ -10108,6 +10466,7 @@ export default function App() {
         favorites={favorites}
         userRole={userRole}
         currentUser={currentUser}
+        setPage={navigate}
         onUpdateProgress={handleUpdateProgress}
         onToggleLibrary={handleToggleSavedLibrary}
         onToggleFavorite={toggleFavorite}
@@ -10244,6 +10603,7 @@ export default function App() {
                   status: item.status === "Hoàn thành" ? "COMPLETED" : item.status === "Tạm dừng" ? "HIATUS" : "ONGOING",
                   externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
                   visibility: item.visibility || "PUBLIC",
+                  sharedWithUsers: item.sharedWithUsers || [],
                   genreIds: mapGenresToIds(item.genres),
                   chapters: (item.chaptersList || []).map((ch, idx) => ({
                     chapterNumber: parseFloat(ch.number) || (idx + 1),

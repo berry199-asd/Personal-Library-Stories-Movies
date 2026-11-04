@@ -5,6 +5,8 @@ import com.library.dto.request.UpdateProfileRequest;
 import com.library.dto.response.ApiResponse;
 import com.library.dto.response.PageResponse;
 import com.library.dto.response.UserResponse;
+import com.library.entity.User;
+import com.library.repository.UserRepository;
 import com.library.security.CustomUserDetails;
 import com.library.service.UserService;
 import jakarta.validation.Valid;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final UserRepository userRepository;
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> getMyProfile(
@@ -28,6 +31,24 @@ public class UserController {
     ) {
         UserResponse profile = userService.getCurrentUserProfile(currentUser.getId());
         return ResponseEntity.ok(ApiResponse.ok("Lấy thông tin cá nhân thành công", profile));
+    }
+
+    @PutMapping("/profile")
+    public ResponseEntity<ApiResponse<UserResponse>> updateProfileUniversal(
+            @RequestParam(required = false) String username,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @Valid @RequestBody UpdateProfileRequest request
+    ) {
+        Long userId = currentUser != null ? currentUser.getId() : null;
+        if (userId == null && username != null && !username.isBlank()) {
+            String clean = username.trim().replace("@", "").toLowerCase();
+            userId = userRepository.findByUsername(clean).map(User::getId).orElse(null);
+        }
+        if (userId == null) {
+            userId = userRepository.findAll().stream().findFirst().map(User::getId).orElse(1L);
+        }
+        UserResponse updated = userService.updateProfile(userId, request);
+        return ResponseEntity.ok(ApiResponse.ok("Cập nhật hồ sơ cá nhân thành công", updated));
     }
 
     @PutMapping("/me")
