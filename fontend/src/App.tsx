@@ -3501,6 +3501,26 @@ function AccountPage({
     onUpdateCurrentUser?.(updated);
     setShowAvatarModal(false);
     setSaved(true);
+
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const cleanUser = (profile.username || "anhquyphi").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        fetch(`${backendBase}/api/users/profile?username=${encodeURIComponent(cleanUser)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            displayName: profile.name,
+            avatarUrl: finalAvatar,
+            bio: profile.bio || ""
+          })
+        }).catch(err => console.warn("Sync avatar to backend failed:", err));
+      }
+    } catch {}
   };
 
   const handleSaveProfile = () => {
@@ -3515,6 +3535,26 @@ function AccountPage({
     onUpdateCurrentUser?.(updated);
     setEditing(false);
     setSaved(true);
+
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const cleanUser = (profile.username || "anhquyphi").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        fetch(`${backendBase}/api/users/profile?username=${encodeURIComponent(cleanUser)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            displayName: updated.name,
+            avatarUrl: updated.avatar,
+            bio: updated.bio
+          })
+        }).catch(err => console.warn("Sync profile to backend failed:", err));
+      }
+    } catch {}
   };
 
   return (
@@ -7901,17 +7941,30 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           const data = await res.json();
           const items = data?.data?.items;
           if (Array.isArray(items) && items.length > 0) {
-            setUsers(items.map((u: any, idx: number) => ({
-              id: u.id || idx + 1,
-              name: u.displayName || u.username,
-              username: u.username.startsWith("@") ? u.username : "@" + u.username,
-              email: u.email,
-              avatar: u.avatarUrl || photos.red,
-              bio: u.bio || (u.role === "ADMIN" ? "Quản trị viên hệ thống Mê Truyện." : "Thành viên Mê Truyện."),
-              role: (u.role === "ADMIN" ? "ADMIN" : "USER") as "USER" | "ADMIN",
-              status: "ACTIVE" as const,
-              joinedAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : "Hôm nay",
-            })));
+            const savedAccounts = loadSavedAccounts();
+            const active = getActiveUser();
+            setUsers(items.map((u: any, idx: number) => {
+              const uHandle = (u.username || "").toLowerCase().replace(/^@/, "");
+              const matchedLocal = savedAccounts.find(a => (a.username || "").toLowerCase().replace(/^@/, "") === uHandle)
+                || (((active.username || "").toLowerCase().replace(/^@/, "") === uHandle) ? active : null);
+              const customAvatar = (u.avatarUrl && u.avatarUrl.trim())
+                ? u.avatarUrl
+                : (matchedLocal?.avatar && matchedLocal.avatar.trim())
+                ? matchedLocal.avatar
+                : photos.red;
+
+              return {
+                id: u.id || idx + 1,
+                name: u.displayName || u.username,
+                username: u.username.startsWith("@") ? u.username : "@" + u.username,
+                email: u.email,
+                avatar: customAvatar,
+                bio: u.bio || (u.role === "ADMIN" ? "Quản trị viên hệ thống Mê Truyện." : "Thành viên Mê Truyện."),
+                role: (u.role === "ADMIN" ? "ADMIN" : "USER") as "USER" | "ADMIN",
+                status: "ACTIVE" as const,
+                joinedAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : "Hôm nay",
+              };
+            }));
           }
         }
       } catch {}
@@ -8050,6 +8103,25 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
     if (!editingUser) return;
     setUsers(users.map(u => u.id === editingUser.id ? editingUser : u));
     showToast(`Đã cập nhật thông tin và phân quyền cho tài khoản ${editingUser.username}.`);
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const cleanUser = (editingUser.username || "").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        fetch(`${backendBase}/api/users/profile?username=${encodeURIComponent(cleanUser)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            displayName: editingUser.name,
+            avatarUrl: editingUser.avatar,
+            bio: editingUser.bio || ""
+          })
+        }).catch(err => console.warn("Sync edited user to backend failed:", err));
+      }
+    } catch {}
     setEditingUser(null);
   };
 
@@ -8286,7 +8358,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           <td>#{u.id}</td>
           <td>
             <div className="admin-user-cell">
-              <img src={u.avatar} alt={u.name} />
+              <img src={u.avatar} alt={u.name} onError={e => { (e.currentTarget as HTMLImageElement).src = photos.red; }} />
               <div><b>{u.name}</b> <span style={{ color: "#9c70f8" }}>{u.username}</span><br /><small style={{ color: "#756b80", fontSize: "8px" }}>{u.bio}</small></div>
             </div>
           </td>
@@ -8442,6 +8514,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
           <label className="admin-field"><span>Username</span><input value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} /></label>
         </div>
         <label className="admin-field"><span>Địa chỉ Email</span><input value={editingUser.email} onChange={e => setEditingUser({ ...editingUser, email: e.target.value })} /></label>
+        <label className="admin-field"><span>Ảnh đại diện (Avatar URL hoặc Base64)</span><input value={editingUser.avatar || ""} onChange={e => setEditingUser({ ...editingUser, avatar: e.target.value })} placeholder="https://... hoặc data:image/..." /></label>
         <div className="admin-field-two">
           <label className="admin-field"><span>Vai trò hệ thống (Role)</span>
             <select value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value as "USER" | "ADMIN" })}>

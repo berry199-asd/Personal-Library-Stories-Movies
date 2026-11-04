@@ -16,6 +16,17 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
     @Override
     public void run(String... args) {
         migratePosterUrlToLongText();
+        migrateUserAvatarUrlToLongText();
+    }
+
+    public synchronized void migrateUserAvatarUrlToLongText() {
+        try {
+            log.info("Checking users table schema for avatar_url LONGTEXT...");
+            jdbcTemplate.execute("ALTER TABLE users MODIFY COLUMN avatar_url LONGTEXT");
+            log.info("Successfully updated users.avatar_url to LONGTEXT.");
+        } catch (Exception ex) {
+            log.warn("Notice in migrateUserAvatarUrlToLongText: {}", ex.getMessage());
+        }
     }
 
     public synchronized void migratePosterUrlToLongText() {
