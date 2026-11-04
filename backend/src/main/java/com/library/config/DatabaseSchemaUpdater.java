@@ -19,6 +19,7 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
         migrateSharedUsersColumn();
         migrateUserAvatarUrlToLongText();
         migrateClientMessageIdColumn();
+        migrateMessageAttachmentColumns();
     }
 
     public synchronized void migrateSharedUsersColumn() {
@@ -48,6 +49,35 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
             log.info("Successfully ensured messages.client_message_id exists.");
         } catch (Exception ex) {
             log.warn("Notice in migrateClientMessageIdColumn: {}", ex.getMessage());
+        }
+    }
+
+    public synchronized void migrateMessageAttachmentColumns() {
+        try {
+            log.info("Checking messages and message_attachments schema for image attachments...");
+            try {
+                jdbcTemplate.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_url LONGTEXT");
+            } catch (Exception ex) {
+                log.warn("Notice adding messages.attachment_url: {}", ex.getMessage());
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255)");
+            } catch (Exception ex) {
+                log.warn("Notice adding messages.attachment_name: {}", ex.getMessage());
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50)");
+            } catch (Exception ex) {
+                log.warn("Notice adding messages.attachment_type: {}", ex.getMessage());
+            }
+            try {
+                jdbcTemplate.execute("ALTER TABLE message_attachments MODIFY COLUMN external_url LONGTEXT");
+            } catch (Exception ex) {
+                log.warn("Notice modifying message_attachments.external_url: {}", ex.getMessage());
+            }
+            log.info("Successfully updated schema for chat attachments.");
+        } catch (Exception ex) {
+            log.warn("Notice in migrateMessageAttachmentColumns: {}", ex.getMessage());
         }
     }
 

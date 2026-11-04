@@ -63,6 +63,15 @@ public class Message {
     @Column(name = "client_message_id", length = 100)
     private String clientMessageId;
 
+    @Column(name = "attachment_url", columnDefinition = "LONGTEXT")
+    private String attachmentUrl;
+
+    @Column(name = "attachment_name", length = 255)
+    private String attachmentName;
+
+    @Column(name = "attachment_type", length = 50)
+    private String attachmentType;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shared_content_id")
     private Content sharedContent;
