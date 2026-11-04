@@ -269,35 +269,92 @@ export type UserProfile = {
 
 const CURRENT_USER_STORAGE_KEY = "pl_current_user_v2";
 const REGISTERED_ACCOUNTS_KEY = "pl_registered_accounts_v2";
-const DELETED_TITLES_KEY = "pl_deleted_titles_v1";
+// Tự động dọn sạch blacklist local cũ để 2 tài khoản/profile luôn đồng bộ dữ liệu thật từ Cloud TiDB
+try {
+  window.localStorage.removeItem("pl_deleted_titles_v1");
+  window.localStorage.removeItem("pl_deleted_titles");
+} catch {}
 
 export function getDeletedTitles(): Set<string> {
-  try {
-    const raw = window.localStorage.getItem(DELETED_TITLES_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr.map((s: string) => String(s).trim().toLowerCase()) : []);
-  } catch {
-    return new Set();
+  return new Set();
+}
+
+export function addDeletedTitle(_title: string) {}
+export function removeDeletedTitle(_title: string) {}
+
+export function packContentDescription(item: Partial<ContentItem>): string {
+  const meta = {
+    _meta: true,
+    shortDescription: item.shortDescription === "None" ? "" : (item.shortDescription || ""),
+    description: item.description === "None" ? "" : (item.description || ""),
+    artist: item.artist || "",
+    cast: item.cast || "",
+    releaseYear: item.releaseYear || "2025",
+    language: item.language || "Tiếng Việt",
+    movieMode: item.movieMode || "",
+    sourceRef: item.sourceRef || "",
+    extraTags: item.extraTags || "",
+    personalNote: item.personalNote || "",
+    externalLinks: (item.externalLinks || []).filter(l => (l.url && l.url.trim()) || (l.platform && l.platform.trim())),
+  };
+  return JSON.stringify(meta);
+}
+
+export function unpackContentDescription(rawDesc?: string): {
+  shortDescription: string;
+  description: string;
+  artist: string;
+  cast: string;
+  releaseYear: string;
+  language: string;
+  movieMode?: "Phim lẻ" | "Series";
+  sourceRef: string;
+  extraTags: string;
+  personalNote: string;
+  externalLinks: ExternalLinkItem[];
+} {
+  const fallback = {
+    shortDescription: "",
+    description: "",
+    artist: "",
+    cast: "",
+    releaseYear: "2025",
+    language: "Tiếng Việt",
+    movieMode: undefined,
+    sourceRef: "",
+    extraTags: "",
+    personalNote: "",
+    externalLinks: [] as ExternalLinkItem[],
+  };
+
+  if (!rawDesc || !rawDesc.trim()) return fallback;
+  const clean = rawDesc.trim();
+  if (clean === "None") return fallback;
+
+  if (clean.startsWith("{") && clean.includes('"_meta":true')) {
+    try {
+      const parsed = JSON.parse(clean);
+      return {
+        shortDescription: parsed.shortDescription === "None" ? "" : (parsed.shortDescription || ""),
+        description: parsed.description === "None" ? "" : (parsed.description || ""),
+        artist: parsed.artist || "",
+        cast: parsed.cast || "",
+        releaseYear: parsed.releaseYear || "2025",
+        language: parsed.language || "Tiếng Việt",
+        movieMode: parsed.movieMode || undefined,
+        sourceRef: parsed.sourceRef || "",
+        extraTags: parsed.extraTags || "",
+        personalNote: parsed.personalNote || "",
+        externalLinks: Array.isArray(parsed.externalLinks) ? parsed.externalLinks : [],
+      };
+    } catch {}
   }
-}
 
-export function addDeletedTitle(title: string) {
-  if (!title || !title.trim()) return;
-  const set = getDeletedTitles();
-  set.add(title.trim().toLowerCase());
-  try {
-    window.localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
-  } catch {}
-}
-
-export function removeDeletedTitle(title: string) {
-  if (!title || !title.trim()) return;
-  const set = getDeletedTitles();
-  set.delete(title.trim().toLowerCase());
-  try {
-    window.localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
-  } catch {}
+  return {
+    ...fallback,
+    shortDescription: clean,
+    description: clean,
+  };
 }
 
 const CUSTOM_COVERS_KEY = "pl_custom_covers_v1";
@@ -1385,8 +1442,8 @@ function PublishedWorkEditorModal({
 }) {
   const [draft, setDraft] = useState<ContentItem>({
     ...initialItem,
-    shortDescription: initialItem.shortDescription || "",
-    description: initialItem.description || "",
+    shortDescription: initialItem.shortDescription === "None" ? "" : (initialItem.shortDescription || ""),
+    description: initialItem.description === "None" ? "" : (initialItem.description || ""),
     author: initialItem.author || "",
     artist: initialItem.artist || "",
     director: initialItem.director || "",
@@ -2952,7 +3009,7 @@ function DetailPage({
         </div>
 
         {/* Hiển thị Mô tả ngắn (nếu có) */}
-        {currentItem.shortDescription && (
+        {currentItem.shortDescription && currentItem.shortDescription !== "None" && (
           <div
             style={{
               marginTop: "10px",
@@ -2979,7 +3036,11 @@ function DetailPage({
             Mô tả chi tiết
           </strong>
           <p className="description" style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>
-            {currentItem.description || currentItem.shortDescription || "Chưa có mô tả chi tiết cho tác phẩm này."}
+            {(currentItem.description && currentItem.description !== "None")
+              ? currentItem.description
+              : (currentItem.shortDescription && currentItem.shortDescription !== "None")
+              ? currentItem.shortDescription
+              : "Chưa có mô tả chi tiết cho tác phẩm này."}
           </p>
         </div>
 
@@ -9452,6 +9513,15 @@ function mapBackendContentToItem(c: any): ContentItem {
   const createdByHandle = c.createdByUsername ? (c.createdByUsername.startsWith("@") ? c.createdByUsername : "@" + c.createdByUsername) : "@anhquyphi";
   const localCover = getCustomCover(c.title);
   const extLink = c.externalMainLink || "";
+
+  const unpacked = unpackContentDescription(c.description);
+  const finalExtLinks: ExternalLinkItem[] =
+    unpacked.externalLinks && unpacked.externalLinks.length > 0
+      ? unpacked.externalLinks
+      : extLink
+      ? [{ platform: "Đường dẫn đọc / xem", url: extLink, note: "" }]
+      : [];
+
   return {
     id: c.id,
     title: c.title,
@@ -9462,12 +9532,20 @@ function mapBackendContentToItem(c: any): ContentItem {
     type,
     genres: Array.isArray(c.genres) ? c.genres.map((g: any) => g.name || g) : [],
     isSeries: c.isSeries,
-    description: c.description || "",
-    shortDescription: c.description || "",
+    description: unpacked.description,
+    shortDescription: unpacked.shortDescription,
     author: !isMovie ? authorOrDirector : "",
+    artist: unpacked.artist,
     director: isMovie ? authorOrDirector : "",
-    mainLink: extLink,
-    externalLinks: extLink ? [{ platform: "Đường dẫn đọc / xem", url: extLink, note: "" }] : [],
+    cast: unpacked.cast,
+    releaseYear: unpacked.releaseYear,
+    language: unpacked.language,
+    movieMode: unpacked.movieMode,
+    sourceRef: unpacked.sourceRef,
+    extraTags: unpacked.extraTags,
+    personalNote: unpacked.personalNote,
+    mainLink: extLink || (finalExtLinks[0]?.url) || "",
+    externalLinks: finalExtLinks,
     visibility: c.visibility || "PUBLIC",
     createdBy: {
       name: c.createdByUsername || "Người đăng",
@@ -9479,7 +9557,7 @@ function mapBackendContentToItem(c: any): ContentItem {
           id: ch.id,
           season: isMovie ? "Phần 1" : "Mùa 1",
           number: String(ch.chapterNumber),
-          title: ch.title || `Chương ${ch.chapterNumber}`,
+          title: ch.title || `${isMovie ? "Tập" : "Chương"} ${ch.chapterNumber}`,
           url: ch.externalLink || "",
           note: ch.notes || "",
         }))
@@ -9604,40 +9682,22 @@ export default function App() {
         const backendBase = getBackendApiBase();
         if (!backendBase) return;
 
-        // 1. Lấy toàn bộ tác phẩm hiện có trên Cloud
+        // 1. Lấy toàn bộ tác phẩm hiện có trên Cloud TiDB
         const res = await fetch(`${backendBase}/api/contents?page=0&size=100`);
         if (!res.ok) return;
 
         const data = await res.json();
         const serverItems = data?.data?.items || [];
-        const deletedSet = getDeletedTitles();
-
-        // Tự động dọn dẹp các tác phẩm đã xóa trên server nếu server vẫn còn
-        for (const sItem of serverItems) {
-          if (sItem.title && deletedSet.has(sItem.title.trim().toLowerCase())) {
-            const authH: Record<string, string> = {
-              ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-            };
-            if (sItem.id) {
-              fetch(`${backendBase}/api/contents/${sItem.id}`, { method: "DELETE", headers: authH }).catch(() => {});
-            }
-            fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(sItem.title)}`, { method: "DELETE", headers: authH }).catch(() => {});
-          }
-        }
-
         const cloudMapped = Array.isArray(serverItems)
-          ? serverItems
-              .map(mapBackendContentToItem)
-              .filter(m => !deletedSet.has(m.title.trim().toLowerCase()))
+          ? serverItems.map(mapBackendContentToItem)
           : [];
 
-        // 2. Kiểm tra xem trong bộ nhớ máy (localStorage) có tác phẩm nào chưa được đẩy lên Cloud không
+        // 2. Kiểm tra xem trong bộ nhớ máy có tác phẩm nào chưa được đẩy lên Cloud không
         const localItems = loadSavedContents();
         let hasUploaded = false;
 
         for (const local of localItems) {
           if (!local.title || !local.title.trim()) continue;
-          if (deletedSet.has(local.title.trim().toLowerCase())) continue;
           const existsOnServer = cloudMapped.some(
             m => m.title.trim().toLowerCase() === local.title.trim().toLowerCase()
           );
@@ -9645,8 +9705,9 @@ export default function App() {
           if (!existsOnServer) {
             hasUploaded = true;
             const creator = (local.createdBy && local.createdBy.user) ? local.createdBy.user : (currentUser.username || "berry");
+            const cleanCreator = creator.replace(/^@/, "");
             try {
-              await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(creator)}`, {
+              await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(cleanCreator)}`, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -9658,7 +9719,7 @@ export default function App() {
                   isSeries: local.type === "Truyện" || local.movieMode === "Series",
                   posterUrl: local.img || "",
                   authorOrDirector: local.author || local.director || local.createdBy?.name || currentUser.name || "Tác giả",
-                  description: local.description || local.shortDescription || local.title,
+                  description: packContentDescription(local),
                   status: local.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
                   externalMainLink: local.mainLink || (local.chaptersList && local.chaptersList[0]?.url) || "",
                   visibility: local.visibility || "PUBLIC",
@@ -9691,14 +9752,13 @@ export default function App() {
           }
         }
 
-        // 4. Cập nhật allContents với danh sách từ cloud (kết hợp các truyện local nếu có)
+        // 4. Đồng bộ danh sách từ cloud vào state
         if (active) {
           setAllContents(prev => {
-            const freshDeleted = getDeletedTitles();
-            const merged = cloudMapped.filter(m => !freshDeleted.has(m.title.trim().toLowerCase()));
+            const merged = [...cloudMapped];
             for (const loc of prev) {
               const cleanT = loc.title.trim().toLowerCase();
-              if (!freshDeleted.has(cleanT) && !merged.some(m => m.title.trim().toLowerCase() === cleanT)) {
+              if (!merged.some(m => m.title.trim().toLowerCase() === cleanT)) {
                 merged.push(loc);
               }
             }
@@ -9802,34 +9862,76 @@ export default function App() {
     try {
       const backendBase = getBackendApiBase();
       if (backendBase) {
-        const targetId = updated.id || allContents.find(x => x.title === oldTitle)?.id;
+        let targetId = updated.id || allContents.find(x => x.title === oldTitle)?.id;
+
+        // Nếu chưa có targetId, thử tìm ID trên server theo tên
+        if (!targetId) {
+          try {
+            const sRes = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(oldTitle)}`);
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              if (sData?.data?.id) {
+                targetId = sData.data.id;
+              }
+            }
+          } catch {}
+        }
+
+        const creator = (updated.createdBy && updated.createdBy.user) ? updated.createdBy.user : (currentUser.username || "berry");
+        const cleanCreator = creator.replace(/^@/, "");
+        const packedDesc = packContentDescription(updated);
+        const authH: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+        };
+
+        const payload = {
+          title: updated.title,
+          contentType: updated.type === "Phim" ? (updated.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
+          isSeries: updated.type === "Truyện" || updated.movieMode === "Series",
+          posterUrl: updated.img || "",
+          authorOrDirector: updated.author || updated.director || updated.createdBy?.name || currentUser.name || "Tác giả",
+          description: packedDesc,
+          status: updated.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
+          externalMainLink: updated.mainLink || (updated.externalLinks && updated.externalLinks[0]?.url) || "",
+          visibility: updated.visibility || "PUBLIC",
+          genreIds: [],
+          chapters: (updated.chaptersList || []).map((ch, idx) => ({
+            chapterNumber: parseFloat(ch.number) || (idx + 1),
+            displayOrder: idx + 1,
+            title: ch.title || `Chương ${ch.number}`,
+            externalLink: ch.url || "",
+            notes: ch.note || "",
+          })),
+        };
+
         if (targetId) {
-          await fetch(`${backendBase}/api/contents/${targetId}`, {
+          const res = await fetch(`${backendBase}/api/contents/${targetId}?actorUsername=${encodeURIComponent(cleanCreator)}`, {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-            },
-            body: JSON.stringify({
-              title: updated.title,
-              contentType: updated.type === "Phim" ? "MOVIE" : "MANGA",
-              isSeries: updated.type === "Truyện" || updated.movieMode === "Series",
-              posterUrl: updated.img || "",
-              authorOrDirector: updated.author || updated.director || updated.createdBy?.name || "Tác giả",
-              description: updated.description || updated.shortDescription || updated.title,
-              status: updated.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
-              externalMainLink: updated.mainLink || "",
-              visibility: updated.visibility || "PUBLIC",
-              genreIds: [],
-              chapters: (updated.chaptersList || []).map((ch, idx) => ({
-                chapterNumber: parseFloat(ch.number) || (idx + 1),
-                displayOrder: idx + 1,
-                title: ch.title || `Chương ${ch.number}`,
-                externalLink: ch.url || "",
-                notes: ch.note || "",
-              })),
-            })
+            headers: authH,
+            body: JSON.stringify(payload),
           });
+          if (res.ok) {
+            const resData = await res.json();
+            if (resData?.data?.id) {
+              const mapped = mapBackendContentToItem(resData.data);
+              setAllContents(prev => prev.map(x => (x.title === updated.title ? { ...mapped, ...updated, id: resData.data.id } : x)));
+            }
+          }
+        } else {
+          // Chưa có trên server -> Tạo mới luôn
+          const res = await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(cleanCreator)}`, {
+            method: "POST",
+            headers: authH,
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            const resData = await res.json();
+            if (resData?.data?.id) {
+              const mapped = mapBackendContentToItem(resData.data);
+              setAllContents(prev => prev.map(x => (x.title === updated.title ? { ...mapped, ...updated, id: resData.data.id } : x)));
+            }
+          }
         }
       }
     } catch (err) {
@@ -10094,7 +10196,9 @@ export default function App() {
           const backendBase = getBackendApiBase();
           if (backendBase) {
             try {
-              const res = await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(currentUser.username)}`, {
+              const cleanCreator = (currentUser.username || "berry").replace(/^@/, "");
+              const packedDesc = packContentDescription(item);
+              const res = await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(cleanCreator)}`, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -10102,11 +10206,11 @@ export default function App() {
                 },
                 body: JSON.stringify({
                   title: item.title,
-                  contentType: item.type === "Phim" ? "MOVIE" : "MANGA",
+                  contentType: item.type === "Phim" ? (item.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
                   isSeries: item.type === "Truyện" || item.movieMode === "Series",
                   posterUrl: item.img || "",
                   authorOrDirector: item.author || item.director || item.createdBy?.name || currentUser.name || "Tác giả",
-                  description: item.description || item.shortDescription || item.title,
+                  description: packedDesc,
                   status: item.status === "Hoàn thành" ? "COMPLETED" : item.status === "Tạm dừng" ? "HIATUS" : "ONGOING",
                   externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
                   visibility: item.visibility || "PUBLIC",
@@ -10134,7 +10238,6 @@ export default function App() {
               console.warn("Publish content to cloud failed:", err);
             }
           }
-
           navigate("detail");
         }}
       />
