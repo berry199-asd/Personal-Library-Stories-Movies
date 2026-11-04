@@ -9448,48 +9448,86 @@ export default function App() {
 
   // Đồng bộ tác phẩm 2 chiều thời gian thực với CSDL MySQL Backend (TiDB Cloud)
   useEffect(() => {
+    let active = true;
     const syncCloudContents = async () => {
       try {
-        const res = await fetch(`${getBackendApiBase()}/api/contents?page=0&size=100`);
-        if (res.ok) {
-          const data = await res.json();
-          const serverItems = data?.data?.items || [];
-          const cloudMapped = Array.isArray(serverItems) ? serverItems.map(mapBackendContentToItem) : [];
+        const backendBase = getBackendApiBase();
+        if (!backendBase) return;
 
-          // 1. Cập nhật các tác phẩm từ server vào allContents
+        // 1. Lấy toàn bộ tác phẩm hiện có trên Cloud
+        const res = await fetch(`${backendBase}/api/contents?page=0&size=100`);
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const serverItems = data?.data?.items || [];
+        const cloudMapped = Array.isArray(serverItems) ? serverItems.map(mapBackendContentToItem) : [];
+
+        // 2. Kiểm tra xem trong bộ nhớ máy (localStorage) có tác phẩm nào chưa được đẩy lên Cloud không
+        const localItems = loadSavedContents();
+        let hasUploaded = false;
+
+        for (const local of localItems) {
+          if (!local.title || !local.title.trim()) continue;
+          const existsOnServer = cloudMapped.some(
+            m => m.title.trim().toLowerCase() === local.title.trim().toLowerCase()
+          );
+
+          if (!existsOnServer) {
+            hasUploaded = true;
+            const creator = (local.createdBy && local.createdBy.user) ? local.createdBy.user : (currentUser.username || "berry");
+            try {
+              await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(creator)}`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+                },
+                body: JSON.stringify({
+                  title: local.title,
+                  contentType: local.type === "Phim" ? (local.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
+                  isSeries: local.type === "Truyện" || local.movieMode === "Series",
+                  posterUrl: local.img || "",
+                  authorOrDirector: local.author || local.director || local.createdBy?.name || currentUser.name || "Tác giả",
+                  description: local.description || local.shortDescription || local.title,
+                  status: local.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
+                  externalMainLink: local.mainLink || (local.chaptersList && local.chaptersList[0]?.url) || "",
+                  visibility: local.visibility || "PUBLIC",
+                  genreIds: [],
+                  chapters: (local.chaptersList || []).map((ch, idx) => ({
+                    chapterNumber: parseFloat(ch.number) || (idx + 1),
+                    displayOrder: idx + 1,
+                    title: ch.title || `Chương ${ch.number}`,
+                    externalLink: ch.url || "",
+                    notes: ch.note || "",
+                  })),
+                }),
+              });
+            } catch (err) {
+              console.warn("Auto-sync local story to cloud failed:", err);
+            }
+          }
+        }
+
+        // 3. Nếu vừa upload thêm truyện mới, tải lại danh sách mới nhất từ server
+        if (hasUploaded) {
+          const updatedRes = await fetch(`${backendBase}/api/contents?page=0&size=100`);
+          if (updatedRes.ok) {
+            const updatedData = await updatedRes.json();
+            const updatedItems = updatedData?.data?.items || [];
+            if (active && Array.isArray(updatedItems)) {
+              setAllContents(updatedItems.map(mapBackendContentToItem));
+              return;
+            }
+          }
+        }
+
+        // 4. Cập nhật allContents với danh sách từ cloud (kết hợp các truyện local nếu có)
+        if (active) {
           setAllContents(prev => {
             const merged = [...cloudMapped];
-            for (const local of prev) {
-              if (!merged.some(m => m.title.trim().toLowerCase() === local.title.trim().toLowerCase())) {
-                merged.push(local);
-
-                // 2. Nếu có tác phẩm local chưa có trên server, tự động upload lên server TiDB Cloud
-                fetch(`${getBackendApiBase()}/api/contents?creatorUsername=${encodeURIComponent(local.createdBy?.user || currentUser.username)}`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-                  },
-                  body: JSON.stringify({
-                    title: local.title,
-                    contentType: local.type === "Phim" ? (local.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
-                    isSeries: local.type === "Truyện" || local.movieMode === "Series",
-                    posterUrl: local.img || "",
-                    authorOrDirector: local.author || local.director || local.createdBy?.name || currentUser.name,
-                    description: local.description || local.shortDescription || local.title,
-                    status: local.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
-                    externalMainLink: local.mainLink || (local.chaptersList && local.chaptersList[0]?.url) || "",
-                    visibility: local.visibility || "PUBLIC",
-                    genreIds: [],
-                    chapters: (local.chaptersList || []).map((ch, idx) => ({
-                      chapterNumber: parseFloat(ch.number) || (idx + 1),
-                      displayOrder: idx + 1,
-                      title: ch.title || `Chương ${ch.number}`,
-                      externalLink: ch.url || "",
-                      notes: ch.note || "",
-                    })),
-                  }),
-                }).catch(err => console.warn("Auto-sync local story to cloud failed:", err));
+            for (const loc of prev) {
+              if (!merged.some(m => m.title.trim().toLowerCase() === loc.title.trim().toLowerCase())) {
+                merged.push(loc);
               }
             }
             return merged;
@@ -9499,9 +9537,13 @@ export default function App() {
         // ignore offline
       }
     };
+
     syncCloudContents();
-    const interval = window.setInterval(syncCloudContents, 10000);
-    return () => window.clearInterval(interval);
+    const interval = window.setInterval(syncCloudContents, 8000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, [currentUser.username]);
 
   useEffect(() => {

@@ -38,7 +38,7 @@ public class Content {
     @Column(name = "is_series", nullable = false)
     private Boolean isSeries = true;
 
-    @Column(name = "poster_url", length = 255)
+    @Column(name = "poster_url", columnDefinition = "LONGTEXT")
     private String posterUrl;
 
     @Column(name = "author_or_director", length = 150)
