@@ -60,6 +60,9 @@ public class Message {
     @Column(name = "sha256_hash", length = 128)
     private String sha256Hash;
 
+    @Column(name = "client_message_id", length = 100)
+    private String clientMessageId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shared_content_id")
     private Content sharedContent;

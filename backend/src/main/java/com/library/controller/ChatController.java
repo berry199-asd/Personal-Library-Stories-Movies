@@ -118,6 +118,7 @@ public class ChatController {
         String time = payload.get("time");
         String cipherText = payload.get("cipherText");
         String senderName = payload.get("senderName");
+        String clientMessageId = payload.get("clientMessageId");
 
         if (fromUserRaw == null || toUserRaw == null || (text == null && cipherText == null)) {
             return ResponseEntity.badRequest().body(ApiResponse.error(400, "Thiếu thông tin người gửi hoặc người nhận", null));
@@ -175,10 +176,12 @@ public class ChatController {
                 .messageText(text != null ? text : cipherText)
                 .isEncrypted(cipherText != null && !cipherText.isBlank())
                 .cipherText(cipherText)
+                .clientMessageId(clientMessageId)
                 .build());
 
         Map<String, Object> result = new HashMap<>();
         result.put("id", "msg-" + msg.getId());
+        result.put("clientMessageId", clientMessageId);
         result.put("conversationId", conversation.getId());
         result.put("sender", "@" + sender.getUsername());
         result.put("senderName", sender.getDisplayName());
@@ -215,6 +218,7 @@ public class ChatController {
             Message m = msgs.get(i);
             Map<String, Object> item = new HashMap<>();
             item.put("id", "msg-" + m.getId());
+            item.put("clientMessageId", m.getClientMessageId());
             item.put("sender", "@" + m.getSender().getUsername());
             item.put("senderName", m.getSender().getDisplayName());
             item.put("text", m.getMessageText());

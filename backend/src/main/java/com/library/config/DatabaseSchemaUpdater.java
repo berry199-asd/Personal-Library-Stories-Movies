@@ -18,6 +18,7 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
         migratePosterUrlToLongText();
         migrateSharedUsersColumn();
         migrateUserAvatarUrlToLongText();
+        migrateClientMessageIdColumn();
     }
 
     public synchronized void migrateSharedUsersColumn() {
@@ -37,6 +38,16 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
             log.info("Successfully updated users.avatar_url to LONGTEXT.");
         } catch (Exception ex) {
             log.warn("Notice in migrateUserAvatarUrlToLongText: {}", ex.getMessage());
+        }
+    }
+
+    public synchronized void migrateClientMessageIdColumn() {
+        try {
+            log.info("Checking messages table schema for client_message_id column...");
+            jdbcTemplate.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS client_message_id VARCHAR(100)");
+            log.info("Successfully ensured messages.client_message_id exists.");
+        } catch (Exception ex) {
+            log.warn("Notice in migrateClientMessageIdColumn: {}", ex.getMessage());
         }
     }
 
