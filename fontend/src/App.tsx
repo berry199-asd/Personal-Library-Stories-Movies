@@ -5416,6 +5416,7 @@ type ChatAttachment = {
 
 type ChatMessageItem = {
   id: string;
+  clientMessageId?: string;
   senderName: string;
   senderUser: string;
   senderAvatar: string;
@@ -5473,6 +5474,20 @@ function loadSavedConversations(): ConversationState[] {
             if (memberCount < 3) return false;
           }
           return true;
+        }).map(c => {
+          if (Array.isArray(c.messages)) {
+            const seen = new Set<string>();
+            const deduped: ChatMessageItem[] = [];
+            for (const m of c.messages) {
+              const key = m.id || m.clientMessageId || `${m.senderUser}_${m.text}_${m.time}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                deduped.push(m);
+              }
+            }
+            return { ...c, messages: deduped };
+          }
+          return c;
         });
         return valid;
       }
@@ -5635,17 +5650,38 @@ function ChatPage({
             if (msgRes.ok) {
               const msgData = await msgRes.json();
               const serverMsgs = msgData?.data;
-              if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+              if (Array.isArray(serverMsgs)) {
                 setConvList(prev => {
                   return prev.map(c => {
                     if (c.id === currentConv.id) {
-                      const existingIds = new Set(c.messages.map(m => m.id));
-                      const newOnes: ChatMessageItem[] = [];
+                      let messages = [...c.messages];
+                      let changed = false;
+
                       for (const sm of serverMsgs) {
-                        if (!existingIds.has(sm.id)) {
-                          const isMine = (sm.sender || "").toLowerCase().replace(/^@/, '') === meUser.username.toLowerCase().replace(/^@/, '');
-                          newOnes.push({
+                        const isMine = (sm.sender || "").toLowerCase().replace(/^@/, '') === meUser.username.toLowerCase().replace(/^@/, '');
+
+                        // Match existing message: direct ID, clientMessageId, or recent optimistic message from sender
+                        const existingIdx = messages.findIndex(m =>
+                          m.id === sm.id ||
+                          (sm.clientMessageId && (m.clientMessageId === sm.clientMessageId || m.id === sm.clientMessageId)) ||
+                          (isMine && m.isMe && !m.systemEvent && (m.id.startsWith("msg-") && m.id.length > 15) && (m.text === sm.text || m.cipherText === sm.cipherText))
+                        );
+
+                        if (existingIdx !== -1) {
+                          const currentM = messages[existingIdx];
+                          if (currentM.id !== sm.id || (sm.clientMessageId && currentM.clientMessageId !== sm.clientMessageId)) {
+                            messages[existingIdx] = {
+                              ...currentM,
+                              id: sm.id,
+                              clientMessageId: sm.clientMessageId || currentM.clientMessageId,
+                              status: "Đã gửi",
+                            };
+                            changed = true;
+                          }
+                        } else {
+                          messages.push({
                             id: sm.id,
+                            clientMessageId: sm.clientMessageId,
                             senderName: sm.senderName || sm.sender,
                             senderUser: sm.sender,
                             senderAvatar: isMine ? meUser.avatar : (peer?.avatar || photos.red),
@@ -5655,15 +5691,29 @@ function ChatPage({
                             cipherText: sm.cipherText,
                             status: "Đã gửi"
                           });
+                          changed = true;
                         }
                       }
-                      if (newOnes.length > 0) {
-                        const mergedMessages = [...c.messages, ...newOnes];
-                        const lastMsg = mergedMessages[mergedMessages.length - 1];
+
+                      // Ensure strict deduplication in memory
+                      const seen = new Set<string>();
+                      const deduped: ChatMessageItem[] = [];
+                      for (const m of messages) {
+                        const key = m.id || m.clientMessageId || `${m.senderUser}_${m.text}_${m.time}`;
+                        if (!seen.has(key)) {
+                          seen.add(key);
+                          deduped.push(m);
+                        } else {
+                          changed = true;
+                        }
+                      }
+
+                      if (changed) {
+                        const lastMsg = deduped[deduped.length - 1];
                         return {
                           ...c,
                           text: lastMsg?.text || c.text,
-                          messages: mergedMessages
+                          messages: deduped
                         };
                       }
                     }
@@ -5832,7 +5882,7 @@ function ChatPage({
     if (!message.trim() && stagedAttachments.length === 0) return;
     const textVal = message.trim();
     const attachmentsToSend = [...stagedAttachments];
-    const msgId = `msg-${Date.now()}`;
+    const msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
     // Nếu chưa có cuộc trò chuyện nào, không tự ý tạo nhóm 1 thành viên
     if (convList.length === 0) {
@@ -5848,6 +5898,7 @@ function ChatPage({
 
     const newMsg: ChatMessageItem = {
       id: msgId,
+      clientMessageId: msgId,
       senderName: meUser.name,
       senderUser: meUser.username,
       senderAvatar: meUser.avatar,
@@ -5909,8 +5960,25 @@ function ChatPage({
           toUser: peerUserHandle,
           text: textVal || summaryText,
           cipherText: encryptedPacket?.cipherText || "",
+          clientMessageId: msgId,
         }),
-      }).catch(err => console.warn("Failed sending direct message to cloud:", err));
+      })
+      .then(res => res.json())
+      .then(data => {
+        const serverId = data?.data?.id;
+        if (serverId) {
+          broadcastAndSetConvList(prev => prev.map(c => {
+            if (c.id === targetConvId) {
+              return {
+                ...c,
+                messages: c.messages.map(m => (m.id === msgId ? { ...m, id: serverId, clientMessageId: msgId } : m))
+              };
+            }
+            return c;
+          }));
+        }
+      })
+      .catch(err => console.warn("Failed sending direct message to cloud:", err));
     }
 
     setMessage("");
@@ -6297,11 +6365,20 @@ function ChatPage({
     };
   };
 
-  const visibleMessages = currentConv.messages.filter(m =>
-    !inChatSearch.trim() ||
-    (m.text && m.text.toLowerCase().includes(inChatSearch.toLowerCase())) ||
-    m.senderName.toLowerCase().includes(inChatSearch.toLowerCase())
-  );
+  const visibleMessages = (() => {
+    const raw = currentConv.messages.filter(m =>
+      !inChatSearch.trim() ||
+      (m.text && m.text.toLowerCase().includes(inChatSearch.toLowerCase())) ||
+      m.senderName.toLowerCase().includes(inChatSearch.toLowerCase())
+    );
+    const seen = new Set<string>();
+    return raw.filter(m => {
+      const key = m.id || m.clientMessageId || `${m.senderUser}_${m.text}_${m.time}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
 
   const onlineMembersCount = currentConv.members.filter(m => m.online).length;
 
