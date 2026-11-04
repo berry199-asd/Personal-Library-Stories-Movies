@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,7 @@ public class ContentServiceImpl implements ContentService {
     private final SeasonRepository seasonRepository;
     private final ReviewRepository reviewRepository;
     private final UserRepository userRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     @Transactional(readOnly = true)
@@ -283,7 +285,85 @@ public class ContentServiceImpl implements ContentService {
         Content content = contentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy truyện/phim #" + id));
         verifyOwnerOrAdmin(content, actorUserId, isAdmin);
-        contentRepository.delete(content);
+        deleteContentCascade(id);
+    }
+
+    private void deleteContentCascade(Long contentId) {
+        log.info("Executing safe cascade delete for content #{}", contentId);
+        try {
+            jdbcTemplate.update("UPDATE messages SET shared_content_id = NULL WHERE shared_content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice updating messages for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("UPDATE message_attachments SET content_id = NULL WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice updating message_attachments for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM reading_progress WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting reading_progress for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM reviews WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting reviews for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM sharing_permissions WHERE user_library_id IN (SELECT id FROM user_libraries WHERE content_id = ?)", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting sharing_permissions for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM user_libraries WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting user_libraries for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM user_favorites WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting user_favorites for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM reports WHERE target_type = 'CONTENT' AND target_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting reports for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM chapters WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting chapters for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM seasons WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting seasons for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM content_links WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting content_links for content #{}: {}", contentId, e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.update("DELETE FROM content_genres WHERE content_id = ?", contentId);
+        } catch (Exception e) {
+            log.warn("Notice deleting content_genres for content #{}: {}", contentId, e.getMessage());
+        }
+
+        int affected = jdbcTemplate.update("DELETE FROM contents WHERE id = ?", contentId);
+        log.info("Successfully deleted content #{} from MySQL, affected rows: {}", contentId, affected);
     }
 
     @Override

@@ -269,18 +269,38 @@ export type UserProfile = {
 
 const CURRENT_USER_STORAGE_KEY = "pl_current_user_v2";
 const REGISTERED_ACCOUNTS_KEY = "pl_registered_accounts_v2";
-// Tự động dọn sạch blacklist local cũ để 2 tài khoản/profile luôn đồng bộ dữ liệu thật từ Cloud TiDB
-try {
-  window.localStorage.removeItem("pl_deleted_titles_v1");
-  window.localStorage.removeItem("pl_deleted_titles");
-} catch {}
+const DELETED_TITLES_STORAGE_KEY = "pl_deleted_titles_v2";
 
 export function getDeletedTitles(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(DELETED_TITLES_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set(arr.map(t => String(t).trim().toLowerCase()));
+      }
+    }
+  } catch {}
   return new Set();
 }
 
-export function addDeletedTitle(_title: string) {}
-export function removeDeletedTitle(_title: string) {}
+export function addDeletedTitle(title: string) {
+  if (!title || !title.trim()) return;
+  try {
+    const current = getDeletedTitles();
+    current.add(title.trim().toLowerCase());
+    window.localStorage.setItem(DELETED_TITLES_STORAGE_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+export function removeDeletedTitle(title: string) {
+  if (!title || !title.trim()) return;
+  try {
+    const current = getDeletedTitles();
+    current.delete(title.trim().toLowerCase());
+    window.localStorage.setItem(DELETED_TITLES_STORAGE_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
 
 export function mapGenresToIds(genres?: string[]): number[] {
   if (!genres || !Array.isArray(genres)) return [];
@@ -8038,6 +8058,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   );
   const [editingContent, setEditingContent] = useState<AdminContentItem | null>(null);
   const [managingChaptersFor, setManagingChaptersFor] = useState<AdminContentItem | null>(null);
+  const [confirmDeleteContent, setConfirmDeleteContent] = useState<{ id: number; title: string } | null>(null);
 
   // 3. STATE QUẢN LÝ THỂ LOẠI & DANH MỤC HỆ THỐNG
   const [genreList, setGenreList] = useState([
@@ -8183,23 +8204,55 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   };
 
   const deleteContent = async (id: number, title: string) => {
-    addDeletedTitle(title);
-    const updated = adminContents.filter(c => c.id !== id);
-    syncGlobalContents(updated);
-    showToast(`Đã xóa tác phẩm “${title}” khỏi hệ thống.`);
-
     try {
       const backendBase = getBackendApiBase();
+      const token = window.localStorage.getItem("personal_library_access_token");
+      const activeUser = getActiveUser();
+      const cleanUsername = (activeUser.username || "anhquyphi").replace(/^@/, "");
+
       if (backendBase) {
-        await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title)}&actorUsername=${encodeURIComponent(getActiveUser().username)}`, {
+        const authHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        };
+
+        // Ưu tiên 1: Gọi endpoint Quản trị viên xóa theo ID
+        let res = await fetch(`${backendBase}/api/admin/contents/${id}`, {
           method: "DELETE",
-          headers: {
-            ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-          }
+          headers: authHeaders
         });
+
+        // Ưu tiên 2: Fallback endpoint contents/{id}
+        if (!res.ok) {
+          res = await fetch(`${backendBase}/api/contents/${id}?actorUsername=${encodeURIComponent(cleanUsername)}`, {
+            method: "DELETE",
+            headers: authHeaders
+          });
+        }
+
+        // Ưu tiên 3: Fallback xóa theo tiêu đề
+        if (!res.ok) {
+          res = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title)}&actorUsername=${encodeURIComponent(cleanUsername)}`, {
+            method: "DELETE",
+            headers: authHeaders
+          });
+        }
+
+        if (!res.ok) {
+          showToast(`Lỗi khi xóa tác phẩm trên máy chủ (Mã: ${res.status}). Vui lòng thử lại.`);
+          return;
+        }
       }
+
+      // Chỉ cập nhật giao diện sau khi CSDL MySQL đã xác nhận xóa thành công
+      addDeletedTitle(title);
+      removeCustomCover(title);
+      const updated = adminContents.filter(c => c.id !== id && c.title !== title);
+      syncGlobalContents(updated);
+      showToast(`Đã xóa vĩnh viễn tác phẩm “${title}” khỏi hệ thống và CSDL MySQL.`);
     } catch (err) {
-      console.warn("Admin delete content on cloud failed:", err);
+      console.warn("Admin delete content failed:", err);
+      showToast("Lỗi kết nối khi xóa tác phẩm.");
     }
   };
 
@@ -8424,7 +8477,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
             })}>Chỉnh sửa</Button>
             <Button variant="secondary" icon="plus" onClick={() => setManagingChaptersFor({ ...item, chapters: item.chapters.map(c => ({ ...c })) })}>Cập nhật Chương/Tập</Button>
             <Button variant="ghost" onClick={() => setPage("detail")}>Xem trang</Button>
-            <Button variant="danger" onClick={() => deleteContent(item.id, item.title)}>Xóa</Button>
+            <Button variant="danger" onClick={() => setConfirmDeleteContent({ id: item.id, title: item.title })}>Xóa</Button>
           </div></td>
         </tr>)}</tbody>
       </table>
@@ -9082,6 +9135,30 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
         </div>
       </div>
     </div>}
+
+    {/* MODAL 5: XÁC NHẬN XÓA TÁC PHẨM KHỎI HỆ THỐNG */}
+    {confirmDeleteContent && (
+      <div className="modal-backdrop" onMouseDown={() => setConfirmDeleteContent(null)}>
+        <div className="confirm-dialog publish-confirm" onMouseDown={e => e.stopPropagation()}>
+          <div className="danger-symbol"><Icon name="x" /></div>
+          <h2>Xác nhận xóa vĩnh viễn?</h2>
+          <p>
+            Bạn có chắc chắn muốn xóa tác phẩm “<b>{confirmDeleteContent.title}</b>” khỏi toàn bộ hệ thống?
+            Toàn bộ chương, tập phim, đánh giá và dữ liệu liên quan sẽ bị xóa khỏi cơ sở dữ liệu MySQL và không thể khôi phục.
+          </p>
+          <div>
+            <Button variant="ghost" onClick={() => setConfirmDeleteContent(null)}>Hủy bỏ</Button>
+            <Button variant="danger" onClick={() => {
+              const target = confirmDeleteContent;
+              setConfirmDeleteContent(null);
+              deleteContent(target.id, target.title);
+            }}>
+              Xác nhận xóa vĩnh viễn
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
   </div></main>;
 }
 
