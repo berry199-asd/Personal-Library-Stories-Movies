@@ -1,3 +1,16 @@
+
+function getBackendApiBase(): string {
+  try {
+    const saved = window.localStorage.getItem("pl_backend_api_url");
+    if (saved && saved.trim()) return saved.trim().replace(/\/+$/, "");
+  } catch {}
+  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
+  if (envUrl && typeof envUrl === "string" && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
+  return "";
+}
+
 import { useState, useEffect, useMemo, type ReactNode, type CSSProperties } from "react";
 
 const photos = {
@@ -4156,7 +4169,7 @@ function AuthPage({
     setOtpCountdown(60);
 
     try {
-      const resp = await fetch("/api/auth/send-otp", {
+      const resp = await fetch(`${getBackendApiBase()}/api/auth/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
@@ -4213,7 +4226,7 @@ function AuthPage({
     }
 
     try {
-      const resp = await fetch("/api/auth/verify-otp", {
+      const resp = await fetch(`${getBackendApiBase()}/api/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -4313,7 +4326,7 @@ function AuthPage({
 
       // 2. Tự động đồng bộ tài khoản vào bảng `users` trong CSDL MySQL (XAMPP phpMyAdmin) qua Backend API
       try {
-        const regResp = await fetch("/api/auth/register", {
+        const regResp = await fetch(`${getBackendApiBase()}/api/auth/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -4373,7 +4386,7 @@ function AuthPage({
       // Nếu chưa có trong local storage, thử đồng bộ từ CSDL MySQL (phpMyAdmin) qua API
       if (!matched) {
         try {
-          const apiResp = await fetch("/api/auth/login", {
+          const apiResp = await fetch(`${getBackendApiBase()}/api/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -4431,7 +4444,7 @@ function AuthPage({
       setSuccess(`Đăng nhập bảo mật thành công (${resolvedProfile.name} · ${resolvedProfile.username} · ${resolvedProfile.role}). Đang chuyển trang...`);
 
       // Tự động đồng bộ quyền role mới nhất từ CSDL MySQL (nếu bạn sửa role thành ADMIN trong phpMyAdmin)
-      fetch("/api/auth/login", {
+      fetch(`${getBackendApiBase()}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
