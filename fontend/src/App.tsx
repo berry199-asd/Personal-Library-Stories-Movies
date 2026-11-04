@@ -292,15 +292,15 @@ export function loadSavedCurrentUser(): UserProfile {
   } catch {}
   return {
     id: "usr-" + Date.now().toString(36),
-    name: "Anh Quý Phi",
-    username: "@anhquyphi",
-    email: "lechauanh.12a5.tnd@gmail.com",
-    password: "doraemon1234@",
+    name: "Thành viên Mê Truyện",
+    username: "@user",
+    email: "",
+    password: "",
     avatar: photos.red,
-    role: "ADMIN",
-    bio: "Quản trị viên hệ thống Mê Truyện Stories Unbound.",
+    role: "USER",
+    bio: "Thành viên Mê Truyện Stories Unbound.",
     joinedDate: "Hôm nay",
-    userId: "USR-3604",
+    userId: "USR-0001",
   };
 }
 
@@ -4350,6 +4350,9 @@ function AuthPage({
         });
         if (regResp.ok) {
           const regData = await regResp.json();
+          if (regData?.data?.accessToken) {
+            window.localStorage.setItem("personal_library_access_token", regData.data.accessToken);
+          }
           if (regData?.data?.user?.id) {
             resolvedProfile.id = "usr-" + regData.data.user.id;
             saveAccountToStorage(resolvedProfile);
@@ -4405,6 +4408,9 @@ function AuthPage({
           });
           if (apiResp.ok) {
             const apiData = await apiResp.json();
+            if (apiData?.data?.accessToken) {
+              window.localStorage.setItem("personal_library_access_token", apiData.data.accessToken);
+            }
             const dbUser = apiData?.data?.user;
             if (dbUser) {
               matched = {
@@ -4463,6 +4469,9 @@ function AuthPage({
       })
         .then(res => res.json())
         .then(data => {
+          if (data?.data?.accessToken) {
+            window.localStorage.setItem("personal_library_access_token", data.data.accessToken);
+          }
           const dbRole = data?.data?.user?.role;
           if (dbRole === "ADMIN" || dbRole === "USER") {
             resolvedProfile.role = dbRole;
@@ -4721,7 +4730,15 @@ function AuthPage({
   );
 }
 
-function PublishPage({ setPage, onPublish }: { setPage: (page: string) => void; onPublish: (item: ContentItem) => void }) {
+function PublishPage({
+  setPage,
+  onPublish,
+  currentUser,
+}: {
+  setPage: (page: string) => void;
+  onPublish: (item: ContentItem) => void;
+  currentUser?: UserProfile;
+}) {
   const [type, setType] = useState<"Truyện" | "Phim">("Truyện");
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
@@ -4820,7 +4837,10 @@ function PublishPage({ setPage, onPublish }: { setPage: (page: string) => void; 
       score: "—",
       type,
       genres: genres.length ? genres : [],
-      createdBy: { name: getCurrentUserName(), user: getCurrentUserHandle() },
+      createdBy: {
+        name: (currentUser && currentUser.name) ? currentUser.name : getCurrentUserName(),
+        user: (currentUser && currentUser.username) ? (currentUser.username.startsWith("@") ? currentUser.username : "@" + currentUser.username) : getCurrentUserHandle()
+      },
       shortDescription: shortDescription.trim(),
       description: description.trim(),
       author: author.trim(),
@@ -5007,6 +5027,37 @@ function saveDirectoryUsers(list: DirectoryUser[]) {
 
 function FriendsPage({ setPage, onOpenPublicProfile }: { setPage: (page: string) => void; onOpenPublicProfile?: (username: string) => void }) {
   const [tab, setTab] = useState("Danh sách bạn bè");
+  useEffect(() => {
+    const fetchDirectoryFromCloud = async () => {
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/users/search?size=100`);
+        if (res.ok) {
+          const data = await res.json();
+          const users = data?.data?.items;
+          if (Array.isArray(users) && users.length > 0) {
+            const mapped: DirectoryUser[] = users.map((u: any) => ({
+              name: u.displayName || u.username,
+              user: u.username.startsWith("@") ? u.username : "@" + u.username,
+              bio: u.bio || "Thành viên cộng đồng.",
+              img: u.avatarUrl || photos.red,
+              online: true,
+            }));
+            setDirectoryUsers(prev => {
+              const combined = [...mapped];
+              for (const p of prev) {
+                if (!combined.some(c => c.user.toLowerCase() === p.user.toLowerCase())) {
+                  combined.push(p);
+                }
+              }
+              saveDirectoryUsers(combined);
+              return combined;
+            });
+          }
+        }
+      } catch {}
+    };
+    fetchDirectoryFromCloud();
+  }, []);
   const [requestTab, setRequestTab] = useState("Đã nhận");
   const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>(() => loadSavedDirectoryUsers());
   const [requests, setRequests] = useState<string[]>([]);
@@ -5313,6 +5364,116 @@ function ChatPage({
     window.setTimeout(() => setChatToast(""), 3500);
   };
 
+  // Polling đồng bộ tin nhắn trực tiếp từ Backend Cloud MySQL (giúp 2 người khác trình duyệt / khác máy thấy tin nhắn của nhau)
+  useEffect(() => {
+    let activePoll = true;
+    const pollDirectMessages = async () => {
+      try {
+        // 1. Kiểm tra danh sách cuộc trò chuyện trên server
+        const convRes = await fetch(`${getBackendApiBase()}/api/conversations/user-conversations?username=${encodeURIComponent(meUser.username)}`);
+        if (convRes.ok) {
+          const convData = await convRes.json();
+          const serverConvs = convData?.data;
+          if (Array.isArray(serverConvs)) {
+            setConvList(prev => {
+              let updated = [...prev];
+              let hasChange = false;
+              for (const sc of serverConvs) {
+                const peerUser = sc.peerUsername;
+                const peerName = sc.peerName || peerUser;
+                const exists = updated.some(c =>
+                  !c.group && c.members?.some(m => m.user && m.user.toLowerCase().replace(/^@/, '') === peerUser.toLowerCase().replace(/^@/, ''))
+                );
+                if (!exists) {
+                  hasChange = true;
+                  const newConv: ConversationState = {
+                    id: sc.id || `conv-direct-${peerUser}`,
+                    name: peerName,
+                    text: "Cuộc trò chuyện trực tiếp",
+                    img: sc.peerAvatar || photos.red,
+                    count: 0,
+                    group: false,
+                    requireApproval: false,
+                    members: [
+                      { name: meUser.name, user: meUser.username, avatar: meUser.avatar, role: "LEADER", online: true },
+                      { name: peerName, user: peerUser, avatar: sc.peerAvatar || photos.red, role: "MEMBER", online: true }
+                    ],
+                    pendingMembers: [],
+                    sharedMedia: [],
+                    messages: []
+                  };
+                  updated.unshift(newConv);
+                }
+              }
+              return hasChange ? updated : prev;
+            });
+          }
+        }
+
+        // 2. Lấy tin nhắn thời gian thực của cuộc trò chuyện hiện tại (nếu là chat 1-1)
+        if (!currentConv.group && currentConv.id !== "empty-conv") {
+          const peer = currentConv.members?.find(m => m.user && m.user.toLowerCase().replace(/^@/, '') !== meUser.username.toLowerCase().replace(/^@/, ''));
+          const peerHandle = peer?.user || currentConv.name;
+          if (peerHandle) {
+            const msgRes = await fetch(`${getBackendApiBase()}/api/conversations/direct-messages?user1=${encodeURIComponent(meUser.username)}&user2=${encodeURIComponent(peerHandle)}`);
+            if (msgRes.ok) {
+              const msgData = await msgRes.json();
+              const serverMsgs = msgData?.data;
+              if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+                setConvList(prev => {
+                  return prev.map(c => {
+                    if (c.id === currentConv.id) {
+                      const existingIds = new Set(c.messages.map(m => m.id));
+                      const newOnes: ChatMessageItem[] = [];
+                      for (const sm of serverMsgs) {
+                        if (!existingIds.has(sm.id)) {
+                          const isMine = (sm.sender || "").toLowerCase().replace(/^@/, '') === meUser.username.toLowerCase().replace(/^@/, '');
+                          newOnes.push({
+                            id: sm.id,
+                            senderName: sm.senderName || sm.sender,
+                            senderUser: sm.sender,
+                            senderAvatar: isMine ? meUser.avatar : (peer?.avatar || photos.red),
+                            isMe: isMine,
+                            time: sm.time || nowTimeStr(),
+                            text: sm.text,
+                            cipherText: sm.cipherText,
+                            status: "Đã gửi"
+                          });
+                        }
+                      }
+                      if (newOnes.length > 0) {
+                        const mergedMessages = [...c.messages, ...newOnes];
+                        const lastMsg = mergedMessages[mergedMessages.length - 1];
+                        return {
+                          ...c,
+                          text: lastMsg?.text || c.text,
+                          messages: mergedMessages
+                        };
+                      }
+                    }
+                    return c;
+                  });
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // network error / offline
+      }
+    };
+
+    pollDirectMessages();
+    const interval = window.setInterval(() => {
+      if (activePoll) pollDirectMessages();
+    }, 2500);
+
+    return () => {
+      activePoll = false;
+      window.clearInterval(interval);
+    };
+  }, [currentConv.id, currentConv.group, meUser.username]);
+
   // ĐỒNG BỘ THỜI GIAN THỰC (BroadcastChannel giữa các tab + Live Timer cho Video Call)
   useEffect(() => {
     let channel: BroadcastChannel | null = null;
@@ -5517,6 +5678,24 @@ function ChatPage({
           : c
       );
     });
+
+    // Đồng bộ tin nhắn trực tiếp lên Cloud Database MySQL để người bên kia nhận được
+    const peerMember = currentConv.members?.find(
+      m => m.user && m.user.toLowerCase().replace(/^@/, '') !== meUser.username.toLowerCase().replace(/^@/, '')
+    );
+    const peerUserHandle = peerMember?.user || (!currentConv.group ? currentConv.name : null);
+    if (peerUserHandle && !currentConv.group) {
+      fetch(`${getBackendApiBase()}/api/conversations/send-direct-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromUser: meUser.username,
+          toUser: peerUserHandle,
+          text: textVal || summaryText,
+          cipherText: encryptedPacket?.cipherText || "",
+        }),
+      }).catch(err => console.warn("Failed sending direct message to cloud:", err));
+    }
 
     setMessage("");
     setStagedAttachments([]);
@@ -9096,6 +9275,43 @@ function ReportModal({
 const CONTENTS_STORAGE_KEY = "pl_contents_v1";
 const FAVORITES_STORAGE_KEY = "pl_favorites_v1";
 
+function mapBackendContentToItem(c: any): ContentItem {
+  const isMovie = c.contentType === "MOVIE" || c.contentType === "ANIME";
+  const type: "Truyện" | "Phim" = isMovie ? "Phim" : "Truyện";
+  const authorOrDirector = c.authorOrDirector || "";
+  const createdByHandle = c.createdByUsername ? (c.createdByUsername.startsWith("@") ? c.createdByUsername : "@" + c.createdByUsername) : "@anhquyphi";
+  return {
+    title: c.title,
+    sub: authorOrDirector || (isMovie ? "Phim" : "Truyện"),
+    img: c.posterUrl || (isMovie ? photos.city : photos.red),
+    status: c.status === "COMPLETED" ? "Hoàn thành" : c.status === "ONGOING" ? "Đang ra" : "Tạm dừng",
+    score: c.averageRating ? String(c.averageRating) : "—",
+    type,
+    genres: Array.isArray(c.genres) ? c.genres.map((g: any) => g.name || g) : [],
+    isSeries: c.isSeries,
+    description: c.description || "",
+    shortDescription: c.description || "",
+    author: !isMovie ? authorOrDirector : "",
+    director: isMovie ? authorOrDirector : "",
+    mainLink: c.externalMainLink || "",
+    visibility: c.visibility || "PUBLIC",
+    createdBy: {
+      name: c.createdByUsername || "Người đăng",
+      user: createdByHandle,
+    },
+    updatedAt: c.updatedAt ? new Date(c.updatedAt).toLocaleDateString("vi-VN") : "Gần đây",
+    chaptersList: Array.isArray(c.chapters) ? c.chapters.map((ch: any) => ({
+      id: ch.id,
+      season: isMovie ? "Phần 1" : "Mùa 1",
+      number: String(ch.chapterNumber),
+      title: ch.title || `Chương ${ch.chapterNumber}`,
+      url: ch.externalLink || "",
+      note: ch.notes || "",
+    })) : [],
+    commentsList: [],
+  };
+}
+
 function loadSavedContents(): ContentItem[] {
   try {
     const raw = window.localStorage.getItem(CONTENTS_STORAGE_KEY);
@@ -9119,8 +9335,26 @@ function loadSavedFavorites(): string[] {
 }
 
 export default function App() {
-  const [page, setPage] = useState("login");
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u && u.username && u.username !== "@user") return true;
+      }
+    } catch {}
+    return false;
+  });
+  const [page, setPage] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u && u.username && u.username !== "@user") return "home";
+      }
+    } catch {}
+    return "login";
+  });
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
     const u = loadSavedCurrentUser();
     const isMain = u.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
@@ -9182,6 +9416,36 @@ export default function App() {
   useEffect(() => {
     saveUserFavorites(favorites, currentUser);
   }, [favorites, currentUser]);
+
+  // Đồng bộ tác phẩm thời gian thực từ CSDL MySQL Backend (TiDB Cloud)
+  useEffect(() => {
+    const fetchCloudContents = async () => {
+      try {
+        const res = await fetch(`${getBackendApiBase()}/api/contents?page=0&size=100`);
+        if (res.ok) {
+          const data = await res.json();
+          const items = data?.data?.items;
+          if (Array.isArray(items) && items.length > 0) {
+            const cloudMapped = items.map(mapBackendContentToItem);
+            setAllContents(prev => {
+              const merged = [...cloudMapped];
+              for (const local of prev) {
+                if (!merged.some(m => m.title.toLowerCase() === local.title.toLowerCase())) {
+                  merged.push(local);
+                }
+              }
+              return merged;
+            });
+          }
+        }
+      } catch (e) {
+        // ignore offline
+      }
+    };
+    fetchCloudContents();
+    const interval = window.setInterval(fetchCloudContents, 10000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -9477,6 +9741,7 @@ export default function App() {
     {page === "publish" && (
       <PublishPage
         setPage={navigate}
+        currentUser={currentUser}
         onPublish={item => {
           setAllContents(current => [item, ...current]);
           setUserSavedTitles(prev => {
@@ -9485,6 +9750,35 @@ export default function App() {
             return next;
           });
           setPublishedTitle(item.title);
+
+          // Gửi lên Backend Cloud MySQL để toàn bộ người dùng khác thấy ngay
+          fetch(`${getBackendApiBase()}/api/contents?creatorUsername=${encodeURIComponent(currentUser.username)}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+            },
+            body: JSON.stringify({
+              title: item.title,
+              contentType: item.type === "Phim" ? (item.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
+              isSeries: item.type === "Truyện" || item.movieMode === "Series",
+              posterUrl: item.img || "",
+              authorOrDirector: item.author || item.director || item.createdBy?.name || currentUser.name,
+              description: item.description || item.shortDescription || item.title,
+              status: item.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
+              externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
+              visibility: item.visibility || "PUBLIC",
+              genreIds: [],
+              chapters: (item.chaptersList || []).map((ch, idx) => ({
+                chapterNumber: parseFloat(ch.number) || (idx + 1),
+                displayOrder: idx + 1,
+                title: ch.title || `Chương ${ch.number}`,
+                externalLink: ch.url || "",
+                notes: ch.note || "",
+              })),
+            }),
+          }).catch(err => console.warn("Sync content to cloud failed:", err));
+
           navigate("detail");
         }}
       />
