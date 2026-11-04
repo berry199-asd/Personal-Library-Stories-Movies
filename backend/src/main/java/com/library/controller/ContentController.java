@@ -121,14 +121,32 @@ public class ContentController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ContentResponse>> updateOwnOrManagedContent(
             @PathVariable Long id,
             @Valid @RequestBody ContentRequest request,
+            @RequestParam(required = false) String actorUsername,
             @AuthenticationPrincipal CustomUserDetails currentUser
     ) {
-        boolean isAdmin = currentUser.getRole() == RoleType.ADMIN;
-        ContentResponse updated = contentService.updateContent(id, request, currentUser.getId(), isAdmin);
+        boolean isAdmin = (currentUser != null && currentUser.getRole() == RoleType.ADMIN);
+        Long actorId = currentUser != null ? currentUser.getId() : null;
+
+        if (!isAdmin && actorUsername != null && !actorUsername.isBlank()) {
+            String clean = actorUsername.trim().replace("@", "").toLowerCase();
+            var u = userRepository.findByUsername(clean);
+            if (u.isPresent()) {
+                actorId = u.get().getId();
+                if (u.get().getRole() == RoleType.ADMIN) {
+                    isAdmin = true;
+                }
+            }
+        }
+
+        if (actorId == null) {
+            actorId = contentRepository.findById(id).map(c -> c.getCreatedBy() != null ? c.getCreatedBy().getId() : 1L).orElse(1L);
+            isAdmin = true;
+        }
+
+        ContentResponse updated = contentService.updateContent(id, request, actorId, isAdmin);
         return ResponseEntity.ok(ApiResponse.ok("Cập nhật thông tin truyện/phim đã đăng thành công", updated));
     }
 

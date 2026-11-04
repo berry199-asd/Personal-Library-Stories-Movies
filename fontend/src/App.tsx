@@ -9451,6 +9451,7 @@ function mapBackendContentToItem(c: any): ContentItem {
   const authorOrDirector = c.authorOrDirector || "";
   const createdByHandle = c.createdByUsername ? (c.createdByUsername.startsWith("@") ? c.createdByUsername : "@" + c.createdByUsername) : "@anhquyphi";
   const localCover = getCustomCover(c.title);
+  const extLink = c.externalMainLink || "";
   return {
     id: c.id,
     title: c.title,
@@ -9465,21 +9466,24 @@ function mapBackendContentToItem(c: any): ContentItem {
     shortDescription: c.description || "",
     author: !isMovie ? authorOrDirector : "",
     director: isMovie ? authorOrDirector : "",
-    mainLink: c.externalMainLink || "",
+    mainLink: extLink,
+    externalLinks: extLink ? [{ platform: "Đường dẫn đọc / xem", url: extLink, note: "" }] : [],
     visibility: c.visibility || "PUBLIC",
     createdBy: {
       name: c.createdByUsername || "Người đăng",
       user: createdByHandle,
     },
     updatedAt: c.updatedAt ? new Date(c.updatedAt).toLocaleDateString("vi-VN") : "Gần đây",
-    chaptersList: Array.isArray(c.chapters) ? c.chapters.map((ch: any) => ({
-      id: ch.id,
-      season: isMovie ? "Phần 1" : "Mùa 1",
-      number: String(ch.chapterNumber),
-      title: ch.title || `Chương ${ch.chapterNumber}`,
-      url: ch.externalLink || "",
-      note: ch.notes || "",
-    })) : [],
+    chaptersList: (Array.isArray(c.chapters) && c.chapters.length > 0)
+      ? c.chapters.map((ch: any) => ({
+          id: ch.id,
+          season: isMovie ? "Phần 1" : "Mùa 1",
+          number: String(ch.chapterNumber),
+          title: ch.title || `Chương ${ch.chapterNumber}`,
+          url: ch.externalLink || "",
+          note: ch.notes || "",
+        }))
+      : [],
     commentsList: [],
   };
 }
@@ -10075,8 +10079,7 @@ export default function App() {
       <PublishPage
         setPage={navigate}
         currentUser={currentUser}
-        onPublish={item => {
-          removeDeletedTitle(item.title);
+        onPublish={async item => {
           if (item.img) {
             saveCustomCover(item.title, item.img);
           }
@@ -10088,42 +10091,48 @@ export default function App() {
           });
           setPublishedTitle(item.title);
 
-          // Gửi lên Backend Cloud MySQL để toàn bộ người dùng khác thấy ngay
           const backendBase = getBackendApiBase();
           if (backendBase) {
-            fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(currentUser.username)}`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-              },
-              body: JSON.stringify({
-                title: item.title,
-                contentType: item.type === "Phim" ? "MOVIE" : "MANGA",
-                isSeries: item.type === "Truyện" || item.movieMode === "Series",
-                posterUrl: item.img || "",
-                authorOrDirector: item.author || item.director || item.createdBy?.name || currentUser.name || "Tác giả",
-                description: item.description || item.shortDescription || item.title,
-                status: item.status === "Hoàn thành" ? "COMPLETED" : item.status === "Tạm dừng" ? "HIATUS" : "ONGOING",
-                externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
-                visibility: item.visibility || "PUBLIC",
-                genreIds: [],
-                chapters: (item.chaptersList || []).map((ch, idx) => ({
-                  chapterNumber: parseFloat(ch.number) || (idx + 1),
-                  displayOrder: idx + 1,
-                  title: ch.title || `Chương ${ch.number}`,
-                  externalLink: ch.url || "",
-                  notes: ch.note || "",
-                })),
-              }),
-            })
-            .then(res => res.json())
-            .then(resData => {
-              if (resData?.data?.id) {
-                console.log("Published story saved to cloud with id:", resData.data.id);
+            try {
+              const res = await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(currentUser.username)}`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+                },
+                body: JSON.stringify({
+                  title: item.title,
+                  contentType: item.type === "Phim" ? "MOVIE" : "MANGA",
+                  isSeries: item.type === "Truyện" || item.movieMode === "Series",
+                  posterUrl: item.img || "",
+                  authorOrDirector: item.author || item.director || item.createdBy?.name || currentUser.name || "Tác giả",
+                  description: item.description || item.shortDescription || item.title,
+                  status: item.status === "Hoàn thành" ? "COMPLETED" : item.status === "Tạm dừng" ? "HIATUS" : "ONGOING",
+                  externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
+                  visibility: item.visibility || "PUBLIC",
+                  genreIds: [],
+                  chapters: (item.chaptersList || []).map((ch, idx) => ({
+                    chapterNumber: parseFloat(ch.number) || (idx + 1),
+                    displayOrder: idx + 1,
+                    title: ch.title || `Chương ${ch.number}`,
+                    externalLink: ch.url || "",
+                    notes: ch.note || "",
+                  })),
+                }),
+              });
+              if (res.ok) {
+                const resData = await res.json();
+                if (resData?.data?.id) {
+                  const mapped = mapBackendContentToItem(resData.data);
+                  if (item.chaptersList && item.chaptersList.length > 0) {
+                    mapped.chaptersList = item.chaptersList;
+                  }
+                  setAllContents(prev => [mapped, ...prev.filter(x => x.title !== item.title)]);
+                }
               }
-            })
-            .catch(err => console.warn("Sync content to cloud failed:", err));
+            } catch (err) {
+              console.warn("Publish content to cloud failed:", err);
+            }
           }
 
           navigate("detail");

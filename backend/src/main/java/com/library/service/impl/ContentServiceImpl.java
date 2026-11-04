@@ -57,7 +57,7 @@ public class ContentServiceImpl implements ContentService {
         Page<ContentResponse> mapped = page.map(c -> ContentResponse.fromEntity(
                 c,
                 reviewRepository.calculateAverageRating(c.getId()),
-                false
+                true
         ));
         return PageResponse.fromPage(mapped);
     }
