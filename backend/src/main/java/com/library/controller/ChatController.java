@@ -120,7 +120,7 @@ public class ChatController {
         String senderName = payload.get("senderName");
 
         if (fromUserRaw == null || toUserRaw == null || (text == null && cipherText == null)) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(400, "Thiếu thông tin người gửi hoặc người nhận"));
+            return ResponseEntity.badRequest().body(ApiResponse.error(400, "Thiếu thông tin người gửi hoặc người nhận", null));
         }
 
         String cleanFrom = fromUserRaw.trim().replace("@", "").toLowerCase();
