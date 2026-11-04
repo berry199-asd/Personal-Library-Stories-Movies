@@ -17,6 +17,7 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
     public void run(String... args) {
         migratePosterUrlToLongText();
         migrateSharedUsersColumn();
+        migrateUserAvatarUrlToLongText();
     }
 
     public synchronized void migrateSharedUsersColumn() {
@@ -26,6 +27,16 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
             log.info("Successfully added contents.shared_users column.");
         } catch (Exception ex) {
             log.info("contents.shared_users already exists or error handled: {}", ex.getMessage());
+        }
+    }
+
+    public synchronized void migrateUserAvatarUrlToLongText() {
+        try {
+            log.info("Checking users table schema for avatar_url LONGTEXT...");
+            jdbcTemplate.execute("ALTER TABLE users MODIFY COLUMN avatar_url LONGTEXT");
+            log.info("Successfully updated users.avatar_url to LONGTEXT.");
+        } catch (Exception ex) {
+            log.warn("Notice in migrateUserAvatarUrlToLongText: {}", ex.getMessage());
         }
     }
 
