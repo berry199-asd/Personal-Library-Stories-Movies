@@ -4804,7 +4804,40 @@ function PublishPage({
   const upload = (file?: File) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setCover(String(reader.result));
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 480;
+        const MAX_HEIGHT = 720;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.72);
+          setCover(compressed);
+        } else {
+          setCover(String(reader.result));
+        }
+      };
+      img.src = String(reader.result);
+    };
     reader.readAsDataURL(file);
   };
   const attempt = (action: string) => {
@@ -7702,6 +7735,35 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
       joinedAt: acc.joinedDate || "18/08/2023",
     }));
   });
+
+  // Tự động tải danh sách toàn bộ người dùng thật từ CSDL MySQL Backend
+  useEffect(() => {
+    const fetchCloudUsers = async () => {
+      try {
+        const backendBase = getBackendApiBase();
+        if (!backendBase) return;
+        const res = await fetch(`${backendBase}/api/users/search?size=100`);
+        if (res.ok) {
+          const data = await res.json();
+          const items = data?.data?.items;
+          if (Array.isArray(items) && items.length > 0) {
+            setUsers(items.map((u: any, idx: number) => ({
+              id: u.id || idx + 1,
+              name: u.displayName || u.username,
+              username: u.username.startsWith("@") ? u.username : "@" + u.username,
+              email: u.email,
+              avatar: u.avatarUrl || photos.red,
+              bio: u.bio || (u.role === "ADMIN" ? "Quản trị viên hệ thống Mê Truyện." : "Thành viên Mê Truyện."),
+              role: (u.role === "ADMIN" ? "ADMIN" : "USER") as "USER" | "ADMIN",
+              status: "ACTIVE" as const,
+              joinedAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : "Hôm nay",
+            })));
+          }
+        }
+      } catch {}
+    };
+    fetchCloudUsers();
+  }, []);
   const [editingUser, setEditingUser] = useState<AdminUserItem | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({ name: "", username: "", email: "", role: "USER" as "USER" | "ADMIN", status: "ACTIVE" as "ACTIVE" | "LOCKED" | "BANNED", bio: "" });
@@ -9851,32 +9913,42 @@ export default function App() {
           setPublishedTitle(item.title);
 
           // Gửi lên Backend Cloud MySQL để toàn bộ người dùng khác thấy ngay
-          fetch(`${getBackendApiBase()}/api/contents?creatorUsername=${encodeURIComponent(currentUser.username)}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-            },
-            body: JSON.stringify({
-              title: item.title,
-              contentType: item.type === "Phim" ? (item.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
-              isSeries: item.type === "Truyện" || item.movieMode === "Series",
-              posterUrl: item.img || "",
-              authorOrDirector: item.author || item.director || item.createdBy?.name || currentUser.name,
-              description: item.description || item.shortDescription || item.title,
-              status: item.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
-              externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
-              visibility: item.visibility || "PUBLIC",
-              genreIds: [],
-              chapters: (item.chaptersList || []).map((ch, idx) => ({
-                chapterNumber: parseFloat(ch.number) || (idx + 1),
-                displayOrder: idx + 1,
-                title: ch.title || `Chương ${ch.number}`,
-                externalLink: ch.url || "",
-                notes: ch.note || "",
-              })),
-            }),
-          }).catch(err => console.warn("Sync content to cloud failed:", err));
+          const backendBase = getBackendApiBase();
+          if (backendBase) {
+            fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(currentUser.username)}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+              },
+              body: JSON.stringify({
+                title: item.title,
+                contentType: item.type === "Phim" ? "MOVIE" : "MANGA",
+                isSeries: item.type === "Truyện" || item.movieMode === "Series",
+                posterUrl: item.img || "",
+                authorOrDirector: item.author || item.director || item.createdBy?.name || currentUser.name || "Tác giả",
+                description: item.description || item.shortDescription || item.title,
+                status: item.status === "Hoàn thành" ? "COMPLETED" : item.status === "Tạm dừng" ? "HIATUS" : "ONGOING",
+                externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
+                visibility: item.visibility || "PUBLIC",
+                genreIds: [],
+                chapters: (item.chaptersList || []).map((ch, idx) => ({
+                  chapterNumber: parseFloat(ch.number) || (idx + 1),
+                  displayOrder: idx + 1,
+                  title: ch.title || `Chương ${ch.number}`,
+                  externalLink: ch.url || "",
+                  notes: ch.note || "",
+                })),
+              }),
+            })
+            .then(res => res.json())
+            .then(resData => {
+              if (resData?.data?.id) {
+                console.log("Published story saved to cloud with id:", resData.data.id);
+              }
+            })
+            .catch(err => console.warn("Sync content to cloud failed:", err));
+          }
 
           navigate("detail");
         }}
