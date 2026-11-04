@@ -214,6 +214,7 @@ type ContentCommentItem = {
 };
 
 type ContentItem = {
+  id?: number;
   title: string;
   sub: string;
   img: string;
@@ -296,6 +297,41 @@ export function removeDeletedTitle(title: string) {
   set.delete(title.trim().toLowerCase());
   try {
     window.localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+const CUSTOM_COVERS_KEY = "pl_custom_covers_v1";
+
+export function getCustomCover(title: string): string | null {
+  if (!title) return null;
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_COVERS_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    return map[title.trim().toLowerCase()] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCustomCover(title: string, cover: string) {
+  if (!title || !cover) return;
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_COVERS_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[title.trim().toLowerCase()] = cover;
+    window.localStorage.setItem(CUSTOM_COVERS_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+export function removeCustomCover(title: string) {
+  if (!title) return;
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_COVERS_KEY);
+    if (!raw) return;
+    const map = JSON.parse(raw);
+    delete map[title.trim().toLowerCase()];
+    window.localStorage.setItem(CUSTOM_COVERS_KEY, JSON.stringify(map));
   } catch {}
 }
 
@@ -9414,10 +9450,12 @@ function mapBackendContentToItem(c: any): ContentItem {
   const type: "Truyện" | "Phim" = isMovie ? "Phim" : "Truyện";
   const authorOrDirector = c.authorOrDirector || "";
   const createdByHandle = c.createdByUsername ? (c.createdByUsername.startsWith("@") ? c.createdByUsername : "@" + c.createdByUsername) : "@anhquyphi";
+  const localCover = getCustomCover(c.title);
   return {
+    id: c.id,
     title: c.title,
     sub: authorOrDirector || (isMovie ? "Phim" : "Truyện"),
-    img: c.posterUrl || (isMovie ? photos.city : photos.red),
+    img: localCover || c.posterUrl || (isMovie ? photos.city : photos.red),
     status: c.status === "COMPLETED" ? "Hoàn thành" : c.status === "ONGOING" ? "Đang ra" : "Tạm dừng",
     score: c.averageRating ? String(c.averageRating) : "—",
     type,
@@ -9573,12 +9611,13 @@ export default function App() {
         // Tự động dọn dẹp các tác phẩm đã xóa trên server nếu server vẫn còn
         for (const sItem of serverItems) {
           if (sItem.title && deletedSet.has(sItem.title.trim().toLowerCase())) {
-            fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(sItem.title)}`, {
-              method: "DELETE",
-              headers: {
-                ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-              }
-            }).catch(() => {});
+            const authH: Record<string, string> = {
+              ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+            };
+            if (sItem.id) {
+              fetch(`${backendBase}/api/contents/${sItem.id}`, { method: "DELETE", headers: authH }).catch(() => {});
+            }
+            fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(sItem.title)}`, { method: "DELETE", headers: authH }).catch(() => {});
           }
         }
 
@@ -9744,13 +9783,53 @@ export default function App() {
     });
   };
 
-  const handleUpdatePublishedContent = (oldTitle: string, updated: ContentItem) => {
+  const handleUpdatePublishedContent = async (oldTitle: string, updated: ContentItem) => {
+    if (updated.img) {
+      saveCustomCover(updated.title, updated.img);
+    }
     setAllContents(prev => prev.map(x => (x.title === oldTitle ? updated : x)));
     if (publishedTitle === oldTitle && updated.title !== oldTitle) {
       setPublishedTitle(updated.title);
     }
     if (oldTitle !== updated.title && favorites.includes(oldTitle)) {
       setFavorites(prev => prev.map(f => (f === oldTitle ? updated.title : f)));
+    }
+
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const targetId = updated.id || allContents.find(x => x.title === oldTitle)?.id;
+        if (targetId) {
+          await fetch(`${backendBase}/api/contents/${targetId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+            },
+            body: JSON.stringify({
+              title: updated.title,
+              contentType: updated.type === "Phim" ? "MOVIE" : "MANGA",
+              isSeries: updated.type === "Truyện" || updated.movieMode === "Series",
+              posterUrl: updated.img || "",
+              authorOrDirector: updated.author || updated.director || updated.createdBy?.name || "Tác giả",
+              description: updated.description || updated.shortDescription || updated.title,
+              status: updated.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
+              externalMainLink: updated.mainLink || "",
+              visibility: updated.visibility || "PUBLIC",
+              genreIds: [],
+              chapters: (updated.chaptersList || []).map((ch, idx) => ({
+                chapterNumber: parseFloat(ch.number) || (idx + 1),
+                displayOrder: idx + 1,
+                title: ch.title || `Chương ${ch.number}`,
+                externalLink: ch.url || "",
+                notes: ch.note || "",
+              })),
+            })
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Update content on cloud failed:", err);
     }
   };
 
@@ -9902,6 +9981,10 @@ export default function App() {
         onUpdatePublishedContent={handleUpdatePublishedContent}
         onDeletePublishedContent={async title => {
           addDeletedTitle(title);
+          removeCustomCover(title);
+          const targetItem = allContents.find(x => x.title === title);
+          const targetId = targetItem?.id;
+
           setAllContents(prev => prev.filter(x => x.title !== title));
           handleRemoveFromLibrary(title);
           showGlobalToast(`Đã xóa vĩnh viễn tác phẩm “${title}” khỏi hệ thống!`);
@@ -9910,12 +9993,19 @@ export default function App() {
           try {
             const backendBase = getBackendApiBase();
             if (backendBase) {
-              await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title)}&actorUsername=${encodeURIComponent(currentUser.username)}`, {
+              const headers: Record<string, string> = {
+                ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+              };
+              if (targetId) {
+                await fetch(`${backendBase}/api/contents/${targetId}?actorUsername=${encodeURIComponent(currentUser.username)}`, {
+                  method: "DELETE",
+                  headers
+                }).catch(() => {});
+              }
+              fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title)}&actorUsername=${encodeURIComponent(currentUser.username)}`, {
                 method: "DELETE",
-                headers: {
-                  ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-                }
-              });
+                headers
+              }).catch(() => {});
             }
           } catch (err) {
             console.warn("Delete published content on cloud failed:", err);
@@ -9987,6 +10077,9 @@ export default function App() {
         currentUser={currentUser}
         onPublish={item => {
           removeDeletedTitle(item.title);
+          if (item.img) {
+            saveCustomCover(item.title, item.img);
+          }
           setAllContents(current => [item, ...current]);
           setUserSavedTitles(prev => {
             const next = prev.includes(item.title) ? prev : [item.title, ...prev];
