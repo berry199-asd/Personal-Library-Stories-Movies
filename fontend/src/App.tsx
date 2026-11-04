@@ -275,17 +275,32 @@ export function loadSavedCurrentUser(): UserProfile {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.username && parsed.name) {
+        // Tự động khôi phục tài khoản Berry nếu trước đó bị ghi đè nhầm thành Anh Quý Phi
+        if (
+          (parsed.email && parsed.email.toLowerCase() === "lechauanh2512.com@gmail.com") ||
+          (parsed.username && parsed.username.toLowerCase() === "@berry") ||
+          (parsed.username && parsed.username.toLowerCase() === "berry")
+        ) {
+          parsed.name = "Berry";
+          parsed.username = "@berry";
+          parsed.role = "USER";
+          parsed.email = "lechauanh2512.com@gmail.com";
+          return parsed;
+        }
+
+        // Tài khoản Admin chính xác
         if (
           (parsed.email && parsed.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
-          (parsed.username && parsed.username.toLowerCase().includes("lechauanh")) ||
-          (parsed.name && parsed.name.toLowerCase().includes("lechauanh")) ||
-          (parsed.username && parsed.username.toLowerCase().includes("anhquyphi")) ||
-          (parsed.name && parsed.name.toLowerCase().includes("anh quý phi"))
+          (parsed.username && parsed.username.toLowerCase() === "@anhquyphi") ||
+          (parsed.username && parsed.username.toLowerCase() === "anhquyphi")
         ) {
           parsed.name = "Anh Quý Phi";
           parsed.username = "@anhquyphi";
           parsed.role = "ADMIN";
+          parsed.email = "lechauanh.12a5.tnd@gmail.com";
+          return parsed;
         }
+
         return parsed;
       }
     }
@@ -318,12 +333,18 @@ export function loadSavedAccounts(): UserProfile[] {
       if (Array.isArray(parsed)) {
         return parsed.map(acc => {
           if (
-            (acc.email && acc.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
-            (acc.username && acc.username.toLowerCase().includes("lechauanh")) ||
-            (acc.username && acc.username.toLowerCase().includes("anhquyphi")) ||
-            (acc.name && acc.name.toLowerCase().includes("anh quý phi"))
+            (acc.email && acc.email.toLowerCase() === "lechauanh2512.com@gmail.com") ||
+            (acc.username && acc.username.toLowerCase() === "@berry") ||
+            (acc.username && acc.username.toLowerCase() === "berry")
           ) {
-            return { ...acc, name: "Anh Quý Phi", username: "@anhquyphi", role: "ADMIN" };
+            return { ...acc, name: "Berry", username: "@berry", role: "USER", email: "lechauanh2512.com@gmail.com" };
+          }
+          if (
+            (acc.email && acc.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
+            (acc.username && acc.username.toLowerCase() === "@anhquyphi") ||
+            (acc.username && acc.username.toLowerCase() === "anhquyphi")
+          ) {
+            return { ...acc, name: "Anh Quý Phi", username: "@anhquyphi", role: "ADMIN", email: "lechauanh.12a5.tnd@gmail.com" };
           }
           return acc;
         });
@@ -956,7 +977,7 @@ function HomePage({
           favorites={favorites}
           toggleFavorite={toggleFavorite}
           setPage={setPage}
-          compact
+          compact={false}
           savedItems={savedItems}
           catalogItems={catalogItems}
           onSelectContent={onSelectContent}
@@ -4314,8 +4335,10 @@ function AuthPage({
         : "@" + inputEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
       // Cho phép đăng ký lại / cập nhật tài khoản (kể cả khi đã xóa trong MySQL phpMyAdmin)
 
-      const isLeChauAnh = inputEmail.includes("lechauanh") || usernameInput.toLowerCase().includes("anhquyphi");
-      const cleanName = displayName.trim() || (isLeChauAnh ? "Anh Quý Phi" : cleanUser.replace(/^@/, ""));
+      const isMainAdmin = inputEmail.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
+                          cleanUser.toLowerCase() === "@anhquyphi" ||
+                          cleanUser.toLowerCase() === "anhquyphi";
+      const cleanName = displayName.trim() || (isMainAdmin ? "Anh Quý Phi" : cleanUser.replace(/^@/, ""));
       resolvedProfile = {
         id: "usr-" + Date.now().toString(36),
         name: cleanName,
@@ -4323,8 +4346,8 @@ function AuthPage({
         email: inputEmail,
         password: password.trim(),
         avatar: photos.red,
-        role: "USER",
-        bio: "Thành viên Mê Truyện Stories Unbound",
+        role: isMainAdmin ? "ADMIN" : "USER",
+        bio: isMainAdmin ? "Quản trị viên hệ thống Mê Truyện Stories Unbound." : "Thành viên Mê Truyện Stories Unbound",
         joinedDate: "Hôm nay",
         userId: "USR-" + Math.floor(1000 + Math.random() * 9000),
       };
@@ -4371,7 +4394,9 @@ function AuthPage({
 
     } else {
       const inputTrim = email.trim();
-      const isLeChauAnh = inputTrim.toLowerCase().includes("lechauanh") || inputTrim.toLowerCase().includes("anhquyphi");
+      const isMainAdmin = inputTrim.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
+                          inputTrim.toLowerCase() === "anhquyphi" ||
+                          inputTrim.toLowerCase() === "@anhquyphi";
       const savedAccounts = loadSavedAccounts();
       let matched = savedAccounts.find(
         a => a.email.toLowerCase() === inputTrim.toLowerCase() ||
@@ -4379,7 +4404,7 @@ function AuthPage({
              a.username.toLowerCase() === ("@" + inputTrim).toLowerCase()
       );
 
-      if (!matched && isLeChauAnh) {
+      if (!matched && isMainAdmin) {
         matched = {
           id: "usr-anhquyphi",
           name: "Anh Quý Phi",
@@ -4447,11 +4472,16 @@ function AuthPage({
         return;
       }
 
+      const isAccountAdmin = isMainAdmin ||
+                             matched.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
+                             matched.username.toLowerCase() === "@anhquyphi" ||
+                             matched.username.toLowerCase() === "anhquyphi";
+
       resolvedProfile = {
         ...matched,
-        role: isLeChauAnh ? "ADMIN" : (matched.role || resolvedRole),
-        name: isLeChauAnh ? "Anh Quý Phi" : matched.name,
-        username: isLeChauAnh ? "@anhquyphi" : matched.username,
+        role: isAccountAdmin ? "ADMIN" : (matched.role || resolvedRole || "USER"),
+        name: isAccountAdmin ? "Anh Quý Phi" : (matched.name || matched.username),
+        username: isAccountAdmin ? "@anhquyphi" : (matched.username.startsWith("@") ? matched.username : "@" + matched.username),
       };
 
       setActiveCurrentUserProfile(resolvedProfile);
@@ -4473,12 +4503,11 @@ function AuthPage({
             window.localStorage.setItem("personal_library_access_token", data.data.accessToken);
           }
           const dbRole = data?.data?.user?.role;
-          if (dbRole === "ADMIN" || dbRole === "USER") {
-            resolvedProfile.role = dbRole;
-            setActiveCurrentUserProfile(resolvedProfile);
-            saveAccountToStorage(resolvedProfile);
-            onAuthenticated(dbRole, resolvedProfile);
-          }
+          const assignedRole = isAccountAdmin ? "ADMIN" : (dbRole === "ADMIN" ? "ADMIN" : "USER");
+          resolvedProfile.role = assignedRole;
+          setActiveCurrentUserProfile(resolvedProfile);
+          saveAccountToStorage(resolvedProfile);
+          onAuthenticated(assignedRole, resolvedProfile);
         })
         .catch(() => {});
 
@@ -9358,15 +9387,15 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
     const u = loadSavedCurrentUser();
     const isMain = u.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
-                   u.username.toLowerCase().includes("anhquyphi") ||
-                   u.name.toLowerCase().includes("anh quý phi");
-    return isMain ? { ...u, role: "ADMIN" as const } : u;
+                   u.username.toLowerCase() === "@anhquyphi" ||
+                   u.username.toLowerCase() === "anhquyphi";
+    return isMain ? { ...u, role: "ADMIN" as const, name: "Anh Quý Phi", username: "@anhquyphi" } : u;
   });
   const [userRole, setUserRole] = useState<"USER" | "ADMIN">(() => {
     const u = loadSavedCurrentUser();
     const isMain = u.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
-                   u.username.toLowerCase().includes("anhquyphi") ||
-                   u.name.toLowerCase().includes("anh quý phi");
+                   u.username.toLowerCase() === "@anhquyphi" ||
+                   u.username.toLowerCase() === "anhquyphi";
     if (isMain) return "ADMIN";
     return u.role || "USER";
   });
@@ -9390,13 +9419,13 @@ export default function App() {
 
   useEffect(() => {
     const isMain = currentUser.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
-                   currentUser.username.toLowerCase().includes("anhquyphi") ||
-                   currentUser.name.toLowerCase().includes("anh quý phi");
+                   currentUser.username.toLowerCase() === "@anhquyphi" ||
+                   currentUser.username.toLowerCase() === "anhquyphi";
     const activeRole = isMain ? "ADMIN" : (currentUser.role || "USER");
     if (userRole !== activeRole) {
       setUserRole(activeRole);
     }
-    const profileToSave = isMain ? { ...currentUser, role: "ADMIN" as const } : currentUser;
+    const profileToSave = isMain ? { ...currentUser, role: "ADMIN" as const, name: "Anh Quý Phi", username: "@anhquyphi" } : currentUser;
     setActiveCurrentUserProfile(profileToSave);
     saveCurrentUserToStorage(profileToSave);
     saveAccountToStorage(profileToSave);
@@ -9417,35 +9446,63 @@ export default function App() {
     saveUserFavorites(favorites, currentUser);
   }, [favorites, currentUser]);
 
-  // Đồng bộ tác phẩm thời gian thực từ CSDL MySQL Backend (TiDB Cloud)
+  // Đồng bộ tác phẩm 2 chiều thời gian thực với CSDL MySQL Backend (TiDB Cloud)
   useEffect(() => {
-    const fetchCloudContents = async () => {
+    const syncCloudContents = async () => {
       try {
         const res = await fetch(`${getBackendApiBase()}/api/contents?page=0&size=100`);
         if (res.ok) {
           const data = await res.json();
-          const items = data?.data?.items;
-          if (Array.isArray(items) && items.length > 0) {
-            const cloudMapped = items.map(mapBackendContentToItem);
-            setAllContents(prev => {
-              const merged = [...cloudMapped];
-              for (const local of prev) {
-                if (!merged.some(m => m.title.toLowerCase() === local.title.toLowerCase())) {
-                  merged.push(local);
-                }
+          const serverItems = data?.data?.items || [];
+          const cloudMapped = Array.isArray(serverItems) ? serverItems.map(mapBackendContentToItem) : [];
+
+          // 1. Cập nhật các tác phẩm từ server vào allContents
+          setAllContents(prev => {
+            const merged = [...cloudMapped];
+            for (const local of prev) {
+              if (!merged.some(m => m.title.trim().toLowerCase() === local.title.trim().toLowerCase())) {
+                merged.push(local);
+
+                // 2. Nếu có tác phẩm local chưa có trên server, tự động upload lên server TiDB Cloud
+                fetch(`${getBackendApiBase()}/api/contents?creatorUsername=${encodeURIComponent(local.createdBy?.user || currentUser.username)}`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+                  },
+                  body: JSON.stringify({
+                    title: local.title,
+                    contentType: local.type === "Phim" ? (local.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
+                    isSeries: local.type === "Truyện" || local.movieMode === "Series",
+                    posterUrl: local.img || "",
+                    authorOrDirector: local.author || local.director || local.createdBy?.name || currentUser.name,
+                    description: local.description || local.shortDescription || local.title,
+                    status: local.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
+                    externalMainLink: local.mainLink || (local.chaptersList && local.chaptersList[0]?.url) || "",
+                    visibility: local.visibility || "PUBLIC",
+                    genreIds: [],
+                    chapters: (local.chaptersList || []).map((ch, idx) => ({
+                      chapterNumber: parseFloat(ch.number) || (idx + 1),
+                      displayOrder: idx + 1,
+                      title: ch.title || `Chương ${ch.number}`,
+                      externalLink: ch.url || "",
+                      notes: ch.note || "",
+                    })),
+                  }),
+                }).catch(err => console.warn("Auto-sync local story to cloud failed:", err));
               }
-              return merged;
-            });
-          }
+            }
+            return merged;
+          });
         }
       } catch (e) {
         // ignore offline
       }
     };
-    fetchCloudContents();
-    const interval = window.setInterval(fetchCloudContents, 10000);
+    syncCloudContents();
+    const interval = window.setInterval(syncCloudContents, 10000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [currentUser.username]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
