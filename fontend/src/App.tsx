@@ -4161,11 +4161,11 @@ function AuthPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
       });
-      if (resp.ok) {
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data?.success && data?.data?.sentViaSmtp !== false) {
         setOtpNotice(`✅ Đã gửi mã xác thực OTP 6 chữ số đến email ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
       } else {
-        const errData = await resp.json().catch(() => null);
-        const errMsg = errData?.message || "Không thể gửi email OTP từ máy chủ. Vui lòng thử lại sau!";
+        const errMsg = data?.data?.smtpMessage || data?.message || "Không thể gửi email OTP từ máy chủ. Vui lòng thử lại sau!";
         setError(`❌ ${errMsg}`);
         setOtpCountdown(0);
       }

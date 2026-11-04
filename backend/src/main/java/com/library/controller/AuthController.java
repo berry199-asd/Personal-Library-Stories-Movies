@@ -8,6 +8,7 @@ import com.library.dto.response.ApiResponse;
 import com.library.dto.response.AuthResponse;
 import com.library.security.OtpVerificationService;
 import com.library.service.AuthService;
+import com.library.exception.BadRequestException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
