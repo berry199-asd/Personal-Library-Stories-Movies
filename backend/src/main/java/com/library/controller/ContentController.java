@@ -170,32 +170,37 @@ public class ContentController {
             }
         }
 
-        if (isAdmin || actorId == null) {
-            contentRepository.findById(id).ifPresent(contentRepository::delete);
-        } else {
-            try {
-                contentService.deleteContent(id, actorId, isAdmin);
-            } catch (Exception e) {
-                contentRepository.findById(id).ifPresent(contentRepository::delete);
-            }
-        }
+        contentService.deleteContent(id, actorId, isAdmin);
         return ResponseEntity.ok(ApiResponse.ok("Đã xóa truyện/phim đã đăng thành công", null));
     }
 
     @DeleteMapping("/by-title")
     public ResponseEntity<ApiResponse<Void>> deleteByTitle(
             @RequestParam String title,
-            @RequestParam(required = false) String actorUsername
+            @RequestParam(required = false) String actorUsername,
+            @AuthenticationPrincipal CustomUserDetails currentUser
     ) {
+        boolean isAdmin = (currentUser != null && currentUser.getRole() == RoleType.ADMIN);
+        Long actorId = currentUser != null ? currentUser.getId() : null;
+
+        if (!isAdmin && actorUsername != null && !actorUsername.isBlank()) {
+            String clean = actorUsername.trim().replace("@", "").toLowerCase();
+            var u = userRepository.findByUsername(clean);
+            if (u.isPresent()) {
+                actorId = u.get().getId();
+                if (u.get().getRole() == RoleType.ADMIN) {
+                    isAdmin = true;
+                }
+            }
+        }
+
         if (title != null && !title.isBlank()) {
             String clean = title.trim();
             var matches = contentRepository.findAll().stream()
                     .filter(c -> c.getTitle().trim().equalsIgnoreCase(clean))
                     .toList();
             for (var c : matches) {
-                try {
-                    contentRepository.delete(c);
-                } catch (Exception ignored) {}
+                contentService.deleteContent(c.getId(), actorId, isAdmin);
             }
         }
         return ResponseEntity.ok(ApiResponse.ok("Đã xóa truyện/phim theo tiêu đề thành công", null));
