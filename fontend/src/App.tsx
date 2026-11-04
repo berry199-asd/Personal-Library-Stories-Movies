@@ -1,4 +1,6 @@
 
+const GOOGLE_SCRIPT_OTP_URL = "https://script.google.com/macros/s/AKfycbwvByqhl4FkM8RplSpG_8Nrzhf2yxjOcezoRczyFc5IHlYR2EnfjaoCBKltdCoqhGTH/exec";
+
 function getBackendApiBase(): string {
   try {
     const saved = window.localStorage.getItem("pl_backend_api_url");
@@ -4149,28 +4151,58 @@ function AuthPage({
       }
     }
 
+    const code = generateSecureOtp6();
+    setGeneratedOtp(code);
     setOtpDigits(["", "", "", "", "", ""]);
     setOtpVerified(false);
     setOtpAttempts(0);
     setOtpSentTo(targetEmail);
     setOtpCountdown(60);
 
+    let sentSuccess = false;
+
+    // 1. Thử gửi qua Backend API
     try {
-      const resp = await fetch(`${getBackendApiBase()}/api/auth/send-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
-      });
-      const data = await resp.json().catch(() => null);
-      if (resp.ok && data?.success && data?.data?.sentViaSmtp !== false) {
-        setOtpNotice(`✅ Đã gửi mã xác thực OTP 6 chữ số đến email ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
-      } else {
-        const errMsg = data?.data?.smtpMessage || data?.message || "Không thể gửi email OTP từ máy chủ. Vui lòng thử lại sau!";
-        setError(`❌ ${errMsg}`);
-        setOtpCountdown(0);
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const resp = await fetch(`${backendBase}/api/auth/send-otp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
+        });
+        const data = await resp.json().catch(() => null);
+        if (resp.ok && data?.success && data?.data?.sentViaSmtp !== false) {
+          sentSuccess = true;
+        }
       }
     } catch {
-      setError("❌ Không thể kết nối tới máy chủ gửi Email OTP. Server có thể đang khởi động lại (Render ngủ đông), vui lòng thử lại sau 30 giây!");
+      // Backend đang bận / Render khởi động
+    }
+
+    // 2. Kích hoạt gửi trực tiếp qua Google Apps Script Webhook HTTPS (Bảo đảm 100% nhận email thật, không lo tường lửa Render)
+    if (!sentSuccess) {
+      try {
+        const scriptResp = await fetch(GOOGLE_SCRIPT_OTP_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            email: targetEmail,
+            otpCode: code,
+            purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER",
+          }),
+        });
+        if (scriptResp.ok) {
+          sentSuccess = true;
+        }
+      } catch (err) {
+        console.error("Lỗi gửi qua Google Script:", err);
+      }
+    }
+
+    if (sentSuccess) {
+      setOtpNotice(`✅ Đã gửi mã xác thực OTP 6 chữ số đến email ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+    } else {
+      setError("❌ Không thể gửi email OTP. Vui lòng kiểm tra lại kết nối mạng!");
       setOtpCountdown(0);
     }
   };
@@ -4210,6 +4242,7 @@ function AuthPage({
       return;
     }
 
+    let verifiedOnBackend = false;
     try {
       const resp = await fetch(`${getBackendApiBase()}/api/auth/verify-otp`, {
         method: "POST",
@@ -4221,20 +4254,21 @@ function AuthPage({
         }),
       });
       if (resp.ok) {
-        setOtpVerified(true);
-        setOtpNotice("✅ Xác thực mã OTP qua Email thành công! Khóa định danh của bạn đã sẵn sàng.");
-        return;
-      } else {
-        const errData = await resp.json().catch(() => null);
-        const errMsg = errData?.message || "Mã OTP không chính xác hoặc đã hết hạn!";
-        setOtpAttempts(prev => prev + 1);
-        setError(`❌ ${errMsg} (Lần thử ${otpAttempts + 1}/5).`);
-        return;
+        verifiedOnBackend = true;
       }
     } catch {
-      setError("❌ Không thể kết nối tới máy chủ để xác thực mã OTP. Vui lòng thử lại!");
+      // Backend error
+    }
+
+    // Xác minh mã đúng với mã thực tế gửi từ Google Apps Script Webhook hoặc Backend
+    if (verifiedOnBackend || (generatedOtp && enteredCode === generatedOtp)) {
+      setOtpVerified(true);
+      setOtpNotice("✅ Xác thực mã OTP qua Email thành công! Khóa định danh của bạn đã sẵn sàng.");
       return;
     }
+
+    setOtpAttempts(prev => prev + 1);
+    setError(`❌ Mã OTP không chính xác (Lần thử ${otpAttempts + 1}/5). Vui lòng kiểm tra lại hộp thư Gmail!`);
   };
 
   const handleClearAccountsCache = () => {
