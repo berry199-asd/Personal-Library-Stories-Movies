@@ -4164,13 +4164,18 @@ function AuthPage({
       if (resp.ok) {
         setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
       } else {
-        setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+        // Chế độ GitHub Pages hoặc Backend chưa chạy: Tự động điền và xác minh mã OTP để người dùng không bị kẹt
+        setOtpDigits(newCode.split(""));
+        setOtpVerified(true);
+        setOtpNotice(`🌐 Đang chạy trên GitHub Pages (chế độ tĩnh không có backend Java): Đã tự động tạo & điền mã OTP thử nghiệm [${newCode}] để bạn tiếp tục ngay!`);
       }
     } catch {
-      setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+      // Chế độ GitHub Pages hoặc Backend chưa chạy: Tự động điền và xác minh mã OTP để người dùng không bị kẹt
+      setOtpDigits(newCode.split(""));
+      setOtpVerified(true);
+      setOtpNotice(`🌐 Đang chạy trên GitHub Pages (chế độ tĩnh không có backend Java): Đã tự động tạo & điền mã OTP thử nghiệm [${newCode}] để bạn tiếp tục ngay!`);
     }
   };
-
   const handleOtpDigitChange = (index: number, value: string) => {
     const cleaned = value.replace(/\D/g, "");
     if (cleaned.length > 1) {
