@@ -118,8 +118,11 @@ public class ChatController {
         String time = payload.get("time");
         String cipherText = payload.get("cipherText");
         String senderName = payload.get("senderName");
+        String attachmentUrl = payload.get("attachmentUrl");
+        String attachmentName = payload.get("attachmentName");
+        String attachmentType = payload.get("attachmentType");
 
-        if (fromUserRaw == null || toUserRaw == null || (text == null && cipherText == null)) {
+        if (fromUserRaw == null || toUserRaw == null || (text == null && cipherText == null && attachmentUrl == null)) {
             return ResponseEntity.badRequest().body(ApiResponse.error(400, "Thiếu thông tin người gửi hoặc người nhận", null));
         }
 
@@ -175,6 +178,9 @@ public class ChatController {
                 .messageText(text != null ? text : cipherText)
                 .isEncrypted(cipherText != null && !cipherText.isBlank())
                 .cipherText(cipherText)
+                .attachmentUrl(attachmentUrl)
+                .attachmentName(attachmentName)
+                .attachmentType(attachmentType)
                 .build());
 
         Map<String, Object> result = new HashMap<>();
@@ -185,6 +191,9 @@ public class ChatController {
         result.put("text", msg.getMessageText());
         result.put("time", time != null ? time : "Vừa xong");
         result.put("cipherText", msg.getCipherText());
+        result.put("attachmentUrl", msg.getAttachmentUrl());
+        result.put("attachmentName", msg.getAttachmentName());
+        result.put("attachmentType", msg.getAttachmentType());
 
         return ResponseEntity.ok(ApiResponse.ok("Đã gửi tin nhắn trực tiếp thành công", result));
     }
@@ -220,6 +229,9 @@ public class ChatController {
             item.put("text", m.getMessageText());
             item.put("time", m.getCreatedAt() != null ? m.getCreatedAt().toString() : "Gần đây");
             item.put("cipherText", m.getCipherText());
+            item.put("attachmentUrl", m.getAttachmentUrl());
+            item.put("attachmentName", m.getAttachmentName());
+            item.put("attachmentType", m.getAttachmentType());
             item.put("mine", false);
             list.add(item);
         }

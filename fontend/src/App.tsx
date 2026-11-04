@@ -5641,7 +5641,30 @@ function ChatPage({
                     if (c.id === currentConv.id) {
                       const existingIds = new Set(c.messages.map(m => m.id));
                       const newOnes: ChatMessageItem[] = [];
+                      const incomingMedia: Array<{ id: string; kind: "IMAGE" | "VIDEO"; url: string; title: string }> = [];
+
                       for (const sm of serverMsgs) {
+                        const parsedAttachments: ChatAttachment[] | undefined = (sm.attachmentUrl && sm.attachmentUrl.trim()) ? [{
+                          id: `att-${sm.id}`,
+                          kind: (sm.attachmentType as "IMAGE" | "VIDEO" | "FILE") || "IMAGE",
+                          name: sm.attachmentName || "Ảnh đính kèm",
+                          url: sm.attachmentUrl,
+                          sizeLabel: "ẢNH ĐÍNH KÈM",
+                        }] : undefined;
+
+                        if (parsedAttachments) {
+                          for (const pa of parsedAttachments) {
+                            if (pa.kind === "IMAGE" || pa.kind === "VIDEO") {
+                              incomingMedia.push({
+                                id: pa.id,
+                                kind: pa.kind,
+                                url: pa.url,
+                                title: pa.name
+                              });
+                            }
+                          }
+                        }
+
                         if (!existingIds.has(sm.id)) {
                           const isMine = (sm.sender || "").toLowerCase().replace(/^@/, '') === meUser.username.toLowerCase().replace(/^@/, '');
                           newOnes.push({
@@ -5653,16 +5676,20 @@ function ChatPage({
                             time: sm.time || nowTimeStr(),
                             text: sm.text,
                             cipherText: sm.cipherText,
-                            status: "Đã gửi"
+                            status: "Đã gửi",
+                            attachments: parsedAttachments,
                           });
                         }
                       }
                       if (newOnes.length > 0) {
                         const mergedMessages = [...c.messages, ...newOnes];
                         const lastMsg = mergedMessages[mergedMessages.length - 1];
+                        const existingMediaIds = new Set(c.sharedMedia.map(m => m.url));
+                        const uniqueNewMedia = incomingMedia.filter(m => !existingMediaIds.has(m.url));
                         return {
                           ...c,
-                          text: lastMsg?.text || c.text,
+                          text: lastMsg?.text || (lastMsg?.attachments?.length ? "Đã gửi một hình ảnh" : c.text),
+                          sharedMedia: [...uniqueNewMedia, ...c.sharedMedia],
                           messages: mergedMessages
                         };
                       }
@@ -5867,10 +5894,10 @@ function ChatPage({
     const summaryText =
       textVal ||
       (attachmentsToSend[0]?.kind === "IMAGE"
-        ? "🖼️ Bạn: Đã gửi hình ảnh"
+        ? "Đã gửi một hình ảnh"
         : attachmentsToSend[0]?.kind === "VIDEO"
-        ? "🎬 Bạn: Đã gửi video"
-        : `📎 Bạn: Đã gửi tệp ${attachmentsToSend[0]?.name}`);
+        ? "Đã gửi một video"
+        : `Đã gửi tệp ${attachmentsToSend[0]?.name}`);
 
     const newMediaItems = attachmentsToSend
       .filter(a => a.kind === "IMAGE" || a.kind === "VIDEO")
@@ -5901,6 +5928,7 @@ function ChatPage({
     );
     const peerUserHandle = peerMember?.user || (!currentConv.group ? currentConv.name : null);
     if (peerUserHandle && !currentConv.group) {
+      const firstAtt = attachmentsToSend[0];
       fetch(`${getBackendApiBase()}/api/conversations/send-direct-message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -5909,6 +5937,9 @@ function ChatPage({
           toUser: peerUserHandle,
           text: textVal || summaryText,
           cipherText: encryptedPacket?.cipherText || "",
+          attachmentUrl: firstAtt?.url || "",
+          attachmentName: firstAtt?.name || "",
+          attachmentType: firstAtt?.kind || "",
         }),
       }).catch(err => console.warn("Failed sending direct message to cloud:", err));
     }
@@ -6744,7 +6775,9 @@ function ChatPage({
                   <>
                     {m.text && (
                       <>
-                        <p>{m.text}</p>
+                        {!(m.attachments && m.attachments.length > 0 && (m.text === "Đã gửi một hình ảnh" || m.text === "🖼️ Bạn: Đã gửi hình ảnh" || m.text === "🖼️ [Hình ảnh]")) && (
+                          <p>{m.text}</p>
+                        )}
                         {showCiphertextMode && (
                           <div
                             style={{
@@ -6788,7 +6821,13 @@ function ChatPage({
                           if (att.kind === "IMAGE") {
                             return (
                               <div className="att-image-card" key={att.id} onClick={() => setLightboxImage(att.url)}>
-                                <img src={att.url} alt={att.name} />
+                                <img
+                                  src={att.url}
+                                  alt={att.name}
+                                  onError={e => {
+                                    (e.currentTarget as HTMLImageElement).src = photos.city;
+                                  }}
+                                />
                                 <span>🔍 {att.name} ({att.sizeLabel})</span>
                               </div>
                             );
