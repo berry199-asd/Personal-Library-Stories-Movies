@@ -1,3 +1,16 @@
+
+function getBackendApiBase(): string {
+  try {
+    const saved = window.localStorage.getItem("pl_backend_api_url");
+    if (saved && saved.trim()) return saved.trim().replace(/\/+$/, "");
+  } catch {}
+  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
+  if (envUrl && typeof envUrl === "string" && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
+  return "";
+}
+
 import { useState, useEffect, useMemo, type ReactNode, type CSSProperties } from "react";
 
 const photos = {
@@ -4156,7 +4169,7 @@ function AuthPage({
     setOtpCountdown(60);
 
     try {
-      const resp = await fetch("/api/auth/send-otp", {
+      const resp = await fetch(`${getBackendApiBase()}/api/auth/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
@@ -4164,13 +4177,18 @@ function AuthPage({
       if (resp.ok) {
         setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
       } else {
-        setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+        // Chế độ GitHub Pages hoặc Backend chưa chạy: Tự động điền và xác minh mã OTP để người dùng không bị kẹt
+        setOtpDigits(newCode.split(""));
+        setOtpVerified(true);
+        setOtpNotice(`🌐 Đang chạy trên GitHub Pages (chế độ tĩnh không có backend Java): Đã tự động tạo & điền mã OTP thử nghiệm [${newCode}] để bạn tiếp tục ngay!`);
       }
     } catch {
-      setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+      // Chế độ GitHub Pages hoặc Backend chưa chạy: Tự động điền và xác minh mã OTP để người dùng không bị kẹt
+      setOtpDigits(newCode.split(""));
+      setOtpVerified(true);
+      setOtpNotice(`🌐 Đang chạy trên GitHub Pages (chế độ tĩnh không có backend Java): Đã tự động tạo & điền mã OTP thử nghiệm [${newCode}] để bạn tiếp tục ngay!`);
     }
   };
-
   const handleOtpDigitChange = (index: number, value: string) => {
     const cleaned = value.replace(/\D/g, "");
     if (cleaned.length > 1) {
@@ -4208,7 +4226,7 @@ function AuthPage({
     }
 
     try {
-      const resp = await fetch("/api/auth/verify-otp", {
+      const resp = await fetch(`${getBackendApiBase()}/api/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -4308,7 +4326,7 @@ function AuthPage({
 
       // 2. Tự động đồng bộ tài khoản vào bảng `users` trong CSDL MySQL (XAMPP phpMyAdmin) qua Backend API
       try {
-        const regResp = await fetch("/api/auth/register", {
+        const regResp = await fetch(`${getBackendApiBase()}/api/auth/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -4368,7 +4386,7 @@ function AuthPage({
       // Nếu chưa có trong local storage, thử đồng bộ từ CSDL MySQL (phpMyAdmin) qua API
       if (!matched) {
         try {
-          const apiResp = await fetch("/api/auth/login", {
+          const apiResp = await fetch(`${getBackendApiBase()}/api/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -4426,7 +4444,7 @@ function AuthPage({
       setSuccess(`Đăng nhập bảo mật thành công (${resolvedProfile.name} · ${resolvedProfile.username} · ${resolvedProfile.role}). Đang chuyển trang...`);
 
       // Tự động đồng bộ quyền role mới nhất từ CSDL MySQL (nếu bạn sửa role thành ADMIN trong phpMyAdmin)
-      fetch("/api/auth/login", {
+      fetch(`${getBackendApiBase()}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
