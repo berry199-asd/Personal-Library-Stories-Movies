@@ -4149,19 +4149,6 @@ function AuthPage({
       }
     }
 
-    // Ở chế độ Đăng ký: Nếu tài khoản từng được lưu trong máy, vẫn cho phép gửi OTP và ghi đè lại tài khoản
-    if (mode === "register") {
-      const savedAccounts = loadSavedAccounts();
-      const alreadyExists = savedAccounts.some(
-        a => a.email.toLowerCase() === targetEmail.toLowerCase()
-      );
-      if (alreadyExists) {
-        setOtpNotice(`ℹ️ Email “${targetEmail}” từng được lưu trên máy. Bạn có thể nhập mã OTP để tiếp tục đăng ký lại.`);
-      }
-    }
-
-    const newCode = generateSecureOtp6();
-    setGeneratedOtp(newCode);
     setOtpDigits(["", "", "", "", "", ""]);
     setOtpVerified(false);
     setOtpAttempts(0);
@@ -4175,20 +4162,19 @@ function AuthPage({
         body: JSON.stringify({ email: targetEmail, purpose: mode === "login" ? "LOGIN_2FA" : "REGISTER" }),
       });
       if (resp.ok) {
-        setOtpNotice(`✅ Đã gửi mã OTP thành công tới ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
+        setOtpNotice(`✅ Đã gửi mã xác thực OTP 6 chữ số đến email ${targetEmail}! Vui lòng kiểm tra hộp thư đến (Inbox) hoặc Spam.`);
       } else {
-        // Chế độ GitHub Pages hoặc Backend chưa chạy: Tự động điền và xác minh mã OTP để người dùng không bị kẹt
-        setOtpDigits(newCode.split(""));
-        setOtpVerified(true);
-        setOtpNotice(`🌐 Đang chạy trên GitHub Pages (chế độ tĩnh không có backend Java): Đã tự động tạo & điền mã OTP thử nghiệm [${newCode}] để bạn tiếp tục ngay!`);
+        const errData = await resp.json().catch(() => null);
+        const errMsg = errData?.message || "Không thể gửi email OTP từ máy chủ. Vui lòng thử lại sau!";
+        setError(`❌ ${errMsg}`);
+        setOtpCountdown(0);
       }
     } catch {
-      // Chế độ GitHub Pages hoặc Backend chưa chạy: Tự động điền và xác minh mã OTP để người dùng không bị kẹt
-      setOtpDigits(newCode.split(""));
-      setOtpVerified(true);
-      setOtpNotice(`🌐 Đang chạy trên GitHub Pages (chế độ tĩnh không có backend Java): Đã tự động tạo & điền mã OTP thử nghiệm [${newCode}] để bạn tiếp tục ngay!`);
+      setError("❌ Không thể kết nối tới máy chủ gửi Email OTP. Server có thể đang khởi động lại (Render ngủ đông), vui lòng thử lại sau 30 giây!");
+      setOtpCountdown(0);
     }
   };
+
   const handleOtpDigitChange = (index: number, value: string) => {
     const cleaned = value.replace(/\D/g, "");
     if (cleaned.length > 1) {
@@ -4216,12 +4202,11 @@ function AuthPage({
     setError("");
     const enteredCode = otpDigits.join("");
     if (enteredCode.length < 6) {
-      setError("Vui lòng nhập đủ 6 chữ số của mã OTP.");
+      setError("Vui lòng nhập đủ 6 chữ số của mã OTP nhận được từ email.");
       return;
     }
     if (otpAttempts >= 5) {
-      setGeneratedOtp("");
-      setError("Bạn đã nhập sai OTP quá 5 lần. Hệ thống đã hủy mã cũ để chống vét cạn (Brute-force). Vui lòng gửi lại mã mới!");
+      setError("Bạn đã nhập sai OTP quá 5 lần. Hệ thống đã hủy mã cũ để bảo vệ tài khoản. Vui lòng gửi lại mã mới!");
       return;
     }
 
@@ -4237,21 +4222,19 @@ function AuthPage({
       });
       if (resp.ok) {
         setOtpVerified(true);
-        setOtpNotice("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
+        setOtpNotice("✅ Xác thực mã OTP qua Email thành công! Khóa định danh của bạn đã sẵn sàng.");
+        return;
+      } else {
+        const errData = await resp.json().catch(() => null);
+        const errMsg = errData?.message || "Mã OTP không chính xác hoặc đã hết hạn!";
+        setOtpAttempts(prev => prev + 1);
+        setError(`❌ ${errMsg} (Lần thử ${otpAttempts + 1}/5).`);
         return;
       }
     } catch {
-      // offline fallback
-    }
-
-    if (generatedOtp && enteredCode !== generatedOtp) {
-      setOtpAttempts(prev => prev + 1);
-      setError(`Mã OTP không chính xác (Lần thử ${otpAttempts + 1}/5). Vui lòng kiểm tra lại!`);
+      setError("❌ Không thể kết nối tới máy chủ để xác thực mã OTP. Vui lòng thử lại!");
       return;
     }
-
-    setOtpVerified(true);
-    setOtpNotice("✅ Xác thực Email OTP thành công! Khóa định danh E2EE của bạn đã sẵn sàng.");
   };
 
   const handleClearAccountsCache = () => {
@@ -4274,17 +4257,9 @@ function AuthPage({
       return setError("Mật khẩu xác nhận không trùng khớp.");
     }
 
-    // Bắt buộc xác thực Email OTP cho cả Đăng nhập & Đăng ký
+    // Bắt buộc xác thực Email OTP thật từ Email trước khi tiếp tục
     if (!otpVerified) {
-      const enteredCode = otpDigits.join("");
-      if (!enteredCode || enteredCode.length < 6) {
-        return setError("Bảo mật bắt buộc: Vui lòng nhấn nút “📨 Gửi mã OTP”, nhập đủ 6 chữ số và nhấn “Xác minh mã OTP” trước khi tiếp tục!");
-      }
-      if (generatedOtp && enteredCode !== generatedOtp) {
-        setOtpAttempts(prev => prev + 1);
-        return setError(`Mã OTP không chính xác (Lần thử ${otpAttempts + 1}/5). Vui lòng thử lại!`);
-      }
-      setOtpVerified(true);
+      return setError("Bảo mật bắt buộc: Vui lòng nhấn nút “📨 Gửi mã OTP”, kiểm tra hộp thư Email để lấy mã 6 chữ số và nhấn “Xác minh mã OTP” trước khi tiếp tục!");
     }
 
     setLoading(true);
