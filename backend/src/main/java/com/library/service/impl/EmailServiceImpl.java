@@ -10,6 +10,13 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -20,8 +27,46 @@ public class EmailServiceImpl implements EmailService {
     @Value("${spring.mail.username:your-email@gmail.com}")
     private String fromEmail;
 
+    // Webhook gửi thư qua HTTPS (Port 443) bằng Google Apps Script - Không bao giờ bị chặn trên Render Free Tier
+    @Value("${app.mail.google-script-url:${GOOGLE_SCRIPT_WEBHOOK_URL:}}")
+    private String googleScriptUrl;
+
     @Override
     public EmailSendResult sendOtpEmail(String toEmail, String otpCode, String purpose) {
+        // 1. ƯU TIÊN GỬI QUA GOOGLE APPS SCRIPT HTTPS (Cổng 443 - Bỏ qua tường lửa Render)
+        if (googleScriptUrl != null && !googleScriptUrl.isBlank()) {
+            try {
+                String payload = """
+                    {"email":"%s","otpCode":"%s","purpose":"%s"}
+                """.formatted(toEmail, otpCode, purpose != null ? purpose : "REGISTER");
+
+                HttpClient client = HttpClient.newBuilder()
+                        .followRedirects(HttpClient.Redirect.ALWAYS)
+                        .connectTimeout(Duration.ofSeconds(10))
+                        .build();
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(googleScriptUrl.trim()))
+                        .header("Content-Type", "application/json")
+                        .timeout(Duration.ofSeconds(20))
+                        .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+                        .build();
+
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    log.info("✅ [Google Apps Script HTTPS Success] Đã gửi mã OTP thành công tới: {}", toEmail);
+                    return new EmailSendResult(true, "Đã gửi mã OTP thành công tới email!");
+                } else {
+                    log.error("❌ [Google Apps Script Error] HTTP {}: {}", response.statusCode(), response.body());
+                    return new EmailSendResult(false, "Lỗi từ Google Apps Script (HTTP " + response.statusCode() + ")");
+                }
+            } catch (Exception ex) {
+                log.error("❌ [Google Apps Script Exception] {}", ex.getMessage());
+                return new EmailSendResult(false, "Lỗi kết nối tới Google Apps Script: " + ex.getMessage());
+            }
+        }
+
+        // 2. NẾU KHÔNG CẤU HÌNH WEBHOOK, DÙNG SMTP GMAIL TRUYỀN THỐNG (Hoạt động tốt trên Localhost)
         if (fromEmail == null || fromEmail.contains("your-email@gmail.com") || fromEmail.isBlank()) {
             log.warn("⚠️ [SMTP Warning] Chưa cấu hình thông tin gửi email thật (spring.mail.username / spring.mail.password).");
             return new EmailSendResult(false, "Chưa cấu hình tài khoản gửi email SMTP trong backend application.properties.");
