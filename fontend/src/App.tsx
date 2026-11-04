@@ -282,6 +282,25 @@ export function getDeletedTitles(): Set<string> {
 export function addDeletedTitle(_title: string) {}
 export function removeDeletedTitle(_title: string) {}
 
+export function mapGenresToIds(genres?: string[]): number[] {
+  if (!genres || !Array.isArray(genres)) return [];
+  const map: Record<string, number> = {
+    "hành động": 1, "action": 1,
+    "kinh dị": 2, "horror": 2,
+    "tình cảm": 3, "romance": 3, "bl": 3, "bg": 3, "gl": 3,
+    "giả tưởng": 4, "fantasy": 4, "isekai": 4, "supernatural": 4,
+    "trinh thám": 5, "mystery": 5, "thriller": 5,
+    "hài hước": 6, "comedy": 6,
+    "khoa học viễn tưởng": 7, "sci-fi": 7,
+  };
+  const ids = new Set<number>();
+  for (const g of genres) {
+    const clean = String(g).trim().toLowerCase();
+    if (map[clean]) ids.add(map[clean]);
+  }
+  return Array.from(ids);
+}
+
 export function packContentDescription(item: Partial<ContentItem>): string {
   const meta = {
     _meta: true,
@@ -295,6 +314,7 @@ export function packContentDescription(item: Partial<ContentItem>): string {
     sourceRef: item.sourceRef || "",
     extraTags: item.extraTags || "",
     personalNote: item.personalNote || "",
+    genres: Array.isArray(item.genres) ? item.genres : [],
     externalLinks: (item.externalLinks || []).filter(l => (l.url && l.url.trim()) || (l.platform && l.platform.trim())),
   };
   return JSON.stringify(meta);
@@ -311,6 +331,7 @@ export function unpackContentDescription(rawDesc?: string): {
   sourceRef: string;
   extraTags: string;
   personalNote: string;
+  genres: string[];
   externalLinks: ExternalLinkItem[];
 } {
   const fallback = {
@@ -324,6 +345,7 @@ export function unpackContentDescription(rawDesc?: string): {
     sourceRef: "",
     extraTags: "",
     personalNote: "",
+    genres: [] as string[],
     externalLinks: [] as ExternalLinkItem[],
   };
 
@@ -345,6 +367,7 @@ export function unpackContentDescription(rawDesc?: string): {
         sourceRef: parsed.sourceRef || "",
         extraTags: parsed.extraTags || "",
         personalNote: parsed.personalNote || "",
+        genres: Array.isArray(parsed.genres) ? parsed.genres : [],
         externalLinks: Array.isArray(parsed.externalLinks) ? parsed.externalLinks : [],
       };
     } catch {}
@@ -1462,6 +1485,7 @@ function PublishedWorkEditorModal({
     personalNote: initialItem.personalNote || "",
     visibility: initialItem.visibility || "PUBLIC",
     chaptersList: initialItem.chaptersList || [],
+    genres: Array.isArray(initialItem.genres) ? [...initialItem.genres] : [],
   });
 
   const isOwner = isUserItemOwner(initialItem);
@@ -1723,6 +1747,8 @@ function PublishedWorkEditorModal({
                 onSave(initialItem.title, {
                   ...draft,
                   title: draft.title.trim(),
+                  genres: Array.isArray(draft.genres) ? draft.genres : [],
+                  extraTags: draft.extraTags || "",
                   sub: creatorLabel || draft.sub || draft.type,
                   externalLinks: cleanLinks,
                   mainLink: cleanLinks[0]?.url || draft.mainLink || "",
@@ -9530,7 +9556,11 @@ function mapBackendContentToItem(c: any): ContentItem {
     status: c.status === "COMPLETED" ? "Hoàn thành" : c.status === "ONGOING" ? "Đang ra" : "Tạm dừng",
     score: c.averageRating ? String(c.averageRating) : "—",
     type,
-    genres: Array.isArray(c.genres) ? c.genres.map((g: any) => g.name || g) : [],
+    genres: (unpacked.genres && unpacked.genres.length > 0)
+      ? unpacked.genres
+      : (Array.isArray(c.genres) && c.genres.length > 0)
+      ? c.genres.map((g: any) => g.name || g)
+      : [],
     isSeries: c.isSeries,
     description: unpacked.description,
     shortDescription: unpacked.shortDescription,
@@ -9723,7 +9753,7 @@ export default function App() {
                   status: local.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
                   externalMainLink: local.mainLink || (local.chaptersList && local.chaptersList[0]?.url) || "",
                   visibility: local.visibility || "PUBLIC",
-                  genreIds: [],
+                  genreIds: mapGenresToIds(local.genres),
                   chapters: (local.chaptersList || []).map((ch, idx) => ({
                     chapterNumber: parseFloat(ch.number) || (idx + 1),
                     displayOrder: idx + 1,
@@ -9895,7 +9925,7 @@ export default function App() {
           status: updated.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
           externalMainLink: updated.mainLink || (updated.externalLinks && updated.externalLinks[0]?.url) || "",
           visibility: updated.visibility || "PUBLIC",
-          genreIds: [],
+          genreIds: mapGenresToIds(updated.genres),
           chapters: (updated.chaptersList || []).map((ch, idx) => ({
             chapterNumber: parseFloat(ch.number) || (idx + 1),
             displayOrder: idx + 1,
@@ -10214,7 +10244,7 @@ export default function App() {
                   status: item.status === "Hoàn thành" ? "COMPLETED" : item.status === "Tạm dừng" ? "HIATUS" : "ONGOING",
                   externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
                   visibility: item.visibility || "PUBLIC",
-                  genreIds: [],
+                  genreIds: mapGenresToIds(item.genres),
                   chapters: (item.chaptersList || []).map((ch, idx) => ({
                     chapterNumber: parseFloat(ch.number) || (idx + 1),
                     displayOrder: idx + 1,
