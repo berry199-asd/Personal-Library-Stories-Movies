@@ -26,13 +26,16 @@ public interface ContentRepository extends JpaRepository<Content, Long>, JpaSpec
             "AND (:contentType IS NULL OR c.contentType = :contentType) " +
             "AND (:status IS NULL OR c.status = :status) " +
             "AND (:genreId IS NULL OR g.id = :genreId) " +
-            "AND (c.visibility IN ('SHARED', 'PUBLIC') OR (:currentUserId IS NOT NULL AND c.createdBy.id = :currentUserId))")
+            "AND (c.visibility = 'PUBLIC' " +
+            "     OR (:currentUserId IS NOT NULL AND c.createdBy.id = :currentUserId) " +
+            "     OR (:currentUsername IS NOT NULL AND c.visibility = 'SHARED' AND LOWER(c.sharedUsers) LIKE LOWER(CONCAT('%', :currentUsername, '%'))))")
     Page<Content> searchAccessibleContents(
             @Param("keyword") String keyword,
             @Param("contentType") ContentType contentType,
             @Param("status") ContentStatus status,
             @Param("genreId") Long genreId,
             @Param("currentUserId") Long currentUserId,
+            @Param("currentUsername") String currentUsername,
             Pageable pageable
     );
 }

@@ -316,6 +316,9 @@ export function packContentDescription(item: Partial<ContentItem>): string {
     personalNote: item.personalNote || "",
     genres: Array.isArray(item.genres) ? item.genres : [],
     externalLinks: (item.externalLinks || []).filter(l => (l.url && l.url.trim()) || (l.platform && l.platform.trim())),
+    sharedWithUsers: Array.isArray(item.sharedWithUsers) ? item.sharedWithUsers : [],
+    visibility: item.visibility || "PUBLIC",
+    allowComments: item.allowComments ?? true,
   };
   return JSON.stringify(meta);
 }
@@ -333,6 +336,9 @@ export function unpackContentDescription(rawDesc?: string): {
   personalNote: string;
   genres: string[];
   externalLinks: ExternalLinkItem[];
+  sharedWithUsers: string[];
+  visibility: "PUBLIC" | "PRIVATE" | "SHARED";
+  allowComments: boolean;
 } {
   const fallback = {
     shortDescription: "",
@@ -347,6 +353,9 @@ export function unpackContentDescription(rawDesc?: string): {
     personalNote: "",
     genres: [] as string[],
     externalLinks: [] as ExternalLinkItem[],
+    sharedWithUsers: [] as string[],
+    visibility: "PUBLIC" as const,
+    allowComments: true,
   };
 
   if (!rawDesc || !rawDesc.trim()) return fallback;
@@ -369,6 +378,9 @@ export function unpackContentDescription(rawDesc?: string): {
         personalNote: parsed.personalNote || "",
         genres: Array.isArray(parsed.genres) ? parsed.genres : [],
         externalLinks: Array.isArray(parsed.externalLinks) ? parsed.externalLinks : [],
+        sharedWithUsers: Array.isArray(parsed.sharedWithUsers) ? parsed.sharedWithUsers : [],
+        visibility: parsed.visibility === "PRIVATE" ? "PRIVATE" : parsed.visibility === "SHARED" ? "SHARED" : "PUBLIC",
+        allowComments: parsed.allowComments ?? true,
       };
     } catch {}
   }
@@ -786,13 +798,28 @@ function FilterCollection({
   const sourcePool = compact
     ? savedItems
     : Array.from(new Map([...pool, ...savedItems].map(item => [item.title, item])).values());
-  const filtered = sourcePool.filter(
-    item =>
+  const activeUser = getActiveUser();
+  const myUsername = (activeUser?.username || "").trim().toLowerCase().replace(/^@/, "");
+  const isAdmin = activeUser?.role === "ADMIN" || activeUser?.username === "@anhquyphi";
+
+  const filtered = sourcePool.filter(item => {
+    if (item.visibility === "PRIVATE") {
+      if (!isUserItemOwner(item, activeUser) && !isAdmin) return false;
+    } else if (item.visibility === "SHARED") {
+      const isOwner = isUserItemOwner(item, activeUser);
+      const isShared = Array.isArray(item.sharedWithUsers) && item.sharedWithUsers.some(
+        u => u.trim().toLowerCase().replace(/^@/, "") === myUsername
+      );
+      if (!isOwner && !isAdmin && !isShared) return false;
+    }
+
+    return (
       item.title.toLocaleLowerCase("vi").includes(search.toLocaleLowerCase("vi")) &&
       (type === "Tất cả" || item.type === type) &&
       (status === "Tất cả" || item.status === status) &&
       genres.every(g => item.genres.includes(g))
-  );
+    );
+  });
   const chooseType = (value: string) => {
     setType(value);
     setGenres(current => current.filter(g => (value === "Truyện" ? mangaGenres : value === "Phim" ? movieGenres : allGenres).includes(g)));
@@ -2812,6 +2839,7 @@ function DetailPage({
   favorites = [],
   userRole = "USER",
   currentUser,
+  setPage,
   onUpdateProgress,
   onUpdatePublishedContent,
   onDeletePublishedContent,
@@ -2828,6 +2856,7 @@ function DetailPage({
   favorites?: string[];
   userRole?: "USER" | "ADMIN";
   currentUser?: UserProfile;
+  setPage?: (page: string) => void;
   onUpdateProgress?: (title: string, nextUnit: number, maxUnits: number) => void;
   onUpdatePublishedContent?: (oldTitle: string, updated: ContentItem) => void;
   onDeletePublishedContent?: (title: string) => void;
@@ -2876,11 +2905,50 @@ function DetailPage({
   }
 
   const currentItem: ContentItem = matchedItem;
+  const myUsername = (activeUser?.username || "").trim().toLowerCase().replace(/^@/, '');
+  const isOwner = isUserItemOwner(currentItem, activeUser);
+  const isAdmin = userRole === "ADMIN" || activeUser?.role === "ADMIN" || activeUser?.username === "@anhquyphi";
+  const isSharedAllowed = Array.isArray(currentItem.sharedWithUsers) &&
+    currentItem.sharedWithUsers.some(u => u.trim().toLowerCase().replace(/^@/, '') === myUsername);
+
+  if (currentItem.visibility === "PRIVATE" && !isOwner && !isAdmin) {
+    return (
+      <main className="inner-page">
+        <div className="page-shell">
+          <div className="empty-results" style={{ height: "320px" }}>
+            <Icon name="lock" size={32} />
+            <b>Tác phẩm đang ở chế độ Riêng tư (Private)</b>
+            <p>Chỉ người sở hữu tác phẩm mới có quyền truy cập và xem nội dung này.</p>
+            <div style={{ marginTop: "12px" }}>
+              <Button onClick={() => setPage ? setPage("home") : undefined}>Về trang chủ</Button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (currentItem.visibility === "SHARED" && !isOwner && !isAdmin && !isSharedAllowed) {
+    return (
+      <main className="inner-page">
+        <div className="page-shell">
+          <div className="empty-results" style={{ height: "320px" }}>
+            <Icon name="share" size={32} />
+            <b>Tác phẩm được chia sẻ riêng</b>
+            <p>Nội dung này chỉ dành cho những người dùng được người tạo cấp quyền truy cập.</p>
+            <div style={{ marginTop: "12px" }}>
+              <Button onClick={() => setPage ? setPage("home") : undefined}>Về trang chủ</Button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const comments: ContentCommentItem[] = currentItem.commentsList || [];
 
   const inLibrary = savedItems.some(x => x.title === currentItem.title);
   const liked = favorites.includes(currentItem.title);
-  const isOwner = isUserItemOwner(currentItem, activeUser);
   const canEditWork = canManagePublishedContent(currentItem, userRole, activeUser);
   const chapters = currentItem.chaptersList || [];
   const availableSeasons = Array.from(new Set(chapters.map(c => c.season || "Mùa 1")));
@@ -9576,7 +9644,11 @@ function mapBackendContentToItem(c: any): ContentItem {
     personalNote: unpacked.personalNote,
     mainLink: extLink || (finalExtLinks[0]?.url) || "",
     externalLinks: finalExtLinks,
-    visibility: c.visibility || "PUBLIC",
+    visibility: (c.visibility as any) || unpacked.visibility || "PUBLIC",
+    sharedWithUsers: (Array.isArray(c.sharedWithUsers) && c.sharedWithUsers.length > 0)
+      ? c.sharedWithUsers
+      : (Array.isArray(unpacked.sharedWithUsers) ? unpacked.sharedWithUsers : []),
+    allowComments: unpacked.allowComments ?? true,
     createdBy: {
       name: c.createdByUsername || "Người đăng",
       user: createdByHandle,
@@ -9670,9 +9742,19 @@ export default function App() {
   const [globalToast, setGlobalToast] = useState("");
 
   const userLibraryItems = useMemo(() => {
-    return allContents.filter(item =>
-      isUserItemOwner(item, currentUser) || userSavedTitles.includes(item.title)
-    );
+    return allContents.filter(item => {
+      const isOwner = isUserItemOwner(item, currentUser);
+      if (isOwner) return true;
+      if (item.visibility === "PRIVATE") return false;
+      if (item.visibility === "SHARED") {
+        const myName = (currentUser.username || "").trim().toLowerCase().replace(/^@/, "");
+        const isShared = Array.isArray(item.sharedWithUsers) && item.sharedWithUsers.some(
+          u => u.trim().toLowerCase().replace(/^@/, "") === myName
+        );
+        return isShared && userSavedTitles.includes(item.title);
+      }
+      return userSavedTitles.includes(item.title);
+    });
   }, [allContents, currentUser, userSavedTitles]);
 
   useEffect(() => {
@@ -9712,8 +9794,17 @@ export default function App() {
         const backendBase = getBackendApiBase();
         if (!backendBase) return;
 
-        // 1. Lấy toàn bộ tác phẩm hiện có trên Cloud TiDB
-        const res = await fetch(`${backendBase}/api/contents?page=0&size=100`);
+        const token = window.localStorage.getItem("personal_library_access_token");
+        const cleanCreator = (currentUser.username || "berry").replace(/^@/, "");
+        const authHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        };
+
+        // 1. Lấy toàn bộ tác phẩm hiện có trên Cloud TiDB (kèm username và token để lấy đúng quyền xem PRIVATE & SHARED)
+        const res = await fetch(`${backendBase}/api/contents?page=0&size=100&currentUsername=${encodeURIComponent(cleanCreator)}`, {
+          headers: authHeaders
+        });
         if (!res.ok) return;
 
         const data = await res.json();
@@ -9735,14 +9826,11 @@ export default function App() {
           if (!existsOnServer) {
             hasUploaded = true;
             const creator = (local.createdBy && local.createdBy.user) ? local.createdBy.user : (currentUser.username || "berry");
-            const cleanCreator = creator.replace(/^@/, "");
+            const creatorClean = creator.replace(/^@/, "");
             try {
-              await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(cleanCreator)}`, {
+              await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(creatorClean)}`, {
                 method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
-                },
+                headers: authHeaders,
                 body: JSON.stringify({
                   title: local.title,
                   contentType: local.type === "Phim" ? (local.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
@@ -9753,6 +9841,7 @@ export default function App() {
                   status: local.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
                   externalMainLink: local.mainLink || (local.chaptersList && local.chaptersList[0]?.url) || "",
                   visibility: local.visibility || "PUBLIC",
+                  sharedWithUsers: local.sharedWithUsers || [],
                   genreIds: mapGenresToIds(local.genres),
                   chapters: (local.chaptersList || []).map((ch, idx) => ({
                     chapterNumber: parseFloat(ch.number) || (idx + 1),
@@ -9771,7 +9860,9 @@ export default function App() {
 
         // 3. Nếu vừa upload thêm truyện mới, tải lại danh sách mới nhất từ server
         if (hasUploaded) {
-          const updatedRes = await fetch(`${backendBase}/api/contents?page=0&size=100`);
+          const updatedRes = await fetch(`${backendBase}/api/contents?page=0&size=100&currentUsername=${encodeURIComponent(cleanCreator)}`, {
+            headers: authHeaders
+          });
           if (updatedRes.ok) {
             const updatedData = await updatedRes.json();
             const updatedItems = updatedData?.data?.items || [];
@@ -9925,6 +10016,7 @@ export default function App() {
           status: updated.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
           externalMainLink: updated.mainLink || (updated.externalLinks && updated.externalLinks[0]?.url) || "",
           visibility: updated.visibility || "PUBLIC",
+          sharedWithUsers: updated.sharedWithUsers || [],
           genreIds: mapGenresToIds(updated.genres),
           chapters: (updated.chaptersList || []).map((ch, idx) => ({
             chapterNumber: parseFloat(ch.number) || (idx + 1),
@@ -10108,6 +10200,7 @@ export default function App() {
         favorites={favorites}
         userRole={userRole}
         currentUser={currentUser}
+        setPage={navigate}
         onUpdateProgress={handleUpdateProgress}
         onToggleLibrary={handleToggleSavedLibrary}
         onToggleFavorite={toggleFavorite}
@@ -10244,6 +10337,7 @@ export default function App() {
                   status: item.status === "Hoàn thành" ? "COMPLETED" : item.status === "Tạm dừng" ? "HIATUS" : "ONGOING",
                   externalMainLink: item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "",
                   visibility: item.visibility || "PUBLIC",
+                  sharedWithUsers: item.sharedWithUsers || [],
                   genreIds: mapGenresToIds(item.genres),
                   chapters: (item.chaptersList || []).map((ch, idx) => ({
                     chapterNumber: parseFloat(ch.number) || (idx + 1),

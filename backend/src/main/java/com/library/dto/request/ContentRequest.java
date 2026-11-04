@@ -40,6 +40,8 @@ public class ContentRequest {
     @Builder.Default
     private ContentVisibility visibility = ContentVisibility.PUBLIC;
 
+    private List<String> sharedWithUsers;
+
     private Set<Long> genreIds;
 
     private List<ChapterRequest> chapters;

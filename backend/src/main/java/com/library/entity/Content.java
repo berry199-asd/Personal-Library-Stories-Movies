@@ -60,6 +60,9 @@ public class Content {
     @Column(nullable = false, length = 20)
     private ContentVisibility visibility = ContentVisibility.PRIVATE;
 
+    @Column(name = "shared_users", columnDefinition = "TEXT")
+    private String sharedUsers;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;

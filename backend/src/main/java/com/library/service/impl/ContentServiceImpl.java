@@ -43,15 +43,20 @@ public class ContentServiceImpl implements ContentService {
             ContentStatus status,
             Long genreId,
             Long currentUserId,
+            String currentUsername,
             Pageable pageable
     ) {
         String normalizedKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        String normalizedUsername = (currentUsername != null && !currentUsername.isBlank())
+                ? currentUsername.trim().replace("@", "").toLowerCase()
+                : null;
         Page<Content> page = contentRepository.searchAccessibleContents(
                 normalizedKeyword,
                 contentType,
                 status,
                 genreId,
                 currentUserId,
+                normalizedUsername,
                 pageable
         );
         Page<ContentResponse> mapped = page.map(c -> ContentResponse.fromEntity(
@@ -60,6 +65,19 @@ public class ContentServiceImpl implements ContentService {
                 true
         ));
         return PageResponse.fromPage(mapped);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<ContentResponse> searchContents(
+            String keyword,
+            ContentType contentType,
+            ContentStatus status,
+            Long genreId,
+            Long currentUserId,
+            Pageable pageable
+    ) {
+        return searchContents(keyword, contentType, status, genreId, currentUserId, null, pageable);
     }
 
     @Override
@@ -100,21 +118,41 @@ public class ContentServiceImpl implements ContentService {
 
     @Override
     @Transactional(readOnly = true)
-    public ContentResponse getContentDetail(Long id, Long currentUserId, boolean isAdmin) {
+    public ContentResponse getContentDetail(Long id, Long currentUserId, String currentUsername, boolean isAdmin) {
         Content content = contentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy truyện/phim #" + id));
 
-        if (!isAdmin && content.getVisibility() == ContentVisibility.PRIVATE) {
+        if (!isAdmin) {
             boolean isCreator = currentUserId != null
                     && content.getCreatedBy() != null
                     && content.getCreatedBy().getId().equals(currentUserId);
-            if (!isCreator) {
-                throw new BadRequestException("Nội dung này đang ở chế độ Riêng tư (Private)");
+
+            if (content.getVisibility() == ContentVisibility.PRIVATE) {
+                if (!isCreator) {
+                    throw new BadRequestException("Nội dung này đang ở chế độ Riêng tư (Private)");
+                }
+            } else if (content.getVisibility() == ContentVisibility.SHARED) {
+                boolean isShared = false;
+                if (currentUsername != null && content.getSharedUsers() != null) {
+                    String clean = currentUsername.trim().replace("@", "").toLowerCase();
+                    isShared = java.util.Arrays.stream(content.getSharedUsers().toLowerCase().split(","))
+                            .map(s -> s.trim().replace("@", ""))
+                            .anyMatch(u -> u.equals(clean));
+                }
+                if (!isCreator && !isShared) {
+                    throw new BadRequestException("Nội dung này được chia sẻ riêng, bạn không có quyền truy cập");
+                }
             }
         }
 
         Double avgRating = reviewRepository.calculateAverageRating(content.getId());
         return ContentResponse.fromEntity(content, avgRating, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ContentResponse getContentDetail(Long id, Long currentUserId, boolean isAdmin) {
+        return getContentDetail(id, currentUserId, null, isAdmin);
     }
 
     @Override
@@ -128,6 +166,11 @@ public class ContentServiceImpl implements ContentService {
             genres.addAll(genreRepository.findAllById(request.getGenreIds()));
         }
 
+        String sharedUsersStr = null;
+        if (request.getSharedWithUsers() != null && !request.getSharedWithUsers().isEmpty()) {
+            sharedUsersStr = String.join(",", request.getSharedWithUsers());
+        }
+
         Content content = Content.builder()
                 .title(request.getTitle().trim())
                 .contentType(request.getContentType())
@@ -138,6 +181,7 @@ public class ContentServiceImpl implements ContentService {
                 .status(request.getStatus() != null ? request.getStatus() : ContentStatus.ONGOING)
                 .externalMainLink(request.getExternalMainLink())
                 .visibility(request.getVisibility() != null ? request.getVisibility() : ContentVisibility.PUBLIC)
+                .sharedUsers(sharedUsersStr)
                 .createdBy(creator)
                 .genres(genres)
                 .build();
@@ -191,6 +235,9 @@ public class ContentServiceImpl implements ContentService {
         if (request.getStatus() != null) content.setStatus(request.getStatus());
         if (request.getExternalMainLink() != null) content.setExternalMainLink(request.getExternalMainLink());
         if (request.getVisibility() != null) content.setVisibility(request.getVisibility());
+        if (request.getSharedWithUsers() != null) {
+            content.setSharedUsers(String.join(",", request.getSharedWithUsers()));
+        }
 
         if (request.getGenreIds() != null) {
             Set<Genre> genres = new HashSet<>(genreRepository.findAllById(request.getGenreIds()));

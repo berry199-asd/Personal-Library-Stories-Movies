@@ -27,6 +27,7 @@ public class ContentResponse {
     private ContentStatus status;
     private String externalMainLink;
     private ContentVisibility visibility;
+    private List<String> sharedWithUsers;
     private Long createdById;
     private String createdByUsername;
     private Double averageRating;
@@ -36,6 +37,13 @@ public class ContentResponse {
     private LocalDateTime updatedAt;
 
     public static ContentResponse fromEntity(Content content, Double averageRating, boolean includeChapters) {
+        List<String> sharedList = (content.getSharedUsers() != null && !content.getSharedUsers().isBlank())
+                ? java.util.Arrays.stream(content.getSharedUsers().split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .collect(Collectors.toList())
+                : List.of();
+
         return ContentResponse.builder()
                 .id(content.getId())
                 .title(content.getTitle())
@@ -47,6 +55,7 @@ public class ContentResponse {
                 .status(content.getStatus())
                 .externalMainLink(content.getExternalMainLink())
                 .visibility(content.getVisibility())
+                .sharedWithUsers(sharedList)
                 .createdById(content.getCreatedBy() != null ? content.getCreatedBy().getId() : null)
                 .createdByUsername(content.getCreatedBy() != null ? content.getCreatedBy().getUsername() : null)
                 .averageRating(averageRating != null ? Math.round(averageRating * 10.0) / 10.0 : 0.0)

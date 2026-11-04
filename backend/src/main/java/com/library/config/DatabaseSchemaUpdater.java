@@ -16,6 +16,17 @@ public class DatabaseSchemaUpdater implements CommandLineRunner {
     @Override
     public void run(String... args) {
         migratePosterUrlToLongText();
+        migrateSharedUsersColumn();
+    }
+
+    public synchronized void migrateSharedUsersColumn() {
+        try {
+            log.info("Checking contents table schema for shared_users column...");
+            jdbcTemplate.execute("ALTER TABLE contents ADD COLUMN shared_users TEXT");
+            log.info("Successfully added contents.shared_users column.");
+        } catch (Exception ex) {
+            log.info("contents.shared_users already exists or error handled: {}", ex.getMessage());
+        }
     }
 
     public synchronized void migratePosterUrlToLongText() {
