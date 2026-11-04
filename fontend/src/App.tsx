@@ -1718,7 +1718,7 @@ function PublishedWorkEditorModal({
                 const cleanLinks = (draft.externalLinks || []).filter(l => l.platform.trim() || l.url.trim());
                 const creatorLabel =
                   draft.type === "Truyện"
-                    ? [draft.author?.trim(), draft.artist?.trim()].filter(Boolean).join(" · ")
+                    ? [draft.author?.trim(), draft.artist?.trim() ? `Họa sĩ: ${draft.artist.trim()}` : "", draft.releaseYear?.trim()].filter(Boolean).join(" · ")
                     : [draft.director?.trim(), draft.releaseYear?.trim()].filter(Boolean).join(" · ");
                 onSave(initialItem.title, {
                   ...draft,
@@ -9915,7 +9915,7 @@ export default function App() {
             const resData = await res.json();
             if (resData?.data?.id) {
               const mapped = mapBackendContentToItem(resData.data);
-              setAllContents(prev => prev.map(x => (x.title === updated.title ? { ...mapped, ...updated, id: resData.data.id } : x)));
+              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? { ...mapped, ...updated, id: resData.data.id } : x)));
             }
           }
         } else {
@@ -9929,7 +9929,7 @@ export default function App() {
             const resData = await res.json();
             if (resData?.data?.id) {
               const mapped = mapBackendContentToItem(resData.data);
-              setAllContents(prev => prev.map(x => (x.title === updated.title ? { ...mapped, ...updated, id: resData.data.id } : x)));
+              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? { ...mapped, ...updated, id: resData.data.id } : x)));
             }
           }
         }
