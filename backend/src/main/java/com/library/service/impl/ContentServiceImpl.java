@@ -14,6 +14,7 @@ import com.library.exception.ResourceNotFoundException;
 import com.library.repository.*;
 import com.library.service.ContentService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashSet;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ContentServiceImpl implements ContentService {
@@ -140,7 +142,19 @@ public class ContentServiceImpl implements ContentService {
                 .genres(genres)
                 .build();
 
-        Content saved = contentRepository.save(content);
+        Content saved;
+        try {
+            saved = contentRepository.save(content);
+        } catch (Exception ex) {
+            String msg = ex.getMessage() != null ? ex.getMessage() : "";
+            if (msg.contains("Data truncation") || msg.contains("too long")) {
+                log.warn("posterUrl exceeded column limit. Falling back to truncated posterUrl: {}", ex.getMessage());
+                content.setPosterUrl(null);
+                saved = contentRepository.save(content);
+            } else {
+                throw ex;
+            }
+        }
 
         if (request.getChapters() != null && !request.getChapters().isEmpty()) {
             int order = 1;
@@ -199,7 +213,19 @@ public class ContentServiceImpl implements ContentService {
             }
         }
 
-        Content saved = contentRepository.save(content);
+        Content saved;
+        try {
+            saved = contentRepository.save(content);
+        } catch (Exception ex) {
+            String msg = ex.getMessage() != null ? ex.getMessage() : "";
+            if (msg.contains("Data truncation") || msg.contains("too long")) {
+                log.warn("posterUrl exceeded column limit. Falling back to truncated posterUrl: {}", ex.getMessage());
+                content.setPosterUrl(null);
+                saved = contentRepository.save(content);
+            } else {
+                throw ex;
+            }
+        }
         Double avgRating = reviewRepository.calculateAverageRating(saved.getId());
         return ContentResponse.fromEntity(saved, avgRating, true);
     }

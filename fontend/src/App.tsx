@@ -268,6 +268,74 @@ export type UserProfile = {
 
 const CURRENT_USER_STORAGE_KEY = "pl_current_user_v2";
 const REGISTERED_ACCOUNTS_KEY = "pl_registered_accounts_v2";
+const DELETED_TITLES_KEY = "pl_deleted_titles_v1";
+
+export function getDeletedTitles(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(DELETED_TITLES_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.map((s: string) => String(s).trim().toLowerCase()) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function addDeletedTitle(title: string) {
+  if (!title || !title.trim()) return;
+  const set = getDeletedTitles();
+  set.add(title.trim().toLowerCase());
+  try {
+    window.localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function removeDeletedTitle(title: string) {
+  if (!title || !title.trim()) return;
+  const set = getDeletedTitles();
+  set.delete(title.trim().toLowerCase());
+  try {
+    window.localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function compressImageFile(file: File, callback: (dataUrl: string) => void) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const MAX_WIDTH = 480;
+      const MAX_HEIGHT = 720;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        callback(canvas.toDataURL("image/jpeg", 0.72));
+      } else {
+        callback(String(reader.result));
+      }
+    };
+    img.src = String(reader.result);
+  };
+  reader.readAsDataURL(file);
+}
 
 export function loadSavedCurrentUser(): UserProfile {
   try {
@@ -1307,9 +1375,7 @@ function PublishedWorkEditorModal({
 
   const handleCoverUpload = (file?: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setDraft(prev => ({ ...prev, img: String(reader.result) }));
-    reader.readAsDataURL(file);
+    compressImageFile(file, compressed => setDraft(prev => ({ ...prev, img: compressed })));
   };
 
   const linksList = draft.externalLinks || [];
@@ -4803,42 +4869,7 @@ function PublishPage({
   const addChapter = () => setChapters([...chapters, { number: String(chapters.length + 1), title: "", url: "" }]);
   const upload = (file?: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX_WIDTH = 480;
-        const MAX_HEIGHT = 720;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL("image/jpeg", 0.72);
-          setCover(compressed);
-        } else {
-          setCover(String(reader.result));
-        }
-      };
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
+    compressImageFile(file, compressed => setCover(compressed));
   };
   const attempt = (action: string) => {
     if (!title.trim()) {
@@ -7960,10 +7991,25 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
     setEditingContent(null);
   };
 
-  const deleteContent = (id: number, title: string) => {
+  const deleteContent = async (id: number, title: string) => {
+    addDeletedTitle(title);
     const updated = adminContents.filter(c => c.id !== id);
     syncGlobalContents(updated);
     showToast(`Đã xóa tác phẩm “${title}” khỏi hệ thống.`);
+
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title)}&actorUsername=${encodeURIComponent(getActiveUser().username)}`, {
+          method: "DELETE",
+          headers: {
+            ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("Admin delete content on cloud failed:", err);
+    }
   };
 
   const handleCloseChaptersModal = () => {
@@ -8349,10 +8395,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
                 style={{ display: "none" }}
                 onChange={e => {
                   const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => setEditingContent({ ...editingContent, img: String(reader.result) });
-                  reader.readAsDataURL(file);
+                  if (file) compressImageFile(file, compressed => setEditingContent({ ...editingContent, img: compressed }));
                 }}
               />
             </label>
@@ -9408,7 +9451,10 @@ function loadSavedContents(): ContentItem[] {
     const raw = window.localStorage.getItem(CONTENTS_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const deleted = getDeletedTitles();
+    return Array.isArray(parsed)
+      ? parsed.filter(item => item && item.title && !deleted.has(item.title.trim().toLowerCase()))
+      : [];
   } catch {
     return [];
   }
@@ -9522,7 +9568,25 @@ export default function App() {
 
         const data = await res.json();
         const serverItems = data?.data?.items || [];
-        const cloudMapped = Array.isArray(serverItems) ? serverItems.map(mapBackendContentToItem) : [];
+        const deletedSet = getDeletedTitles();
+
+        // Tự động dọn dẹp các tác phẩm đã xóa trên server nếu server vẫn còn
+        for (const sItem of serverItems) {
+          if (sItem.title && deletedSet.has(sItem.title.trim().toLowerCase())) {
+            fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(sItem.title)}`, {
+              method: "DELETE",
+              headers: {
+                ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+              }
+            }).catch(() => {});
+          }
+        }
+
+        const cloudMapped = Array.isArray(serverItems)
+          ? serverItems
+              .map(mapBackendContentToItem)
+              .filter(m => !deletedSet.has(m.title.trim().toLowerCase()))
+          : [];
 
         // 2. Kiểm tra xem trong bộ nhớ máy (localStorage) có tác phẩm nào chưa được đẩy lên Cloud không
         const localItems = loadSavedContents();
@@ -9530,6 +9594,7 @@ export default function App() {
 
         for (const local of localItems) {
           if (!local.title || !local.title.trim()) continue;
+          if (deletedSet.has(local.title.trim().toLowerCase())) continue;
           const existsOnServer = cloudMapped.some(
             m => m.title.trim().toLowerCase() === local.title.trim().toLowerCase()
           );
@@ -9586,9 +9651,11 @@ export default function App() {
         // 4. Cập nhật allContents với danh sách từ cloud (kết hợp các truyện local nếu có)
         if (active) {
           setAllContents(prev => {
-            const merged = [...cloudMapped];
+            const freshDeleted = getDeletedTitles();
+            const merged = cloudMapped.filter(m => !freshDeleted.has(m.title.trim().toLowerCase()));
             for (const loc of prev) {
-              if (!merged.some(m => m.title.trim().toLowerCase() === loc.title.trim().toLowerCase())) {
+              const cleanT = loc.title.trim().toLowerCase();
+              if (!freshDeleted.has(cleanT) && !merged.some(m => m.title.trim().toLowerCase() === cleanT)) {
                 merged.push(loc);
               }
             }
@@ -9833,11 +9900,26 @@ export default function App() {
         onOpenReport={(type, name) => setReportTarget({ type, name })}
         onOpenPublicProfile={openPublicProfile}
         onUpdatePublishedContent={handleUpdatePublishedContent}
-        onDeletePublishedContent={title => {
+        onDeletePublishedContent={async title => {
+          addDeletedTitle(title);
           setAllContents(prev => prev.filter(x => x.title !== title));
           handleRemoveFromLibrary(title);
           showGlobalToast(`Đã xóa vĩnh viễn tác phẩm “${title}” khỏi hệ thống!`);
           navigate("library");
+
+          try {
+            const backendBase = getBackendApiBase();
+            if (backendBase) {
+              await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title)}&actorUsername=${encodeURIComponent(currentUser.username)}`, {
+                method: "DELETE",
+                headers: {
+                  ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {})
+                }
+              });
+            }
+          } catch (err) {
+            console.warn("Delete published content on cloud failed:", err);
+          }
         }}
         onNavigatePublish={() => navigate("publish")}
       />
@@ -9904,6 +9986,7 @@ export default function App() {
         setPage={navigate}
         currentUser={currentUser}
         onPublish={item => {
+          removeDeletedTitle(item.title);
           setAllContents(current => [item, ...current]);
           setUserSavedTitles(prev => {
             const next = prev.includes(item.title) ? prev : [item.title, ...prev];
