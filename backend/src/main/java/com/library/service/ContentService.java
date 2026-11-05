@@ -37,6 +37,8 @@ public interface ContentService {
 
     ContentResponse getContentDetail(Long id, Long currentUserId, String currentUsername, boolean isAdmin);
 
+    ContentResponse getContentByTitle(String title, Long actorUserId, String actorUsername, boolean isAdmin);
+
     default ContentResponse getContentDetail(Long id, Long currentUserId, boolean isAdmin) {
         return getContentDetail(id, currentUserId, null, isAdmin);
     }

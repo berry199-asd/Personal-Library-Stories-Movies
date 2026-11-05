@@ -158,10 +158,42 @@ public class ContentServiceImpl implements ContentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ContentResponse getContentByTitle(String title, Long actorUserId, String actorUsername, boolean isAdmin) {
+        if (title == null || title.isBlank()) {
+            throw new BadRequestException("Tiêu đề tác phẩm không được để trống");
+        }
+        String clean = title.trim();
+        var matches = contentRepository.findAll().stream()
+                .filter(c -> c.getTitle() != null && c.getTitle().trim().equalsIgnoreCase(clean))
+                .sorted((a, b) -> b.getId().compareTo(a.getId()))
+                .toList();
+
+        if (matches.isEmpty()) {
+            throw new ResourceNotFoundException("Không tìm thấy tác phẩm với tiêu đề: " + title);
+        }
+
+        Content content = matches.get(0);
+        return getContentDetail(content.getId(), actorUserId, actorUsername, isAdmin);
+    }
+
+    @Override
     @Transactional
     public ContentResponse createContent(ContentRequest request, Long creatorUserId) {
         User creator = userRepository.findById(creatorUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng #" + creatorUserId));
+
+        if (request.getTitle() != null && !request.getTitle().isBlank()) {
+            String cleanTitle = request.getTitle().trim();
+            var existingOpt = contentRepository.findAll().stream()
+                    .filter(c -> c.getTitle() != null && c.getTitle().trim().equalsIgnoreCase(cleanTitle))
+                    .filter(c -> c.getCreatedBy() != null && c.getCreatedBy().getId().equals(creatorUserId))
+                    .findFirst();
+            if (existingOpt.isPresent()) {
+                log.info("Content with title '{}' already exists for creator #{}. Updating existing content #{} instead of duplicating.", cleanTitle, creatorUserId, existingOpt.get().getId());
+                return updateContent(existingOpt.get().getId(), request, creatorUserId, true);
+            }
+        }
 
         Set<Genre> genres = new HashSet<>();
         if (request.getGenreIds() != null && !request.getGenreIds().isEmpty()) {
