@@ -197,6 +197,31 @@ public class ContentController {
         return ResponseEntity.ok(ApiResponse.ok("Đã xóa truyện/phim đã đăng thành công", null));
     }
 
+    
+    @GetMapping("/by-title")
+    public ResponseEntity<ApiResponse<ContentResponse>> getByTitle(
+            @RequestParam String title,
+            @RequestParam(required = false) String actorUsername,
+            @AuthenticationPrincipal CustomUserDetails currentUser
+    ) {
+        boolean isAdmin = (currentUser != null && currentUser.getRole() == RoleType.ADMIN);
+        Long actorId = currentUser != null ? currentUser.getId() : null;
+
+        if (!isAdmin && actorUsername != null && !actorUsername.isBlank()) {
+            String clean = actorUsername.trim().replace("@", "").toLowerCase();
+            var u = userRepository.findByUsername(clean);
+            if (u.isPresent()) {
+                actorId = u.get().getId();
+                if (u.get().getRole() == RoleType.ADMIN) {
+                    isAdmin = true;
+                }
+            }
+        }
+
+        ContentResponse content = contentService.getContentByTitle(title, actorId, actorUsername, isAdmin);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy thông tin tác phẩm theo tiêu đề thành công", content));
+    }
+
     @DeleteMapping("/by-title")
     public ResponseEntity<ApiResponse<Void>> deleteByTitle(
             @RequestParam String title,

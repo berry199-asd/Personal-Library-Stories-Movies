@@ -8185,7 +8185,7 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   const [contentStatusFilter, setContentStatusFilter] = useState("ALL");
   const [adminContents, setAdminContents] = useState<AdminContentItem[]>(() =>
     contents.map((c, idx) => ({
-      id: idx + 1,
+      id: c.id || idx + 1,
       title: c.title,
       sub: c.sub || (c.type === "Truyện" ? (c.author || "Tác giả") : (c.director || "Đạo diễn")),
       img: c.img || photos.hero,
@@ -8228,6 +8228,52 @@ function AdminPage({ setPage, contents, setContents }: { setPage: (page: string)
   const [editingContent, setEditingContent] = useState<AdminContentItem | null>(null);
   const [managingChaptersFor, setManagingChaptersFor] = useState<AdminContentItem | null>(null);
   const [confirmDeleteContent, setConfirmDeleteContent] = useState<{ id: number; title: string } | null>(null);
+
+  // Tự động đồng bộ adminContents từ props contents của TiDB Cloud
+  useEffect(() => {
+    if (Array.isArray(contents) && contents.length > 0) {
+      setAdminContents(contents.map((c, idx) => ({
+        id: c.id || idx + 1,
+        title: c.title,
+        sub: c.sub || (c.type === "Truyện" ? (c.author || "Tác giả") : (c.director || "Đạo diễn")),
+        img: c.img || photos.hero,
+        status: c.status || "Đang ra",
+        score: c.score || "—",
+        type: c.type || "Truyện",
+        isSeries: c.isSeries ?? true,
+        visibility: c.visibility || "PUBLIC",
+        shortDescription: c.shortDescription || "",
+        description: c.description || "",
+        author: c.author || "",
+        artist: c.artist || "",
+        director: c.director || "",
+        cast: c.cast || "",
+        releaseYear: c.releaseYear || "2025",
+        language: c.language || "Tiếng Việt",
+        movieMode: c.movieMode || (c.type === "Phim" ? "Phim lẻ" : undefined),
+        singleMovieUrl: c.singleMovieUrl || "",
+        externalLinks:
+          c.externalLinks && c.externalLinks.length > 0
+            ? c.externalLinks
+            : c.mainLink
+            ? [{ platform: "Liên kết chính", url: c.mainLink, note: "" }]
+            : [{ platform: "", url: "", note: "" }],
+        mainLink: c.mainLink || c.externalLinks?.[0]?.url || "",
+        sourceRef: c.sourceRef || "",
+        extraTags: c.extraTags || "",
+        personalNote: c.personalNote || "",
+        allowComments: c.allowComments ?? true,
+        genres: c.genres || [],
+        chapters:
+          c.chaptersList && c.chaptersList.length > 0
+            ? c.chaptersList
+            : [{ id: 1, season: "Mùa 1", number: "1", title: c.type === "Phim" ? "Tập 1" : "Chương 1", url: "", note: "" }],
+        createdBy: c.createdBy || { name: getCurrentUserName(), user: getCurrentUserHandle() },
+        publishedAt: c.publishedAt,
+        updatedAt: c.updatedAt,
+      })));
+    }
+  }, [contents]);
 
   // 3. STATE QUẢN LÝ THỂ LOẠI & DANH MỤC HỆ THỐNG
   const [genreList, setGenreList] = useState([
@@ -10067,7 +10113,18 @@ export default function App() {
         const data = await res.json();
         const serverItems = data?.data?.items || [];
         if (active && Array.isArray(serverItems)) {
-          setAllContents(serverItems.map(mapBackendContentToItem));
+          // Khử trùng lặp theo Tiêu đề tác phẩm (giữ lại bản ghi ID mới nhất)
+          const seen = new Set<string>();
+          const deduped: any[] = [];
+          const sorted = [...serverItems].sort((a, b) => (b.id || 0) - (a.id || 0));
+          for (const item of sorted) {
+            const key = (item.title || "").trim().toLowerCase();
+            if (!seen.has(key)) {
+              seen.add(key);
+              deduped.push(item);
+            }
+          }
+          setAllContents(deduped.map(mapBackendContentToItem));
         }
       } catch (e) {
         // ignore network error
@@ -10166,16 +10223,33 @@ export default function App() {
     try {
       const backendBase = getBackendApiBase();
       if (backendBase) {
-        let targetId = updated.id || allContents.find(x => x.title === oldTitle)?.id;
+        const normOld = oldTitle.trim().toLowerCase();
+        const normNew = updated.title.trim().toLowerCase();
+        let targetId = updated.id || allContents.find(x => x.title.trim().toLowerCase() === normOld || x.title.trim().toLowerCase() === normNew)?.id;
 
         // Nếu chưa có targetId, thử tìm ID trên server theo tên
         if (!targetId) {
           try {
-            const sRes = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(oldTitle)}`);
+            const sRes = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(oldTitle.trim())}`, {
+              headers: { ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {}) }
+            });
             if (sRes.ok) {
               const sData = await sRes.json();
               if (sData?.data?.id) {
                 targetId = sData.data.id;
+              }
+            }
+          } catch {}
+        }
+        if (!targetId && updated.title !== oldTitle) {
+          try {
+            const sRes2 = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(updated.title.trim())}`, {
+              headers: { ...(window.localStorage.getItem("personal_library_access_token") ? { "Authorization": `Bearer ${window.localStorage.getItem("personal_library_access_token")}` } : {}) }
+            });
+            if (sRes2.ok) {
+              const sData2 = await sRes2.json();
+              if (sData2?.data?.id) {
+                targetId = sData2.data.id;
               }
             }
           } catch {}
