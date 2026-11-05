@@ -237,12 +237,16 @@ public class ContentServiceImpl implements ContentService {
         if (request.getChapters() != null && !request.getChapters().isEmpty()) {
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
+                if (chReq.getExternalLink() == null || chReq.getExternalLink().isBlank()) {
+                    continue;
+                }
+                java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
                 Chapter chapter = Chapter.builder()
                         .content(saved)
-                        .chapterNumber(chReq.getChapterNumber())
+                        .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
-                        .title(chReq.getTitle())
-                        .externalLink(chReq.getExternalLink())
+                        .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
+                        .externalLink(chReq.getExternalLink().trim())
                         .notes(chReq.getNotes())
                         .build();
                 saved.getChapters().add(chapterRepository.save(chapter));
@@ -282,12 +286,16 @@ public class ContentServiceImpl implements ContentService {
             content.getChapters().clear();
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
+                if (chReq.getExternalLink() == null || chReq.getExternalLink().isBlank()) {
+                    continue;
+                }
+                java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
                 Chapter chapter = Chapter.builder()
                         .content(content)
-                        .chapterNumber(chReq.getChapterNumber())
+                        .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
-                        .title(chReq.getTitle())
-                        .externalLink(chReq.getExternalLink())
+                        .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
+                        .externalLink(chReq.getExternalLink().trim())
                         .notes(chReq.getNotes())
                         .build();
                 content.getChapters().add(chapterRepository.save(chapter));
