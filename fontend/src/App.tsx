@@ -9935,17 +9935,7 @@ function mapBackendContentToItem(c: any): ContentItem {
 }
 
 function loadSavedContents(): ContentItem[] {
-  try {
-    const raw = window.localStorage.getItem(CONTENTS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const deleted = getDeletedTitles();
-    return Array.isArray(parsed)
-      ? parsed.filter(item => item && item.title && !deleted.has(item.title.trim().toLowerCase()))
-      : [];
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 function loadSavedFavorites(): string[] {
@@ -9998,7 +9988,7 @@ export default function App() {
   const [favorites, setFavorites] = useState<string[]>(() => loadUserFavorites(currentUser));
   const [userSavedTitles, setUserSavedTitles] = useState<string[]>(() => loadUserSavedTitles(currentUser));
   const [userProgress, setUserProgress] = useState<Record<string, number>>(() => loadUserProgress(currentUser));
-  const [allContents, setAllContents] = useState<ContentItem[]>(() => loadSavedContents());
+  const [allContents, setAllContents] = useState<ContentItem[]>([]);
   const [publishedTitle, setPublishedTitle] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -10040,22 +10030,23 @@ export default function App() {
     setUserProgress(loadUserProgress(profileToSave));
   }, [currentUser]);
 
+  // Dọn sạch hoàn toàn các bản ghi lưu trữ cục bộ cũ trên máy người dùng, chỉ sử dụng TiDB Cloud
   useEffect(() => {
     try {
-      window.localStorage.setItem(CONTENTS_STORAGE_KEY, JSON.stringify(allContents));
-    } catch {
-      // ignore storage errors
-    }
-  }, [allContents]);
+      window.localStorage.removeItem(CONTENTS_STORAGE_KEY);
+      window.localStorage.removeItem("personal_library_cloud_contents_cache");
+      window.localStorage.removeItem("pl_deleted_titles_v2");
+    } catch {}
+  }, []);
 
   useEffect(() => {
     saveUserFavorites(favorites, currentUser);
   }, [favorites, currentUser]);
 
-  // Đồng bộ tác phẩm 2 chiều thời gian thực với CSDL MySQL Backend (TiDB Cloud)
+  // Đồng bộ tác phẩm trực tiếp từ CSDL TiDB Cloud (Nguồn chân lý duy nhất - Không lưu Local máy)
   useEffect(() => {
     let active = true;
-    const syncCloudContents = async () => {
+    const fetchCloudContents = async () => {
       try {
         const backendBase = getBackendApiBase();
         if (!backendBase) return;
@@ -10067,7 +10058,7 @@ export default function App() {
           ...(token ? { "Authorization": `Bearer ${token}` } : {})
         };
 
-        // 1. Lấy toàn bộ tác phẩm hiện có trên Cloud TiDB (kèm username và token để lấy đúng quyền xem PRIVATE & SHARED)
+        // Lấy danh sách tác phẩm mới nhất trực tiếp từ TiDB Cloud
         const res = await fetch(`${backendBase}/api/contents?page=0&size=100&currentUsername=${encodeURIComponent(cleanCreator)}`, {
           headers: authHeaders
         });
@@ -10075,90 +10066,16 @@ export default function App() {
 
         const data = await res.json();
         const serverItems = data?.data?.items || [];
-        const cloudMapped = Array.isArray(serverItems)
-          ? serverItems.map(mapBackendContentToItem)
-          : [];
-
-        // 2. Kiểm tra xem trong bộ nhớ máy có tác phẩm nào chưa được đẩy lên Cloud không
-        const localItems = loadSavedContents();
-        let hasUploaded = false;
-
-        for (const local of localItems) {
-          if (!local.title || !local.title.trim()) continue;
-          const existsOnServer = cloudMapped.some(
-            m => m.title.trim().toLowerCase() === local.title.trim().toLowerCase()
-          );
-
-          if (!existsOnServer) {
-            hasUploaded = true;
-            const creator = (local.createdBy && local.createdBy.user) ? local.createdBy.user : (currentUser.username || "berry");
-            const creatorClean = creator.replace(/^@/, "");
-            try {
-              await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(creatorClean)}`, {
-                method: "POST",
-                headers: authHeaders,
-                body: JSON.stringify({
-                  title: local.title,
-                  contentType: local.type === "Phim" ? (local.movieMode === "Series" ? "ANIME" : "MOVIE") : "MANGA",
-                  isSeries: local.type === "Truyện" || local.movieMode === "Series",
-                  posterUrl: local.img || "",
-                  authorOrDirector: local.author || local.director || local.createdBy?.name || currentUser.name || "Tác giả",
-                  description: packContentDescription(local),
-                  status: local.status === "Hoàn thành" ? "COMPLETED" : "ONGOING",
-                  externalMainLink: local.mainLink || (local.chaptersList && local.chaptersList[0]?.url) || "",
-                  visibility: local.visibility || "PUBLIC",
-                  sharedWithUsers: local.sharedWithUsers || [],
-                  genreIds: mapGenresToIds(local.genres),
-                  chapters: (local.chaptersList || []).map((ch, idx) => ({
-                    chapterNumber: parseFloat(ch.number) || (idx + 1),
-                    displayOrder: idx + 1,
-                    title: ch.title || `Chương ${ch.number}`,
-                    externalLink: ch.url || "",
-                    notes: ch.note || "",
-                  })),
-                }),
-              });
-            } catch (err) {
-              console.warn("Auto-sync local story to cloud failed:", err);
-            }
-          }
-        }
-
-        // 3. Nếu vừa upload thêm truyện mới, tải lại danh sách mới nhất từ server
-        if (hasUploaded) {
-          const updatedRes = await fetch(`${backendBase}/api/contents?page=0&size=100&currentUsername=${encodeURIComponent(cleanCreator)}`, {
-            headers: authHeaders
-          });
-          if (updatedRes.ok) {
-            const updatedData = await updatedRes.json();
-            const updatedItems = updatedData?.data?.items || [];
-            if (active && Array.isArray(updatedItems)) {
-              setAllContents(updatedItems.map(mapBackendContentToItem));
-              return;
-            }
-          }
-        }
-
-        // 4. Đồng bộ danh sách từ cloud vào state
-        if (active) {
-          setAllContents(prev => {
-            const merged = [...cloudMapped];
-            for (const loc of prev) {
-              const cleanT = loc.title.trim().toLowerCase();
-              if (!merged.some(m => m.title.trim().toLowerCase() === cleanT)) {
-                merged.push(loc);
-              }
-            }
-            return merged;
-          });
+        if (active && Array.isArray(serverItems)) {
+          setAllContents(serverItems.map(mapBackendContentToItem));
         }
       } catch (e) {
-        // ignore offline
+        // ignore network error
       }
     };
 
-    syncCloudContents();
-    const interval = window.setInterval(syncCloudContents, 8000);
+    fetchCloudContents();
+    const interval = window.setInterval(fetchCloudContents, 8000);
     return () => {
       active = false;
       window.clearInterval(interval);
