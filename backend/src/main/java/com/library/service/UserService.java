@@ -16,4 +16,5 @@ public interface UserService {
     PageResponse<UserResponse> searchUsers(String keyword, Pageable pageable);
     UserResponse updateUserStatusByAdmin(Long targetUserId, UserStatus status);
     UserResponse updateUserRoleByAdmin(Long targetUserId, RoleType role);
+    UserResponse updateUserRoleByAdmin(Long targetUserId, RoleType role, String actorUsername);
 }

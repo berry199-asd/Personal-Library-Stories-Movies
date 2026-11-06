@@ -574,7 +574,7 @@ export function loadSavedAccounts(): UserProfile[] {
             (acc.username && acc.username.toLowerCase() === "@berry") ||
             (acc.username && acc.username.toLowerCase() === "berry")
           ) {
-            return { ...acc, name: "Berry", username: "@berry", role: "USER", email: "lechauanh2512.com@gmail.com" };
+            return { ...acc, name: "Berry", username: "@berry", role: acc.role || "USER", email: "lechauanh2512.com@gmail.com" };
           }
           if (
             (acc.email && acc.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com") ||
@@ -9078,27 +9078,160 @@ function AdminPage({ setPage, contents, setContents, onSelectTitle }: { setPage:
     (contentStatusFilter === "ALL" || c.status === contentStatusFilter)
   );
 
-  const saveEditedUser = () => {
-    if (!editingUser) return;
-    setUsers(users.map(u => u.id === editingUser.id ? editingUser : u));
-    showToast(`Đã cập nhật thông tin và phân quyền cho tài khoản ${editingUser.username}.`);
+  const handleToggleUserRole = async (targetUser: AdminUserItem) => {
+    const isCurrentAdmin = targetUser.role === "ADMIN";
+    const nextRole: "USER" | "ADMIN" = isCurrentAdmin ? "USER" : "ADMIN";
+
+    // Safeguard: Prevent removing the last administrator
+    if (isCurrentAdmin) {
+      const adminCount = users.filter(u => u.role === "ADMIN").length;
+      if (adminCount <= 1) {
+        showToast("⚠️ Không thể hạ quyền quản trị viên duy nhất còn lại trong hệ thống!");
+        return;
+      }
+    }
+
+    // Optimistic UI update
+    const prevUsers = [...users];
+    setUsers(users.map(item => item.id === targetUser.id ? { ...item, role: nextRole } : item));
+    showToast(`Đang cập nhật vai trò của ${targetUser.username} sang ${nextRole}...`);
+
+    // Sync to local account storage
+    const activeMe = getActiveUser();
+    try {
+      saveAccountToStorage({
+        id: String(targetUser.id),
+        name: targetUser.name,
+        username: targetUser.username,
+        email: targetUser.email,
+        avatar: targetUser.avatar,
+        bio: targetUser.bio,
+        role: nextRole
+      });
+      const currentHandle = (activeMe.username || "").toLowerCase().replace(/^@/, "");
+      const targetHandle = (targetUser.username || "").toLowerCase().replace(/^@/, "");
+      if (currentHandle === targetHandle) {
+        const updatedMe = { ...activeMe, role: nextRole };
+        setActiveCurrentUserProfile(updatedMe);
+        saveCurrentUserToStorage(updatedMe);
+      }
+    } catch {}
+
+    // Persist to MySQL Backend
     try {
       const backendBase = getBackendApiBase();
       if (backendBase) {
-        const cleanUser = (editingUser.username || "").replace(/^@/, "");
+        const cleanAdmin = (activeMe.username || "anhquyphi").replace(/^@/, "");
         const token = window.localStorage.getItem("personal_library_access_token");
-        fetch(`${backendBase}/api/users/profile?username=${encodeURIComponent(cleanUser)}`, {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        };
+
+        const targetHandle = (targetUser.username || "").replace(/^@/, "");
+        let res = await fetch(`${backendBase}/api/admin/users/${targetUser.id}/role?role=${nextRole}&actorUsername=${encodeURIComponent(cleanAdmin)}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { "Authorization": `Bearer ${token}` } : {})
-          },
+          headers
+        });
+
+        if (!res.ok) {
+          // Fallback by username
+          res = await fetch(`${backendBase}/api/admin/users/by-username/${encodeURIComponent(targetHandle)}/role?role=${nextRole}&actorUsername=${encodeURIComponent(cleanAdmin)}`, {
+            method: "PUT",
+            headers
+          });
+        }
+
+        if (res.ok) {
+          showToast(`✓ Đã lưu vai trò ${nextRole} của ${targetUser.username} vào CSDL MySQL!`);
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showToast(`⚠️ Lỗi cập nhật CSDL: ${errData.message || "Không thể cập nhật vai trò"}`);
+          setUsers(prevUsers);
+        }
+      }
+    } catch (e) {
+      console.warn("Update role failed:", e);
+      showToast("⚠️ Lỗi kết nối CSDL khi cập nhật vai trò.");
+      setUsers(prevUsers);
+    }
+  };
+
+  const saveEditedUser = async () => {
+    if (!editingUser) return;
+
+    // Check safeguard if admin role was removed
+    const original = users.find(u => u.id === editingUser.id);
+    if (original && original.role === "ADMIN" && editingUser.role !== "ADMIN") {
+      const adminCount = users.filter(u => u.role === "ADMIN").length;
+      if (adminCount <= 1) {
+        showToast("⚠️ Không thể hạ quyền quản trị viên duy nhất còn lại trong hệ thống!");
+        return;
+      }
+    }
+
+    setUsers(users.map(u => u.id === editingUser.id ? editingUser : u));
+    showToast(`Đã lưu cập nhật cho tài khoản ${editingUser.username}.`);
+
+    // Sync to local account storage
+    const activeMe = getActiveUser();
+    try {
+      saveAccountToStorage({
+        id: String(editingUser.id),
+        name: editingUser.name,
+        username: editingUser.username,
+        email: editingUser.email,
+        avatar: editingUser.avatar,
+        bio: editingUser.bio,
+        role: editingUser.role
+      });
+      const currentHandle = (activeMe.username || "").toLowerCase().replace(/^@/, "");
+      const targetHandle = (editingUser.username || "").toLowerCase().replace(/^@/, "");
+      if (currentHandle === targetHandle) {
+        const updatedMe = { ...activeMe, role: editingUser.role };
+        setActiveCurrentUserProfile(updatedMe);
+        saveCurrentUserToStorage(updatedMe);
+      }
+    } catch {}
+
+    // Persist to MySQL Backend
+    try {
+      const backendBase = getBackendApiBase();
+      if (backendBase) {
+        const cleanAdmin = (activeMe.username || "anhquyphi").replace(/^@/, "");
+        const targetHandle = (editingUser.username || "").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        };
+
+        // 1. Update Profile (name, avatar, bio)
+        fetch(`${backendBase}/api/users/profile?username=${encodeURIComponent(targetHandle)}`, {
+          method: "PUT",
+          headers,
           body: JSON.stringify({
             displayName: editingUser.name,
             avatarUrl: editingUser.avatar,
             bio: editingUser.bio || ""
           })
-        }).catch(err => console.warn("Sync edited user to backend failed:", err));
+        }).catch(err => console.warn("Sync edited profile to backend failed:", err));
+
+        // 2. Update Role in MySQL
+        if (!original || original.role !== editingUser.role) {
+          fetch(`${backendBase}/api/admin/users/${editingUser.id}/role?role=${editingUser.role}&actorUsername=${encodeURIComponent(cleanAdmin)}`, {
+            method: "PUT",
+            headers
+          }).catch(err => console.warn("Sync role to backend failed:", err));
+        }
+
+        // 3. Update Status in MySQL
+        if (!original || original.status !== editingUser.status) {
+          fetch(`${backendBase}/api/admin/users/${editingUser.id}/status?status=${editingUser.status}&actorUsername=${encodeURIComponent(cleanAdmin)}`, {
+            method: "PATCH",
+            headers
+          }).catch(err => console.warn("Sync status to backend failed:", err));
+        }
       }
     } catch {}
     setEditingUser(null);
@@ -9378,11 +9511,7 @@ function AdminPage({ setPage, contents, setContents, onSelectTitle }: { setPage:
           <td><span className={`badge-pill ${u.status === "ACTIVE" ? "active" : u.status === "LOCKED" ? "locked" : "banned"}`}>{u.status}</span></td>
           <td><div className="admin-row-actions">
             <Button variant="secondary" icon="edit" onClick={() => setEditingUser({ ...u })}>Chỉnh sửa</Button>
-            <Button variant="ghost" onClick={() => {
-              const nextRole = u.role === "ADMIN" ? "USER" : "ADMIN";
-              setUsers(users.map(item => item.id === u.id ? { ...item, role: nextRole } : item));
-              showToast(`Đã đổi vai trò của ${u.username} sang ${nextRole}.`);
-            }}>Đổi Role</Button>
+            <Button variant="ghost" onClick={() => handleToggleUserRole(u)}>Đổi Role</Button>
             <Button variant={u.status === "ACTIVE" ? "danger" : "secondary"} onClick={() => {
               const nextStatus = u.status === "ACTIVE" ? "LOCKED" : "ACTIVE";
               setUsers(users.map(item => item.id === u.id ? { ...item, status: nextStatus } : item));
