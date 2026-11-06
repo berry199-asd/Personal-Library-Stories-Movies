@@ -21,7 +21,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Slf4j
@@ -187,10 +189,10 @@ public class ContentServiceImpl implements ContentService {
             String cleanTitle = request.getTitle().trim();
             var existingOpt = contentRepository.findAll().stream()
                     .filter(c -> c.getTitle() != null && c.getTitle().trim().equalsIgnoreCase(cleanTitle))
-                    .filter(c -> c.getCreatedBy() != null && c.getCreatedBy().getId().equals(creatorUserId))
+                    .sorted((a, b) -> b.getId().compareTo(a.getId()))
                     .findFirst();
             if (existingOpt.isPresent()) {
-                log.info("Content with title '{}' already exists for creator #{}. Updating existing content #{} instead of duplicating.", cleanTitle, creatorUserId, existingOpt.get().getId());
+                log.info("Content with title '{}' already exists. Updating existing content #{} instead of duplicating.", cleanTitle, existingOpt.get().getId());
                 return updateContent(existingOpt.get().getId(), request, creatorUserId, true);
             }
         }
@@ -235,19 +237,20 @@ public class ContentServiceImpl implements ContentService {
         }
 
         java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
+        int nextSeasonNum = 1;
         if (request.getSeasonTitles() != null && !request.getSeasonTitles().isEmpty()) {
-            int sNum = 1;
             for (String rawTitle : request.getSeasonTitles()) {
                 if (rawTitle != null && !rawTitle.isBlank()) {
                     String cleanTitle = rawTitle.trim();
-                    if (!seasonMap.containsKey(cleanTitle)) {
+                    String key = cleanTitle.toLowerCase();
+                    if (!seasonMap.containsKey(key)) {
                         Season s = Season.builder()
                                 .content(saved)
-                                .seasonNumber(sNum++)
+                                .seasonNumber(nextSeasonNum++)
                                 .title(cleanTitle)
                                 .build();
                         Season savedSeason = seasonRepository.save(s);
-                        seasonMap.put(cleanTitle, savedSeason);
+                        seasonMap.put(key, savedSeason);
                         saved.getSeasons().add(savedSeason);
                     }
                 }
@@ -257,35 +260,39 @@ public class ContentServiceImpl implements ContentService {
         if (request.getChapters() != null && !request.getChapters().isEmpty()) {
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
-                String extLink = chReq.getExternalLink() != null && !chReq.getExternalLink().isBlank()
+                String extLink = chReq.getExternalLink() != null && !chReq.getExternalLink().isBlank() && !chReq.getExternalLink().equals("#")
                         ? chReq.getExternalLink().trim()
                         : (saved.getExternalMainLink() != null && !saved.getExternalMainLink().isBlank() ? saved.getExternalMainLink().trim() : "#");
 
                 java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
 
-                Season season = null;
-                if (chReq.getSeasonTitle() != null && !chReq.getSeasonTitle().isBlank()) {
-                    String sTitle = chReq.getSeasonTitle().trim();
-                    if (!seasonMap.containsKey(sTitle)) {
-                        int sNum = chReq.getSeasonNumber() != null ? chReq.getSeasonNumber() : (seasonMap.size() + 1);
-                        Season s = Season.builder()
-                                .content(saved)
-                                .seasonNumber(sNum)
-                                .title(sTitle)
-                                .build();
-                        Season savedSeason = seasonRepository.save(s);
-                        seasonMap.put(sTitle, savedSeason);
-                        saved.getSeasons().add(savedSeason);
-                    }
-                    season = seasonMap.get(sTitle);
+                String sTitle = (chReq.getSeasonTitle() != null && !chReq.getSeasonTitle().isBlank())
+                        ? chReq.getSeasonTitle().trim()
+                        : (saved.getContentType() == ContentType.MOVIE && saved.getIsSeries() == false ? "Phim lẻ" : "Phần 1");
+                String sKey = sTitle.toLowerCase();
+                Season season = seasonMap.get(sKey);
+                if (season == null) {
+                    Season s = Season.builder()
+                            .content(saved)
+                            .seasonNumber(nextSeasonNum++)
+                            .title(sTitle)
+                            .build();
+                    season = seasonRepository.save(s);
+                    seasonMap.put(sKey, season);
+                    saved.getSeasons().add(season);
                 }
+
+                String defaultTitle = (saved.getContentType() == ContentType.MOVIE)
+                        ? (sTitle.equals("Phim lẻ") && request.getChapters().size() == 1 ? "Bản đầy đủ" : "Tập " + chNum)
+                        : "Chương " + chNum;
+                String finalTitle = chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : defaultTitle;
 
                 Chapter chapter = Chapter.builder()
                         .content(saved)
                         .season(season)
                         .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
-                        .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
+                        .title(finalTitle)
                         .externalLink(extLink)
                         .notes(chReq.getNotes())
                         .build();
@@ -296,6 +303,10 @@ public class ContentServiceImpl implements ContentService {
         var allDbSeasonsCreate = seasonRepository.findByContentIdOrderBySeasonNumberAsc(saved.getId());
         if (allDbSeasonsCreate != null && !allDbSeasonsCreate.isEmpty()) {
             saved.setSeasons(allDbSeasonsCreate);
+        }
+        var allDbChaptersCreate = chapterRepository.findByContentIdOrderByDisplayOrderAscChapterNumberAsc(saved.getId());
+        if (allDbChaptersCreate != null && !allDbChaptersCreate.isEmpty()) {
+            saved.setChapters(allDbChaptersCreate);
         }
         return ContentResponse.fromEntity(saved, 0.0, true);
     }
@@ -333,68 +344,132 @@ public class ContentServiceImpl implements ContentService {
 
         java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
         var existingDbSeasons = seasonRepository.findByContentIdOrderBySeasonNumberAsc(content.getId());
+        int nextSeasonNum = 1;
         for (Season s : existingDbSeasons) {
-            if (s.getTitle() != null) {
-                seasonMap.put(s.getTitle().trim(), s);
+            if (s.getTitle() != null && !s.getTitle().isBlank()) {
+                seasonMap.put(s.getTitle().trim().toLowerCase(), s);
+            }
+            if (s.getSeasonNumber() != null && s.getSeasonNumber() >= nextSeasonNum) {
+                nextSeasonNum = s.getSeasonNumber() + 1;
             }
         }
 
         if (request.getSeasonTitles() != null && !request.getSeasonTitles().isEmpty()) {
-            int sNum = 1;
             for (String rawTitle : request.getSeasonTitles()) {
                 if (rawTitle != null && !rawTitle.isBlank()) {
                     String cleanTitle = rawTitle.trim();
-                    if (!seasonMap.containsKey(cleanTitle)) {
+                    String key = cleanTitle.toLowerCase();
+                    if (!seasonMap.containsKey(key)) {
                         Season s = Season.builder()
                                 .content(content)
-                                .seasonNumber(sNum++)
+                                .seasonNumber(nextSeasonNum++)
                                 .title(cleanTitle)
                                 .build();
                         Season savedSeason = seasonRepository.save(s);
-                        seasonMap.put(cleanTitle, savedSeason);
+                        seasonMap.put(key, savedSeason);
                         content.getSeasons().add(savedSeason);
                     }
                 }
             }
         }
 
+        // Cập nhật an toàn danh sách tập/chương: Tái sử dụng bản ghi cũ để không vi phạm khoá ngoại và không mất tiến độ/bình luận
         if (request.getChapters() != null) {
-            content.getChapters().clear();
+            List<Chapter> currentChapters = new ArrayList<>(content.getChapters());
+            List<ChapterRequest> incomingReqs = request.getChapters();
+            Set<Long> updatedChapterIds = new HashSet<>();
+
             int order = 1;
-            for (ChapterRequest chReq : request.getChapters()) {
-                String extLink = chReq.getExternalLink() != null && !chReq.getExternalLink().isBlank()
+            for (int i = 0; i < incomingReqs.size(); i++) {
+                ChapterRequest chReq = incomingReqs.get(i);
+                String extLink = chReq.getExternalLink() != null && !chReq.getExternalLink().isBlank() && !chReq.getExternalLink().equals("#")
                         ? chReq.getExternalLink().trim()
                         : (content.getExternalMainLink() != null && !content.getExternalMainLink().isBlank() ? content.getExternalMainLink().trim() : "#");
 
                 java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
 
-                Season season = null;
-                if (chReq.getSeasonTitle() != null && !chReq.getSeasonTitle().isBlank()) {
-                    String sTitle = chReq.getSeasonTitle().trim();
-                    if (!seasonMap.containsKey(sTitle)) {
-                        int sNum = chReq.getSeasonNumber() != null ? chReq.getSeasonNumber() : (seasonMap.size() + 1);
-                        Season s = Season.builder()
-                                .content(content)
-                                .seasonNumber(sNum)
-                                .title(sTitle)
-                                .build();
-                        Season savedSeason = seasonRepository.save(s);
-                        seasonMap.put(sTitle, savedSeason);
-                        content.getSeasons().add(savedSeason);
-                    }
-                    season = seasonMap.get(sTitle);
+                String sTitle = (chReq.getSeasonTitle() != null && !chReq.getSeasonTitle().isBlank())
+                        ? chReq.getSeasonTitle().trim()
+                        : (content.getContentType() == ContentType.MOVIE && content.getIsSeries() == false ? "Phim lẻ" : "Phần 1");
+                String sKey = sTitle.toLowerCase();
+                Season season = seasonMap.get(sKey);
+                if (season == null) {
+                    Season s = Season.builder()
+                            .content(content)
+                            .seasonNumber(nextSeasonNum++)
+                            .title(sTitle)
+                            .build();
+                    season = seasonRepository.save(s);
+                    seasonMap.put(sKey, season);
+                    content.getSeasons().add(season);
                 }
 
-                Chapter chapter = Chapter.builder()
-                        .content(content)
-                        .season(season)
-                        .chapterNumber(chNum)
-                        .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
-                        .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
-                        .externalLink(extLink)
-                        .notes(chReq.getNotes())
-                        .build();
-                content.getChapters().add(chapterRepository.save(chapter));
+                // Tìm tập cũ khớp để cập nhật (giữ nguyên ID)
+                Chapter targetChapter = null;
+                for (Chapter existing : currentChapters) {
+                    if (!updatedChapterIds.contains(existing.getId())) {
+                        boolean seasonMatch = (existing.getSeason() != null && season != null && existing.getSeason().getId().equals(season.getId()))
+                                || (existing.getSeason() == null && season == null);
+                        boolean numMatch = existing.getChapterNumber() != null && existing.getChapterNumber().compareTo(chNum) == 0;
+                        if (seasonMatch && numMatch) {
+                            targetChapter = existing;
+                            break;
+                        }
+                    }
+                }
+                if (targetChapter == null) {
+                    for (Chapter existing : currentChapters) {
+                        if (!updatedChapterIds.contains(existing.getId())) {
+                            targetChapter = existing;
+                            break;
+                        }
+                    }
+                }
+
+                String defaultTitle = (content.getContentType() == ContentType.MOVIE)
+                        ? (sTitle.equals("Phim lẻ") && incomingReqs.size() == 1 ? "Bản đầy đủ" : "Tập " + chNum)
+                        : "Chương " + chNum;
+                String finalTitle = chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : defaultTitle;
+                int finalOrder = chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++;
+
+                if (targetChapter != null) {
+                    targetChapter.setSeason(season);
+                    targetChapter.setChapterNumber(chNum);
+                    targetChapter.setDisplayOrder(finalOrder);
+                    targetChapter.setTitle(finalTitle);
+                    targetChapter.setExternalLink(extLink);
+                    targetChapter.setNotes(chReq.getNotes());
+                    chapterRepository.save(targetChapter);
+                    updatedChapterIds.add(targetChapter.getId());
+                } else {
+                    Chapter newCh = Chapter.builder()
+                            .content(content)
+                            .season(season)
+                            .chapterNumber(chNum)
+                            .displayOrder(finalOrder)
+                            .title(finalTitle)
+                            .externalLink(extLink)
+                            .notes(chReq.getNotes())
+                            .build();
+                    Chapter savedCh = chapterRepository.save(newCh);
+                    content.getChapters().add(savedCh);
+                    updatedChapterIds.add(savedCh.getId());
+                }
+            }
+
+            // Dọn dẹp an toàn các tập bị xoá khỏi danh sách
+            for (Chapter existing : currentChapters) {
+                if (!updatedChapterIds.contains(existing.getId())) {
+                    try {
+                        jdbcTemplate.update("UPDATE reviews SET chapter_id = NULL WHERE chapter_id = ?", existing.getId());
+                        jdbcTemplate.update("DELETE FROM reading_watching_progress WHERE chapter_id = ?", existing.getId());
+                        jdbcTemplate.update("DELETE FROM chapter_links WHERE chapter_id = ?", existing.getId());
+                        content.getChapters().remove(existing);
+                        chapterRepository.delete(existing);
+                    } catch (Exception ex) {
+                        log.warn("Notice safely deleting chapter #{}: {}", existing.getId(), ex.getMessage());
+                    }
+                }
             }
         }
 
@@ -414,6 +489,10 @@ public class ContentServiceImpl implements ContentService {
         var allDbSeasonsUpdate = seasonRepository.findByContentIdOrderBySeasonNumberAsc(saved.getId());
         if (allDbSeasonsUpdate != null && !allDbSeasonsUpdate.isEmpty()) {
             saved.setSeasons(allDbSeasonsUpdate);
+        }
+        var allDbChaptersUpdate = chapterRepository.findByContentIdOrderByDisplayOrderAscChapterNumberAsc(saved.getId());
+        if (allDbChaptersUpdate != null && !allDbChaptersUpdate.isEmpty()) {
+            saved.setChapters(allDbChaptersUpdate);
         }
         Double avgRating = reviewRepository.calculateAverageRating(saved.getId());
         return ContentResponse.fromEntity(saved, avgRating, true);
