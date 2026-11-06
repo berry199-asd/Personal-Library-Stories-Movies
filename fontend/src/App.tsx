@@ -211,6 +211,10 @@ type ContentCommentItem = {
   text: string;
   spoiler?: string;
   chapterLabel?: string;
+  chapterId?: number;
+  parentId?: number;
+  replies?: ContentCommentItem[];
+  createdAt?: string;
 };
 
 type ContentItem = {
@@ -2869,6 +2873,40 @@ function LibraryPage({
   </main>;
 }
 
+
+function formatReviewTime(dateStr?: string): string {
+  if (!dateStr) return "Vừa xong";
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (diffSec < 60) return "Vừa xong";
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)} phút trước`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} giờ trước`;
+    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+  } catch {
+    return "Vừa xong";
+  }
+}
+
+function mapReviewResponseToComment(r: any): ContentCommentItem {
+  return {
+    id: r.id,
+    author: r.displayName || r.username || "Thành viên",
+    username: r.username ? (r.username.startsWith("@") ? r.username : "@" + r.username) : "@user",
+    avatar: r.avatarUrl || photos.red,
+    time: formatReviewTime(r.createdAt),
+    rating: r.rating ? `${r.rating}.0` : "—",
+    text: r.commentText || "",
+    spoiler: r.isSpoiler ? r.commentText : "",
+    chapterLabel: r.chapterTitle || (r.chapterId ? `Tập/Chương #${r.chapterId}` : undefined),
+    chapterId: r.chapterId,
+    parentId: r.parentId,
+    replies: Array.isArray(r.replies) ? r.replies.map(mapReviewResponseToComment) : [],
+    createdAt: r.createdAt,
+  };
+}
+
 function DetailPage({
   publishedTitle = "",
   allContents = [],
@@ -2915,6 +2953,11 @@ function DetailPage({
   const [isSpoiler, setIsSpoiler] = useState(false);
   const [editingWorkModal, setEditingWorkModal] = useState(false);
   const [editingChaptersModal, setEditingChaptersModal] = useState(false);
+  const [backendComments, setBackendComments] = useState<ContentCommentItem[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
+  const [replyTarget, setReplyTarget] = useState<{ id: number; author: string } | null>(null);
 
   const matchedItem =
     allContents.find(x => x.title === publishedTitle) ||
@@ -2982,7 +3025,7 @@ function DetailPage({
     );
   }
 
-  const comments: ContentCommentItem[] = currentItem.commentsList || [];
+  const comments: ContentCommentItem[] = backendComments.length > 0 ? backendComments : (currentItem.commentsList || []);
 
   const inLibrary = savedItems.some(x => x.title === currentItem.title);
   const liked = favorites.includes(currentItem.title);
@@ -3007,48 +3050,159 @@ function DetailPage({
     onUpdateProgress?.(currentItem.title, idx + 1, Math.max(1, chapters.length));
   };
 
-  const submitComment = () => {
-    if (!commentText.trim()) return;
-    const newComment: ContentCommentItem = {
-      id: Date.now(),
-      author: activeUser.name || getCurrentUserName(),
-      username: activeUser.username || getCurrentUserHandle(),
-      avatar: activeUser.avatar || photos.red,
-      time: "Vừa xong",
-      rating: `${userRating}.0`,
-      text: isSpoiler ? "Bình luận này có chứa nội dung tiết lộ cốt truyện." : commentText.trim(),
-      spoiler: isSpoiler ? commentText.trim() : "",
-    };
-    const nextComments = [newComment, ...comments];
-    const numericRatings = nextComments.map(c => parseFloat(c.rating)).filter(n => !Number.isNaN(n));
-    const avgScore =
-      numericRatings.length > 0
-        ? (numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length).toFixed(1)
-        : currentItem.score;
+  useEffect(() => {
+    let cancelled = false;
+    const loadReviews = async () => {
+      const backendBase = getBackendApiBase();
+      if (!backendBase || !currentItem) return;
+      let targetContentId = currentItem.id;
+      if (!targetContentId && currentItem.title) {
+        try {
+          const resId = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(currentItem.title.trim())}`);
+          if (resId.ok) {
+            const dataId = await resId.json();
+            if (dataId?.data?.id) {
+              targetContentId = dataId.data.id;
+              currentItem.id = targetContentId;
+            }
+          }
+        } catch {}
+      }
+      if (!targetContentId) return;
 
-    onUpdatePublishedContent?.(currentItem.title, {
-      ...currentItem,
-      score: avgScore,
-      commentsList: nextComments,
-    });
-    setCommentText("");
-    setIsSpoiler(false);
-    setDetailToast("Đã đăng đánh giá & bình luận của bạn!");
+      try {
+        setLoadingComments(true);
+        const token = window.localStorage.getItem("personal_library_access_token");
+        const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+        let url = `${backendBase}/api/contents/${targetContentId}/reviews?page=0&size=100`;
+        if (reviewTab === "Bình luận Chương/Tập") {
+          if (selectedChapterId) {
+            url += `&chapterId=${selectedChapterId}`;
+          } else {
+            url += `&type=CHAPTER`;
+          }
+        } else {
+          url += `&type=GENERAL`;
+        }
+        const res = await fetch(url, { headers });
+        if (res.ok && !cancelled) {
+          const body = await res.json();
+          const items: any[] = body?.data?.items || [];
+          setBackendComments(items.map(mapReviewResponseToComment));
+        }
+      } catch (e) {
+        console.warn("Failed to load reviews:", e);
+      } finally {
+        if (!cancelled) setLoadingComments(false);
+      }
+    };
+
+    loadReviews();
+    return () => { cancelled = true; };
+  }, [currentItem?.id, currentItem?.title, reviewTab, selectedChapterId]);
+
+  const submitComment = async () => {
+    if (!commentText.trim() || submittingComment) return;
+    const backendBase = getBackendApiBase();
+    let targetContentId = currentItem.id;
+    if (!targetContentId && backendBase && currentItem.title) {
+      try {
+        const resId = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(currentItem.title.trim())}`);
+        if (resId.ok) {
+          const dataId = await resId.json();
+          if (dataId?.data?.id) {
+            targetContentId = dataId.data.id;
+            currentItem.id = targetContentId;
+          }
+        }
+      } catch {}
+    }
+
+    if (!backendBase || !targetContentId) {
+      const newComment: ContentCommentItem = {
+        id: Date.now(),
+        author: activeUser.name || getCurrentUserName(),
+        username: activeUser.username || getCurrentUserHandle(),
+        avatar: activeUser.avatar || photos.red,
+        time: "Vừa xong",
+        rating: `${userRating}.0`,
+        text: isSpoiler ? "Bình luận này có chứa nội dung tiết lộ cốt truyện." : commentText.trim(),
+        spoiler: isSpoiler ? commentText.trim() : "",
+      };
+      const nextComments = [newComment, ...comments];
+      onUpdatePublishedContent?.(currentItem.title, {
+        ...currentItem,
+        commentsList: nextComments,
+      });
+      setCommentText("");
+      setIsSpoiler(false);
+      setReplyTarget(null);
+      setDetailToast("Đã lưu bình luận!");
+      return;
+    }
+
+    setSubmittingComment(true);
+    try {
+      const cleanUser = (activeUser.username || "berry").replace(/^@/, "");
+      const token = window.localStorage.getItem("personal_library_access_token");
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      };
+      const payload = {
+        chapterId: reviewTab === "Bình luận Chương/Tập" && selectedChapterId ? selectedChapterId : null,
+        parentId: replyTarget ? replyTarget.id : null,
+        rating: userRating,
+        commentText: commentText.trim(),
+        isSpoiler: isSpoiler,
+      };
+      const res = await fetch(`${backendBase}/api/contents/${targetContentId}/reviews?authorUsername=${encodeURIComponent(cleanUser)}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDetailToast(data?.message || "Không thể đăng bình luận");
+        return;
+      }
+      const savedReview = data.data;
+      const createdItem = mapReviewResponseToComment(savedReview);
+      setBackendComments(prev => [createdItem, ...prev]);
+      setCommentText("");
+      setIsSpoiler(false);
+      setReplyTarget(null);
+      setDetailToast("Đã lưu bình luận vào CSDL MySQL thành công!");
+    } catch {
+      setDetailToast("Lỗi kết nối máy chủ khi đăng bình luận!");
+    } finally {
+      setSubmittingComment(false);
+    }
   };
 
-  const deleteComment = (commentId: number) => {
-    const nextComments = comments.filter(c => c.id !== commentId);
-    const numericRatings = nextComments.map(c => parseFloat(c.rating)).filter(n => !Number.isNaN(n));
-    const avgScore =
-      numericRatings.length > 0
-        ? (numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length).toFixed(1)
-        : "—";
-    onUpdatePublishedContent?.(currentItem.title, {
-      ...currentItem,
-      score: avgScore,
-      commentsList: nextComments,
-    });
-    setDetailToast("Đã xóa bình luận.");
+  const deleteComment = async (commentId: number) => {
+    const backendBase = getBackendApiBase();
+    if (backendBase) {
+      try {
+        const cleanUser = (activeUser.username || "berry").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+        const res = await fetch(`${backendBase}/api/reviews/${commentId}?actorUsername=${encodeURIComponent(cleanUser)}`, {
+          method: "DELETE",
+          headers,
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          setDetailToast(err?.message || "Không thể xóa bình luận");
+          return;
+        }
+      } catch {
+        setDetailToast("Lỗi kết nối khi xóa bình luận!");
+        return;
+      }
+    }
+    setBackendComments(prev => prev.filter(c => c.id !== commentId));
+    setDetailToast("Đã xóa bình luận khỏi CSDL MySQL thành công!");
   };
 
   return <main className="detail-page">
@@ -3476,7 +3630,27 @@ function DetailPage({
         />
       )}
       <section className="reviews"><SectionTitle eyebrow="CỘNG ĐỒNG" title={`Đánh giá & Bình luận (${comments.length})`} />
-        <div className="review-tabs">{["Bình luận chung", "Bình luận Chương/Tập"].map(x => <button className={reviewTab === x ? "active" : ""} onClick={() => setReviewTab(x)} key={x}>{x}</button>)}</div>
+        <div className="review-tabs">{["Bình luận chung", "Bình luận Chương/Tập"].map(x => <button className={reviewTab === x ? "active" : ""} onClick={() => { setReviewTab(x); setSelectedChapterId(null); }} key={x}>{x}</button>)}</div>
+
+        {reviewTab === "Bình luận Chương/Tập" && (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "10px 0 14px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "11px", color: "#b6acc4", fontWeight: 600 }}>Chọn chương / tập để lọc:</span>
+            <select
+              className="admin-select"
+              style={{ width: "auto", minWidth: "200px", padding: "6px 12px", fontSize: "12px" }}
+              value={selectedChapterId ?? ""}
+              onChange={e => setSelectedChapterId(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">-- Tất cả chương / tập --</option>
+              {chapters.map((ch, idx) => (
+                <option key={ch.id || idx} value={ch.id}>
+                  {ch.title || (currentItem.type === "Phim" ? `Tập ${ch.number}` : `Chương ${ch.number}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {currentItem.allowComments !== false ? (
           <div className="comment-form">
             <div className="comment-user">
@@ -3488,10 +3662,16 @@ function DetailPage({
                 </div>
               </div>
             </div>
-            <textarea value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Chia sẻ cảm nhận của bạn về tác phẩm này..." />
+            {replyTarget && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(168, 85, 247, 0.15)", border: "1px solid rgba(168, 85, 247, 0.4)", borderRadius: "8px", padding: "6px 12px", marginBottom: "8px", fontSize: "12px", color: "#e9d5ff" }}>
+                <span>Đang trả lời bình luận của <b>@{replyTarget.author}</b></span>
+                <button type="button" onClick={() => setReplyTarget(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>✕ Hủy</button>
+              </div>
+            )}
+            <textarea value={commentText} onChange={e => setCommentText(e.target.value)} placeholder={replyTarget ? `Viết phản hồi cho @${replyTarget.author}...` : (reviewTab === "Bình luận Chương/Tập" ? "Chia sẻ cảm nhận của bạn về tập/chương này..." : "Chia sẻ cảm nhận của bạn về tác phẩm này...")} />
             <div className="form-footer">
               <label><input type="checkbox" checked={isSpoiler} onChange={e => setIsSpoiler(e.target.checked)} /> <span>Cảnh báo Spoiler (Làm mờ nội dung)</span></label>
-              <Button onClick={submitComment}>Đăng bình luận</Button>
+              <Button disabled={submittingComment} onClick={submitComment}>{submittingComment ? "Đang lưu CSDL..." : "Đăng bình luận"}</Button>
             </div>
           </div>
         ) : (
@@ -3499,7 +3679,12 @@ function DetailPage({
             <b>Người đăng tải đã tắt tính năng bình luận cho tác phẩm này.</b>
           </div>
         )}
-        {comments.length === 0 ? (
+
+        {loadingComments ? (
+          <div className="empty-results" style={{ height: "100px", marginTop: "12px" }}>
+            <p>Đang tải bình luận từ CSDL MySQL...</p>
+          </div>
+        ) : comments.length === 0 ? (
           <div className="empty-results" style={{ height: "130px", marginTop: "12px" }}>
             <b>Chưa có bình luận nào</b>
             <p>Hãy là người đầu tiên để lại đánh giá và bình luận cho “{currentItem.title}”.</p>
@@ -3508,15 +3693,16 @@ function DetailPage({
           comments.map(c => (
             <div className="thread" key={c.id} style={{ marginTop: "12px" }}>
               <img src={c.avatar} alt="" style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(c.username)} />
-              <div>
+              <div style={{ flex: 1 }}>
                 <div className="thread-meta">
                   <b style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(c.username)}>{c.author}</b>
                   <span>{c.time}</span>
+                  {c.chapterLabel && <span className="badge-pill" style={{ fontSize: "9px", padding: "1px 6px" }}>{c.chapterLabel}</span>}
                   <Rating value={c.rating} />
                 </div>
                 <p>{c.text}</p>
                 <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                  <button onClick={() => setCommentText(`@${c.author} `)}>Trả lời</button>
+                  <button onClick={() => { setReplyTarget({ id: c.id, author: c.author }); setCommentText(`@${c.author} `); }}>Trả lời</button>
                   {(c.username === activeUser.username || c.username === getCurrentUserHandle() || userRole === "ADMIN") && (
                     <button style={{ color: "#f87171" }} onClick={() => deleteComment(c.id)}>Xóa bình luận</button>
                   )}
@@ -3526,6 +3712,27 @@ function DetailPage({
                   <div className={`spoiler ${spoilerRevealed ? "revealed" : ""}`} onClick={() => setSpoilerRevealed(!spoilerRevealed)} style={{ cursor: "pointer" }}>
                     <div><Icon name="lock" /><b>Nội dung có spoiler</b><span>{spoilerRevealed ? "Nhấn để ẩn" : "Nhấn để hiển thị"}</span></div>
                     <p>{c.spoiler}</p>
+                  </div>
+                )}
+                {c.replies && c.replies.length > 0 && (
+                  <div className="comment-replies" style={{ marginLeft: "28px", marginTop: "10px", borderLeft: "2px solid rgba(168, 85, 247, 0.3)", paddingLeft: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {c.replies.map(rep => (
+                      <div className="thread reply-thread" key={rep.id} style={{ marginTop: "4px" }}>
+                        <img src={rep.avatar} alt="" style={{ width: "32px", height: "32px", borderRadius: "50%", cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(rep.username)} />
+                        <div style={{ flex: 1 }}>
+                          <div className="thread-meta">
+                            <b style={{ cursor: "pointer" }} onClick={() => onOpenPublicProfile?.(rep.username)}>{rep.author}</b>
+                            <span>{rep.time}</span>
+                          </div>
+                          <p>{rep.text}</p>
+                          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                            {(rep.username === activeUser.username || rep.username === getCurrentUserHandle() || userRole === "ADMIN") && (
+                              <button style={{ color: "#f87171" }} onClick={() => deleteComment(rep.id)}>Xóa bình luận</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

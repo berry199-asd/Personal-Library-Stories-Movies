@@ -17,6 +17,7 @@ public class ReviewResponse {
     private Long id;
     private Long contentId;
     private Long chapterId;
+    private String chapterTitle;
     private Long parentId;
     private Long userId;
     private String username;
@@ -28,12 +29,14 @@ public class ReviewResponse {
     private Integer helpfulCount;
     private List<ReviewResponse> replies;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     public static ReviewResponse fromEntity(Review review) {
         return ReviewResponse.builder()
                 .id(review.getId())
                 .contentId(review.getContent().getId())
                 .chapterId(review.getChapter() != null ? review.getChapter().getId() : null)
+                .chapterTitle(review.getChapter() != null ? review.getChapter().getTitle() : null)
                 .parentId(review.getParent() != null ? review.getParent().getId() : null)
                 .userId(review.getUser().getId())
                 .username(review.getUser().getUsername())
@@ -47,6 +50,7 @@ public class ReviewResponse {
                         ? review.getReplies().stream().map(ReviewResponse::fromEntity).collect(Collectors.toList())
                         : List.of())
                 .createdAt(review.getCreatedAt())
+                .updatedAt(review.getUpdatedAt())
                 .build();
     }
 }
