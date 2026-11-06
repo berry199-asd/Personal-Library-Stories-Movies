@@ -11531,20 +11531,34 @@ function mapBackendContentToItem(c: any): ContentItem {
       ? [{ platform: isMovie ? "Đường dẫn xem phim" : "Đường dẫn đọc truyện", url: extLink || singleUrlVal, note: isMovie && movieModeVal === "Phim lẻ" ? "Bản đầy đủ" : "" }]
       : [];
 
+  const backendSeasons: string[] = Array.isArray(c.seasonTitles) && c.seasonTitles.length > 0
+    ? c.seasonTitles
+    : Array.isArray(unpacked.seasons) && unpacked.seasons.length > 0
+    ? unpacked.seasons
+    : [];
+
+  const defaultMovieSeason = backendSeasons.length > 0
+    ? backendSeasons[0]
+    : (movieModeVal === "Phim lẻ" ? "Phim lẻ" : "Phần 1");
+
   const mappedChapters: PublishedChapterItem[] = (Array.isArray(c.chapters) && c.chapters.length > 0)
-    ? c.chapters.map((ch: any) => ({
-        id: ch.id,
-        season: ch.seasonTitle || ch.season || (isMovie ? (movieModeVal === "Phim lẻ" ? "Phim lẻ" : "Phần 1") : "Phần 1"),
-        number: String(ch.chapterNumber),
-        title: ch.title || (isMovie ? (movieModeVal === "Phim lẻ" ? "Bản đầy đủ" : `Tập ${ch.chapterNumber}`) : `Chương ${ch.chapterNumber}`),
-        url: ch.externalLink || "",
-        note: ch.notes || "",
-      }))
+    ? c.chapters.map((ch: any) => {
+        const rawS = (ch.seasonTitle || ch.season || "").trim();
+        const s = rawS || (isMovie ? defaultMovieSeason : "Phần 1");
+        return {
+          id: ch.id,
+          season: s,
+          number: String(ch.chapterNumber),
+          title: ch.title || (isMovie ? (s === "Phim lẻ" && c.chapters.length === 1 ? "Bản đầy đủ" : `Tập ${ch.chapterNumber}`) : `Chương ${ch.chapterNumber}`),
+          url: ch.externalLink || "",
+          note: ch.notes || "",
+        };
+      })
     : (isMovie && (singleUrlVal || extLink))
     ? [
         {
           id: 1,
-          season: "Phim lẻ",
+          season: defaultMovieSeason,
           number: "Full",
           title: c.title,
           url: singleUrlVal || extLink,
@@ -11553,16 +11567,13 @@ function mapBackendContentToItem(c: any): ContentItem {
       ]
     : [];
 
-  const backendSeasons: string[] = Array.isArray(c.seasonTitles) && c.seasonTitles.length > 0
-    ? c.seasonTitles
-    : Array.isArray(unpacked.seasons) && unpacked.seasons.length > 0
-    ? unpacked.seasons
-    : [];
+  const chapterSeasons = mappedChapters.map(ch => ch.season?.trim()).filter(Boolean) as string[];
+  const allFinalSeasons = Array.from(new Set([...backendSeasons, ...chapterSeasons]));
 
   return {
     id: c.id,
     title: c.title,
-    seasons: backendSeasons.length > 0 ? backendSeasons : undefined,
+    seasons: allFinalSeasons.length > 0 ? allFinalSeasons : undefined,
     sub: authorOrDirector || (isMovie ? (unpacked.director || "Phim") : "Truyện"),
     img: localCover || c.posterUrl || (isMovie ? photos.city : photos.red),
     status: c.status === "COMPLETED" ? "Hoàn thành" : c.status === "ONGOING" ? "Đang ra" : "Tạm dừng",
@@ -11995,7 +12006,9 @@ export default function App() {
       if (backendBase) {
         const normOld = oldTitle.trim().toLowerCase();
         const normNew = updated.title.trim().toLowerCase();
-        let targetId = updated.id || allContents.find(x => x.title.trim().toLowerCase() === normOld || x.title.trim().toLowerCase() === normNew)?.id;
+        const matching = allContents.filter(x => x.title.trim().toLowerCase() === normOld || x.title.trim().toLowerCase() === normNew);
+        let targetId = updated.id || (matching.length > 0 ? Math.max(...matching.map(m => m.id || 0)) : undefined);
+        if (!targetId || targetId <= 0) targetId = undefined;
 
         // Nếu chưa có targetId, thử tìm ID trên server theo tên
         if (!targetId) {
@@ -12046,12 +12059,12 @@ export default function App() {
           ? updated.chaptersList!.map((ch, idx) => {
               const num = parseChapterNumber(ch.number);
               const link = (ch.url || updated.mainLink || movieWatchUrlUp || "#").trim();
-              const seasonName = ch.season?.trim() || (isMovieUp ? (finalSeasonTitles[0] || "Phần 1") : "Phần 1");
+              const seasonName = ch.season?.trim() || (isMovieUp ? (finalSeasonTitles[0] || "Phim lẻ") : "Phần 1");
               return {
                 chapterNumber: num > 0 ? num : (idx + 1),
                 displayOrder: idx + 1,
                 title: ch.title || (isMovieUp ? (seasonName === "Phim lẻ" && updated.chaptersList!.length === 1 ? "Bản đầy đủ" : `Tập ${ch.number || idx + 1}`) : `Chương ${ch.number || idx + 1}`),
-                externalLink: link || "#",
+                externalLink: link && link.length > 0 ? link : "#",
                 notes: ch.note || "",
                 seasonTitle: seasonName,
                 seasonNumber: parseChapterNumber(seasonName) || (idx + 1),
@@ -12081,7 +12094,7 @@ export default function App() {
           visibility: updated.visibility || "PUBLIC",
           sharedWithUsers: updated.sharedWithUsers || [],
           genreIds: mapGenresToIds(updated.genres),
-          seasonTitles: finalSeasonTitles.length > 0 ? finalSeasonTitles : ["Phần 1"],
+          seasonTitles: finalSeasonTitles.length > 0 ? finalSeasonTitles : (isMovieUp ? ["Phim lẻ"] : ["Phần 1"]),
           chapters: validChaptersUp,
         };
 
@@ -12095,8 +12108,20 @@ export default function App() {
             const resData = await res.json();
             if (resData?.data?.id) {
               const mapped = mapBackendContentToItem(resData.data);
-              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? { ...mapped, ...updated, seasons: finalSeasonTitles, chaptersList: updated.chaptersList && updated.chaptersList.length > 0 ? updated.chaptersList : mapped.chaptersList, id: resData.data.id } : x)));
+              const merged: ContentItem = {
+                ...mapped,
+                ...updated,
+                id: resData.data.id,
+                seasons: finalSeasonTitles.length > 0 ? finalSeasonTitles : mapped.seasons,
+                chaptersList: updated.chaptersList && updated.chaptersList.length > 0 ? updated.chaptersList : mapped.chaptersList,
+              };
+              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? merged : x)));
+              showGlobalToast(`Đã lưu thành công dữ liệu "${updated.title}" lên cơ sở dữ liệu!`);
             }
+          } else {
+            const errText = await res.text();
+            console.error("PUT /api/contents failed:", res.status, errText);
+            showGlobalToast(`Lỗi khi lưu lên máy chủ (${res.status}). Dữ liệu đã được lưu tạm trên giao diện.`);
           }
         } else {
           // Chưa có trên server -> Tạo mới luôn
@@ -12109,8 +12134,20 @@ export default function App() {
             const resData = await res.json();
             if (resData?.data?.id) {
               const mapped = mapBackendContentToItem(resData.data);
-              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? { ...mapped, ...updated, id: resData.data.id } : x)));
+              const merged: ContentItem = {
+                ...mapped,
+                ...updated,
+                id: resData.data.id,
+                seasons: finalSeasonTitles.length > 0 ? finalSeasonTitles : mapped.seasons,
+                chaptersList: updated.chaptersList && updated.chaptersList.length > 0 ? updated.chaptersList : mapped.chaptersList,
+              };
+              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? merged : x)));
+              showGlobalToast(`Đã lưu thành công dữ liệu "${updated.title}" lên cơ sở dữ liệu!`);
             }
+          } else {
+            const errText = await res.text();
+            console.error("POST /api/contents failed:", res.status, errText);
+            showGlobalToast(`Lỗi khi tạo trên máy chủ (${res.status}). Dữ liệu đã được lưu tạm trên giao diện.`);
           }
         }
       }
