@@ -53,8 +53,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/genres/**", "/api/contents/**").permitAll()
-                        .requestMatchers("/api/contents/**", "/api/conversations/**", "/api/users/**").permitAll()
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/notifications/**", "/api/contents/**", "/api/conversations/**", "/api/users/**", "/api/reviews/**", "/api/library/**", "/api/admin/**").permitAll()
                         .anyRequest().hasAnyRole("USER", "ADMIN")
                 );
 

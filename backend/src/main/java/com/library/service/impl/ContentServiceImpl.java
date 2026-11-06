@@ -235,14 +235,32 @@ public class ContentServiceImpl implements ContentService {
         }
 
         if (request.getChapters() != null && !request.getChapters().isEmpty()) {
+                        java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
                 if (chReq.getExternalLink() == null || chReq.getExternalLink().isBlank()) {
                     continue;
                 }
                 java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
+
+                Season season = null;
+                if (chReq.getSeasonTitle() != null && !chReq.getSeasonTitle().isBlank()) {
+                    String sTitle = chReq.getSeasonTitle().trim();
+                    if (!seasonMap.containsKey(sTitle)) {
+                        int sNum = chReq.getSeasonNumber() != null ? chReq.getSeasonNumber() : (seasonMap.size() + 1);
+                        Season s = Season.builder()
+                                .content(saved)
+                                .seasonNumber(sNum)
+                                .title(sTitle)
+                                .build();
+                        seasonMap.put(sTitle, seasonRepository.save(s));
+                    }
+                    season = seasonMap.get(sTitle);
+                }
+
                 Chapter chapter = Chapter.builder()
                         .content(saved)
+                        .season(season)
                         .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
                         .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
@@ -267,7 +285,12 @@ public class ContentServiceImpl implements ContentService {
         content.setTitle(request.getTitle().trim());
         content.setContentType(request.getContentType());
         if (request.getIsSeries() != null) content.setIsSeries(request.getIsSeries());
-        if (request.getPosterUrl() != null) content.setPosterUrl(request.getPosterUrl());
+        if (request.getPosterUrl() != null && !request.getPosterUrl().isBlank()) {
+            String pUrl = request.getPosterUrl().trim();
+            if (pUrl.startsWith("http://") || pUrl.startsWith("https://") || pUrl.startsWith("data:image/")) {
+                content.setPosterUrl(pUrl);
+            }
+        }
         if (request.getAuthorOrDirector() != null) content.setAuthorOrDirector(request.getAuthorOrDirector());
         if (request.getDescription() != null) content.setDescription(request.getDescription());
         if (request.getStatus() != null) content.setStatus(request.getStatus());
@@ -284,14 +307,32 @@ public class ContentServiceImpl implements ContentService {
 
         if (request.getChapters() != null) {
             content.getChapters().clear();
+            java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
                 if (chReq.getExternalLink() == null || chReq.getExternalLink().isBlank()) {
                     continue;
                 }
                 java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
+
+                Season season = null;
+                if (chReq.getSeasonTitle() != null && !chReq.getSeasonTitle().isBlank()) {
+                    String sTitle = chReq.getSeasonTitle().trim();
+                    if (!seasonMap.containsKey(sTitle)) {
+                        int sNum = chReq.getSeasonNumber() != null ? chReq.getSeasonNumber() : (seasonMap.size() + 1);
+                        Season s = Season.builder()
+                                .content(content)
+                                .seasonNumber(sNum)
+                                .title(sTitle)
+                                .build();
+                        seasonMap.put(sTitle, seasonRepository.save(s));
+                    }
+                    season = seasonMap.get(sTitle);
+                }
+
                 Chapter chapter = Chapter.builder()
                         .content(content)
+                        .season(season)
                         .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
                         .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
@@ -343,9 +384,9 @@ public class ContentServiceImpl implements ContentService {
         }
 
         try {
-            jdbcTemplate.update("DELETE FROM reading_progress WHERE content_id = ?", contentId);
+            jdbcTemplate.update("DELETE FROM reading_watching_progress WHERE content_id = ?", contentId);
         } catch (Exception e) {
-            log.warn("Notice deleting reading_progress for content #{}: {}", contentId, e.getMessage());
+            log.warn("Notice deleting reading_watching_progress for content #{}: {}", contentId, e.getMessage());
         }
 
         try {

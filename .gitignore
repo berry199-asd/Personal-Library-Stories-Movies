@@ -114,3 +114,6 @@ application-local.properties
 application-local.yml
 config.local.js
 secrets/
+
+build_helper.js
+

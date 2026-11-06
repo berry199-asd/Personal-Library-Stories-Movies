@@ -17,6 +17,9 @@ import com.library.enums.RoleType;
 import com.library.repository.ConversationMemberRepository;
 import com.library.repository.ConversationRepository;
 import com.library.repository.MessageRepository;
+import com.library.repository.NotificationRepository;
+import com.library.entity.Notification;
+import com.library.enums.NotificationType;
 import com.library.repository.UserRepository;
 import com.library.security.CustomUserDetails;
 import com.library.service.ChatService;
@@ -43,6 +46,7 @@ public class ChatController {
     private final ConversationRepository conversationRepository;
     private final ConversationMemberRepository memberRepository;
     private final MessageRepository messageRepository;
+    private final NotificationRepository notificationRepository;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
@@ -184,6 +188,23 @@ public class ChatController {
                 .attachmentName(attachmentName)
                 .attachmentType(attachmentType)
                 .build());
+
+        // Create notification for recipient
+        try {
+            String preview = (text != null && !text.isBlank())
+                    ? (text.length() > 60 ? text.substring(0, 57) + "..." : text)
+                    : (attachmentUrl != null ? ("[Tệp đính kèm: " + (attachmentName != null ? attachmentName : "File") + "]") : "Đã gửi một tin nhắn");
+
+            notificationRepository.save(Notification.builder()
+                    .user(recipient)
+                    .actor(sender)
+                    .type(NotificationType.NEW_MESSAGE)
+                    .title(sender.getDisplayName() != null ? sender.getDisplayName() : "@" + sender.getUsername())
+                    .message(preview)
+                    .referenceId(conversation.getId())
+                    .isRead(false)
+                    .build());
+        } catch (Exception ignored) {}
 
         Map<String, Object> result = new HashMap<>();
         result.put("id", "msg-" + msg.getId());

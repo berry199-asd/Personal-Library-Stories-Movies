@@ -15,6 +15,10 @@ public class ChapterRequest {
 
     private Long seasonId;
 
+    private String seasonTitle;
+
+    private Integer seasonNumber;
+
     @NotNull(message = "Số chương/tập không được để trống")
     private BigDecimal chapterNumber;
 

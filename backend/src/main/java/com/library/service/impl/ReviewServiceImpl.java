@@ -7,6 +7,8 @@ import com.library.entity.Chapter;
 import com.library.entity.Content;
 import com.library.entity.Review;
 import com.library.entity.User;
+import com.library.enums.ContentVisibility;
+import com.library.enums.RoleType;
 import com.library.exception.BadRequestException;
 import com.library.exception.ResourceNotFoundException;
 import com.library.repository.ChapterRepository;
@@ -20,6 +22,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class ReviewServiceImpl implements ReviewService {
@@ -32,9 +36,19 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<ReviewResponse> getContentReviews(Long contentId, Long chapterId, Pageable pageable) {
+        return getContentReviews(contentId, chapterId, null, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<ReviewResponse> getContentReviews(Long contentId, Long chapterId, String type, Pageable pageable) {
         Page<Review> page;
         if (chapterId != null) {
             page = reviewRepository.findByChapterIdAndParentIsNull(chapterId, pageable);
+        } else if ("CHAPTER".equalsIgnoreCase(type)) {
+            page = reviewRepository.findByContentIdAndChapterIsNotNullAndParentIsNull(contentId, pageable);
+        } else if ("ALL".equalsIgnoreCase(type)) {
+            page = reviewRepository.findByContentIdAndParentIsNull(contentId, pageable);
         } else {
             page = reviewRepository.findByContentIdAndChapterIsNullAndParentIsNull(contentId, pageable);
         }
@@ -48,6 +62,29 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng #" + userId));
         Content content = contentRepository.findById(contentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy truyện/phim #" + contentId));
+
+        // Check if comments are disabled for this content
+        if (content.getDescription() != null && content.getDescription().contains("\"allowComments\":false")) {
+            throw new BadRequestException("Người đăng tải đã tắt tính năng bình luận cho tác phẩm này");
+        }
+
+        // Check visibility permissions
+        boolean isOwner = content.getCreatedBy() != null && content.getCreatedBy().getId().equals(userId);
+        boolean isAdmin = user.getRole() == RoleType.ADMIN;
+        if (content.getVisibility() == ContentVisibility.PRIVATE && !isOwner && !isAdmin) {
+            throw new BadRequestException("Tác phẩm ở chế độ riêng tư, bạn không có quyền bình luận");
+        }
+
+        // Prevent duplicate comment submissions within 10 seconds
+        LocalDateTime tenSecondsAgo = LocalDateTime.now().minusSeconds(10);
+        String trimmedComment = request.getCommentText() != null ? request.getCommentText().trim() : "";
+        if (trimmedComment.isBlank()) {
+            throw new BadRequestException("Nội dung bình luận không được để trống");
+        }
+        if (reviewRepository.existsByContentIdAndUserIdAndCommentTextAndCreatedAtAfter(
+                contentId, userId, trimmedComment, tenSecondsAgo)) {
+            throw new BadRequestException("Bạn vừa gửi bình luận này, vui lòng đợi vài giây trước khi gửi tiếp");
+        }
 
         Chapter chapter = null;
         if (request.getChapterId() != null) {
@@ -67,12 +104,13 @@ public class ReviewServiceImpl implements ReviewService {
                 .chapter(chapter)
                 .parent(parent)
                 .rating(request.getRating())
-                .commentText(request.getCommentText().trim())
+                .commentText(trimmedComment)
                 .isSpoiler(Boolean.TRUE.equals(request.getIsSpoiler()))
                 .helpfulCount(0)
                 .build();
 
-        return ReviewResponse.fromEntity(reviewRepository.save(review));
+        Review saved = reviewRepository.save(review);
+        return ReviewResponse.fromEntity(saved);
     }
 
     @Override

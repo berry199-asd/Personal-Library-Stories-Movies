@@ -10,6 +10,7 @@ import com.library.enums.ConversationType;
 import com.library.enums.MemberRole;
 import com.library.enums.MessageStatus;
 import com.library.enums.MessageType;
+import com.library.enums.NotificationType;
 import com.library.exception.BadRequestException;
 import com.library.exception.ResourceNotFoundException;
 import com.library.repository.*;
@@ -33,6 +34,7 @@ public class ChatServiceImpl implements ChatService {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final ContentRepository contentRepository;
+    private final NotificationRepository notificationRepository;
     private final Aes256CryptoUtil aes256CryptoUtil;
 
     @Override
@@ -150,7 +152,35 @@ public class ChatServiceImpl implements ChatService {
                 .isRevoked(false)
                 .build();
 
-        return MessageResponse.fromEntity(messageRepository.save(message));
+        Message savedMsg = messageRepository.save(message);
+
+        // Notify all other members in the conversation
+        try {
+            List<ConversationMember> members = memberRepository.findByConversationId(conversationId);
+            String preview = (message.getMessageText() != null && !message.getMessageText().isBlank())
+                    ? (message.getMessageText().length() > 60 ? message.getMessageText().substring(0, 57) + "..." : message.getMessageText())
+                    : (message.getSharedContent() != null ? ("[Chia sẻ: " + message.getSharedContent().getTitle() + "]") : "Đã gửi một tin nhắn");
+
+            String notifTitle = conversation.getType() == ConversationType.GROUP
+                    ? (conversation.getGroupName() != null ? conversation.getGroupName() : "Nhóm trò chuyện")
+                    : (sender.getDisplayName() != null ? sender.getDisplayName() : "@" + sender.getUsername());
+
+            for (ConversationMember m : members) {
+                if (!m.getUser().getId().equals(senderUserId)) {
+                    notificationRepository.save(Notification.builder()
+                            .user(m.getUser())
+                            .actor(sender)
+                            .type(NotificationType.NEW_MESSAGE)
+                            .title(notifTitle)
+                            .message(preview)
+                            .referenceId(conversation.getId())
+                            .isRead(false)
+                            .build());
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return MessageResponse.fromEntity(savedMsg);
     }
 
     @Override

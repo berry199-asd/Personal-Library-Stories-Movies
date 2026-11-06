@@ -12,12 +12,14 @@ import com.library.exception.ResourceNotFoundException;
 import com.library.repository.UserRepository;
 import com.library.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
@@ -90,9 +92,28 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserResponse updateUserRoleByAdmin(Long targetUserId, RoleType role) {
+        return updateUserRoleByAdmin(targetUserId, role, null);
+    }
+
+    @Override
+    @Transactional
+    public UserResponse updateUserRoleByAdmin(Long targetUserId, RoleType role, String actorUsername) {
         User user = getUserByIdOrThrow(targetUserId);
+
+        // Safeguard: Prevent removing the last administrator
+        if (user.getRole() == RoleType.ADMIN && role != RoleType.ADMIN) {
+            long adminCount = userRepository.countByRole(RoleType.ADMIN);
+            if (adminCount <= 1) {
+                throw new BadRequestException("Không thể hạ quyền quản trị viên duy nhất còn lại trong hệ thống.");
+            }
+        }
+
         user.setRole(role);
-        return UserResponse.fromEntity(userRepository.save(user));
+        User saved = userRepository.save(user);
+        log.info("Admin [{}] updated role of user #{} ({}) to {}",
+                (actorUsername != null && !actorUsername.isBlank() ? actorUsername : "system"),
+                targetUserId, user.getUsername(), role);
+        return UserResponse.fromEntity(saved);
     }
 
     private User getUserByIdOrThrow(Long userId) {

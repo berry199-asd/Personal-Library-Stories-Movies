@@ -1,8 +1,10 @@
 package com.library.service;
 
 import com.library.dto.request.LibraryEntryRequest;
+import com.library.dto.response.ContentResponse;
 import com.library.dto.response.LibraryEntryResponse;
 import com.library.dto.response.PageResponse;
+import com.library.dto.response.ReadingProgressResponse;
 import com.library.enums.ContentType;
 import com.library.enums.ReadingStatus;
 import org.springframework.data.domain.Pageable;
@@ -29,7 +31,17 @@ public interface LibraryService {
 
     void removeFromLibrary(Long userId, Long contentId);
 
+    ReadingProgressResponse getReadingProgress(Long userId, Long contentId);
+
     List<Long> getCompletedChapterIds(Long userId, Long contentId);
 
     boolean toggleChapterProgress(Long userId, Long chapterId);
+
+    boolean toggleChapterProgress(Long userId, Long contentId, Long chapterId, Double chapterNumber);
+
+    boolean toggleFavorite(Long userId, Long contentId);
+
+    List<Long> getFavoriteContentIds(Long userId);
+
+    List<ContentResponse> getFavoriteContents(Long userId);
 }
