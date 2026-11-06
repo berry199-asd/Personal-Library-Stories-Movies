@@ -69,7 +69,20 @@ function Brand() {
   return <div className="brand"><div className="brand-mark"><span>M</span></div><div><b>Mê Truyện</b><small>STORIES UNBOUND</small></div></div>;
 }
 
-type NotificationItem = { id: number; type: "CHAPTER" | "COMMENT" | "SHARE" | "FRIEND"; icon: string; text: string; targetTitle: string; time: string; unread: boolean; targetPage: string };
+type NotificationItem = {
+  id: number;
+  type: "CHAPTER" | "COMMENT" | "SHARE" | "FRIEND" | "MESSAGE";
+  icon: string;
+  text: string;
+  targetTitle: string;
+  time: string;
+  unread: boolean;
+  targetPage: string;
+  conversationId?: number | null;
+  peerUser?: string | null;
+  senderAvatar?: string | null;
+  senderName?: string | null;
+};
 
 function Navbar({
   page,
@@ -93,7 +106,7 @@ function Navbar({
   currentUser?: UserProfile;
 }) {
   const [notice, setNotice] = useState(false);
-  const [noticeTab, setNoticeTab] = useState<"ALL" | "CHAPTER" | "COMMENT" | "SHARE">("ALL");
+  const [noticeTab, setNoticeTab] = useState<"ALL" | "MESSAGE" | "CHAPTER" | "COMMENT" | "SHARE">("ALL");
   const [accountOpen, setAccountOpen] = useState(false);
   const unreadCount = notifications.filter(n => n.unread).length;
   const shownNotices = notifications.filter(n => noticeTab === "ALL" || n.type === noticeTab);
@@ -126,30 +139,67 @@ function Navbar({
         <kbd>Ctrl K</kbd>
       </button>
       <div className="notice-wrap">
-        <button className="icon-btn" onClick={() => setNotice(!notice)} title="Thông báo">
+        <button className="icon-btn" onClick={() => setNotice(!notice)} title="Thông báo" style={{ position: "relative" }}>
           <Icon name="bell" />
-          {unreadCount > 0 && <i />}
+          {unreadCount > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: "-4px",
+                right: "-4px",
+                background: "#ec4899",
+                color: "#ffffff",
+                fontSize: "10px",
+                fontWeight: 700,
+                borderRadius: "10px",
+                padding: "1px 5px",
+                minWidth: "16px",
+                lineHeight: "14px",
+                textAlign: "center",
+                boxShadow: "0 2px 6px rgba(236,72,153,0.5)",
+              }}
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
         </button>
         {notice && <div className="notice-pop">
           <div className="pop-title">
             <span>Thông báo ({unreadCount} chưa đọc)</span>
-            <button onClick={onMarkAllRead} style={{ border: 0, background: "none", color: "#a980ff", fontSize: "9px", fontWeight: 600 }}>Đánh dấu đã đọc</button>
+            <button onClick={onMarkAllRead} style={{ border: 0, background: "none", color: "#a980ff", fontSize: "9px", fontWeight: 600, cursor: "pointer" }}>Đánh dấu đã đọc</button>
           </div>
           <div className="notice-tabs">
-            {([["ALL", "Tất cả"], ["CHAPTER", "Chương mới"], ["SHARE", "Chia sẻ"], ["COMMENT", "Bình luận"]] as const).map(([key, label]) =>
+            {([["ALL", "Tất cả"], ["MESSAGE", "Tin nhắn"], ["CHAPTER", "Chương mới"], ["SHARE", "Chia sẻ"], ["COMMENT", "Bình luận"]] as const).map(([key, label]) =>
               <button key={key} className={noticeTab === key ? "active" : ""} onClick={() => setNoticeTab(key)}>{label}</button>
             )}
           </div>
-          <div style={{ maxHeight: "260px", overflowY: "auto" }}>
+          <div style={{ maxHeight: "280px", overflowY: "auto" }}>
             {shownNotices.map(item => <div
               key={item.id}
               className={`notice-item ${item.unread ? "unread" : ""}`}
-              style={{ cursor: "pointer" }}
+              style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "10px" }}
               onClick={() => { onReadNotification(item); setNotice(false); }}
             >
-              <div className={`notice-icon ${item.type === "COMMENT" || item.type === "SHARE" ? "alt" : ""}`}>{item.icon}</div>
-              <p><b>{item.targetTitle}</b> {item.text}<small>{item.time}</small></p>
+              {item.senderAvatar ? (
+                <img src={item.senderAvatar} alt="" style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div className={`notice-icon ${item.type === "COMMENT" || item.type === "SHARE" ? "alt" : ""}`} style={{ flexShrink: 0 }}>
+                  {item.type === "MESSAGE" ? "💬" : item.icon}
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: "11px", lineHeight: "1.4" }}><b>{item.targetTitle}</b> {item.text}</p>
+                <small style={{ color: "#70677c", fontSize: "10px" }}>{item.time}</small>
+              </div>
+              {item.unread && (
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#a879ff", flexShrink: 0 }} />
+              )}
             </div>)}
+            {shownNotices.length === 0 && (
+              <div style={{ padding: "20px", textAlign: "center", color: "#70677c", fontSize: "11px" }}>
+                Không có thông báo nào trong mục này
+              </div>
+            )}
           </div>
           <div className="notice-footer">
             <button onClick={() => { setNotice(false); setPage("notifications"); }}>Xem tất cả thông báo →</button>
@@ -6402,12 +6452,16 @@ function ChatPage({
   onOpenPublicProfile,
   onSaveSharedToLibrary,
   currentUser,
+  targetConversationId,
+  targetPeerUser,
 }: {
   setPage: (page: string) => void;
   onOpenShareToChat?: (item?: ContentItem) => void;
   onOpenPublicProfile?: (username: string) => void;
   onSaveSharedToLibrary?: (item: ContentItem) => void;
   currentUser?: UserProfile;
+  targetConversationId?: number | null;
+  targetPeerUser?: string | null;
 }) {
   const meUser = currentUser || activeCurrentUserProfile;
   const [convList, setConvList] = useState<ConversationState[]>(() => loadSavedConversations());
@@ -6420,6 +6474,21 @@ function ChatPage({
   const [showSampleMediaPicker, setShowSampleMediaPicker] = useState(false);
   const [typingUser] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+  // Tự động chuyển đến đoạn chat mục tiêu khi mở từ thông báo
+  useEffect(() => {
+    if (targetConversationId != null) {
+      const idx = convList.findIndex(c => String(c.id) === String(targetConversationId));
+      if (idx !== -1) setActive(idx);
+    } else if (targetPeerUser) {
+      const cleanPeer = targetPeerUser.toLowerCase().replace(/^@/, '');
+      const idx = convList.findIndex(c => 
+        c.name.toLowerCase().replace(/^@/, '') === cleanPeer ||
+        c.members?.some(m => m.user && m.user.toLowerCase().replace(/^@/, '') === cleanPeer)
+      );
+      if (idx !== -1) setActive(idx);
+    }
+  }, [targetConversationId, targetPeerUser, convList]);
 
   // Bảo mật E2EE & Mã hóa AES-256-GCM cho tin nhắn
   const [e2eeSessionKey, setE2eeSessionKey] = useState<string>(() => loadE2eeMasterKey());
@@ -6908,6 +6977,28 @@ function ChatPage({
         }
       })
       .catch(err => console.warn("Failed sending direct message to cloud:", err));
+    }
+
+    // Gửi thông báo đến tất cả các thành viên trong nhóm (trừ người gửi)
+    if (currentConv.group && currentConv.members && currentConv.members.length > 0) {
+      const membersToNotify = currentConv.members.filter(
+        m => m.user && m.user.toLowerCase().replace(/^@/, '') !== meUser.username.toLowerCase().replace(/^@/, '')
+      );
+      membersToNotify.forEach(m => {
+        const recipientUser = m.user.replace(/^@/, '');
+        fetch(`${getBackendApiBase()}/api/notifications`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetUsername: recipientUser,
+            actorUsername: meUser.username,
+            type: "NEW_MESSAGE",
+            title: `Tin nhắn mới từ ${meUser.name || meUser.username} trong nhóm ${currentConv.name}`,
+            message: textVal || summaryText,
+            referenceId: typeof currentConv.id === "number" ? currentConv.id : null,
+          }),
+        }).catch(err => console.warn("Failed creating group message notification:", err));
+      });
     }
 
     setMessage("");
@@ -10744,7 +10835,7 @@ function NotificationsPage({
   onMarkAllRead: () => void;
   onReadNotification: (item: NotificationItem) => void;
 }) {
-  const [filter, setFilter] = useState<"ALL" | "UNREAD" | "CHAPTER" | "SHARE" | "COMMENT">("ALL");
+  const [filter, setFilter] = useState<"ALL" | "UNREAD" | "MESSAGE" | "CHAPTER" | "SHARE" | "COMMENT">("ALL");
 
   const filtered = notifications.filter(n => {
     if (filter === "UNREAD") return n.unread;
@@ -10756,7 +10847,7 @@ function NotificationsPage({
     <PageHeading
       eyebrow="TRUNG TÂM CẬP NHẬT"
       title="Tất cả thông báo"
-      description="Theo dõi chương/tập mới phát hành, lượt chia sẻ từ bạn bè và phản hồi bình luận."
+      description="Theo dõi tin nhắn mới, chương/tập mới phát hành, lượt chia sẻ từ bạn bè và phản hồi bình luận."
       action={<Button variant="secondary" icon="check" onClick={onMarkAllRead}>Đánh dấu tất cả đã đọc</Button>}
     />
 
@@ -10764,6 +10855,7 @@ function NotificationsPage({
       {[
         ["ALL", `Tất cả (${notifications.length})`],
         ["UNREAD", `Chưa đọc (${notifications.filter(x => x.unread).length})`],
+        ["MESSAGE", `Tin nhắn (${notifications.filter(x => x.type === "MESSAGE").length})`],
         ["CHAPTER", "Chương / Tập mới"],
         ["SHARE", "Chia sẻ & Bạn bè"],
         ["COMMENT", "Bình luận & Thảo luận"],
@@ -10780,9 +10872,14 @@ function NotificationsPage({
           key={n.id}
           className={`notif-card ${n.unread ? "unread" : ""}`}
           onClick={() => { onReadNotification(n); setPage(n.targetPage); }}
+          style={{ cursor: "pointer" }}
         >
           <div className="notif-icon">
-            <Icon name={n.type === "CHAPTER" ? "book" : n.type === "SHARE" ? "share" : "message"} size={18} />
+            {n.senderAvatar ? (
+              <img src={n.senderAvatar} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+            ) : (
+              <Icon name={n.type === "CHAPTER" ? "book" : n.type === "SHARE" ? "share" : "message"} size={18} />
+            )}
           </div>
           <div>
             <b>{n.targetTitle}</b>
@@ -11228,11 +11325,61 @@ export default function App() {
   const [allContents, setAllContents] = useState<ContentItem[]>([]);
   const [publishedTitle, setPublishedTitle] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
+  const [activeChatTarget, setActiveChatTarget] = useState<{ conversationId?: number | null; peerUser?: string | null }>({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [publicProfileUser, setPublicProfileUser] = useState(() => loadSavedCurrentUser().username);
   const [shareModalItem, setShareModalItem] = useState<ContentItem | null | undefined>(undefined);
   const [reportTarget, setReportTarget] = useState<{ type: "CONTENT" | "COMMENT"; name: string } | null>(null);
   const [globalToast, setGlobalToast] = useState("");
+
+  // Đồng bộ thông báo thời gian thực từ cơ sở dữ liệu MySQL (tin nhắn, chương mới, chia sẻ, bình luận)
+  useEffect(() => {
+    const rawUser = currentUser?.username || activeCurrentUserProfile.username || "";
+    const cleanUser = rawUser.trim().replace(/^@/, '');
+    if (!cleanUser) return;
+
+    let isMounted = true;
+    const fetchNotifs = () => {
+      fetch(`${getBackendApiBase()}/api/notifications?username=${encodeURIComponent(cleanUser)}&page=0&size=50`)
+        .then(res => res.json())
+        .then(data => {
+          if (!isMounted) return;
+          const content = data?.data?.content || data?.data;
+          if (Array.isArray(content)) {
+            const mapped: NotificationItem[] = content.map((n: any) => {
+              const isMsg = n.type === "NEW_MESSAGE" || n.type === "MESSAGE";
+              let timeStr = "";
+              if (n.createdAt) {
+                const d = new Date(n.createdAt);
+                timeStr = !isNaN(d.getTime()) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + d.toLocaleDateString() : "";
+              }
+              return {
+                id: n.id,
+                type: isMsg ? "MESSAGE" : (n.type === "NEW_CHAPTER" ? "CHAPTER" : n.type === "NEW_COMMENT" ? "COMMENT" : "SHARE"),
+                icon: isMsg ? "💬" : "bell",
+                text: n.message || "",
+                targetTitle: n.title || (isMsg ? "Tin nhắn mới" : "Thông báo"),
+                time: timeStr || "Vừa xong",
+                unread: !n.isRead,
+                targetPage: isMsg ? "chat" : "home",
+                conversationId: n.referenceId,
+                senderAvatar: n.actorAvatar,
+                senderName: n.actorDisplayName,
+              };
+            });
+            setNotifications(mapped);
+          }
+        })
+        .catch(err => console.warn("Failed fetching notifications from backend:", err));
+    };
+
+    fetchNotifs();
+    const timer = setInterval(fetchNotifs, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [currentUser]);
 
   const userLibraryItems = useMemo(() => {
     return allContents.filter(item => {
@@ -11635,12 +11782,31 @@ export default function App() {
   };
 
   const markAllNotificationsRead = () => {
+    const rawUser = currentUser?.username || activeCurrentUserProfile.username || "";
+    const cleanUser = rawUser.trim().replace(/^@/, '');
+    if (cleanUser) {
+      fetch(`${getBackendApiBase()}/api/notifications/read-all?username=${encodeURIComponent(cleanUser)}`, {
+        method: "PATCH",
+      }).catch(err => console.warn("Failed marking all notifications read:", err));
+    }
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
   };
 
   const markNotificationRead = (item: NotificationItem) => {
+    const rawUser = currentUser?.username || activeCurrentUserProfile.username || "";
+    const cleanUser = rawUser.trim().replace(/^@/, '');
+    if (cleanUser && item.id) {
+      fetch(`${getBackendApiBase()}/api/notifications/${item.id}/read?username=${encodeURIComponent(cleanUser)}`, {
+        method: "PATCH",
+      }).catch(err => console.warn("Failed marking notification read:", err));
+    }
     setNotifications(prev => prev.map(n => n.id === item.id ? { ...n, unread: false } : n));
-    setPage(item.targetPage);
+    if (item.type === "MESSAGE" || item.targetPage === "chat") {
+      setActiveChatTarget({ conversationId: item.conversationId, peerUser: item.peerUser });
+      setPage("chat");
+    } else {
+      setPage(item.targetPage);
+    }
   };
 
   if (!authenticated || page === "login" || page === "register") {
@@ -11791,6 +11957,8 @@ export default function App() {
         currentUser={currentUser}
         onOpenShareToChat={item => setShareModalItem(item ?? null)}
         onOpenPublicProfile={openPublicProfile}
+        targetConversationId={activeChatTarget.conversationId}
+        targetPeerUser={activeChatTarget.peerUser}
         onSaveSharedToLibrary={item => {
           setAllContents(prev => {
             const exists = prev.some(x => x.title === item.title);
