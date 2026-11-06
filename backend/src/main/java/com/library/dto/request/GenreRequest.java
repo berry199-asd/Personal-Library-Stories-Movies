@@ -20,4 +20,6 @@ public class GenreRequest {
 
     @Size(max = 255, message = "Mô tả tối đa 255 ký tự")
     private String description;
+
+    private String applicableType; // "BOTH", "MANGA", "MOVIE"
 }

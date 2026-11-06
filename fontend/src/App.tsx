@@ -794,9 +794,51 @@ function savePersonalMetaToStorage(meta: Record<string, PersonalItemMeta>) {
   saveUserPersonalMeta(meta);
 }
 
-const mangaGenres = ["BL", "BG", "GL", "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Psychological", "Romance", "School Life", "Slice of Life", "Supernatural", "Thriller", "Martial Arts", "Isekai", "Sci-Fi", "Sports", "Shounen", "Shoujo", "Seinen", "Josei"];
-const movieGenres = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Musical", "Romance", "Sci-Fi", "Thriller", "War", "Western", "Family", "Psychological", "Supernatural"];
-const allGenres = Array.from(new Set([...mangaGenres, ...movieGenres]));
+const defaultMangaGenres = ["BL", "BG", "GL", "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Psychological", "Romance", "School Life", "Slice of Life", "Supernatural", "Thriller", "Martial Arts", "Isekai", "Sci-Fi", "Sports", "Shounen", "Shoujo", "Seinen", "Josei"];
+const defaultMovieGenres = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Historical", "Horror", "Mystery", "Musical", "Romance", "Sci-Fi", "Thriller", "War", "Western", "Family", "Psychological", "Supernatural"];
+
+export type CachedSystemGenre = { id: number; name: string; slug: string; description?: string; applicableType?: "BOTH" | "MANGA" | "MOVIE"; contentCount?: number };
+
+export function getStoredSystemGenres(): CachedSystemGenre[] {
+  try {
+    const raw = window.localStorage.getItem("pl_system_genres_cache_v2");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function saveStoredSystemGenres(genres: CachedSystemGenre[]) {
+  try {
+    window.localStorage.setItem("pl_system_genres_cache_v2", JSON.stringify(genres));
+    window.dispatchEvent(new Event("system_genres_updated"));
+  } catch {}
+}
+
+export function getMangaGenres(): string[] {
+  const dynamic = getStoredSystemGenres()
+    .filter(g => !g.applicableType || g.applicableType === "BOTH" || g.applicableType === "MANGA")
+    .map(g => g.name);
+  return Array.from(new Set([...defaultMangaGenres, ...dynamic]));
+}
+
+export function getMovieGenres(): string[] {
+  const dynamic = getStoredSystemGenres()
+    .filter(g => !g.applicableType || g.applicableType === "BOTH" || g.applicableType === "MOVIE")
+    .map(g => g.name);
+  return Array.from(new Set([...defaultMovieGenres, ...dynamic]));
+}
+
+export function getAllGenresList(): string[] {
+  const dynamic = getStoredSystemGenres().map(g => g.name);
+  return Array.from(new Set([...defaultMangaGenres, ...defaultMovieGenres, ...dynamic]));
+}
+
+export const mangaGenres = defaultMangaGenres;
+export const movieGenres = defaultMovieGenres;
+export const allGenres = Array.from(new Set([...defaultMangaGenres, ...defaultMovieGenres]));
 
 function SectionTitle({ eyebrow, title, action, onAction }: { eyebrow?: string; title: string; action?: string; onAction?: () => void }) {
   return <div className="section-title"><div>{eyebrow && <span>{eyebrow}</span>}<h2>{title}</h2></div>{action && <button onClick={onAction}>{action} <Icon name="arrow" size={15} /></button>}</div>;
@@ -1831,7 +1873,7 @@ function PublishedWorkEditorModal({
         <div className="admin-field">
           <span>Thể loại ({draft.genres.length} đã chọn)</span>
           <div className="admin-genre-picks">
-            {(draft.type === "Truyện" ? mangaGenres : movieGenres).map(g => (
+            {(draft.type === "Truyện" ? getMangaGenres() : getMovieGenres()).map(g => (
               <button
                 key={g}
                 type="button"
@@ -5752,7 +5794,7 @@ function PublishPage({
   const [notice, setNotice] = useState("");
   const [dialog, setDialog] = useState("");
 
-  const available = type === "Truyện" ? mangaGenres : movieGenres;
+  const available = type === "Truyện" ? getMangaGenres() : getMovieGenres();
   const addLink = () => setLinks([...links, { platform: "", url: "", note: "" }]);
   const addChapter = () => setChapters([...chapters, { number: String(chapters.length + 1), title: "", url: "" }]);
   const sortChaptersAsc = () => setChapters(sortChaptersAscending(chapters));
@@ -9003,16 +9045,206 @@ function AdminPage({ setPage, contents, setContents, onSelectTitle }: { setPage:
     }
   }, [contents]);
 
-  // 3. STATE QUẢN LÝ THỂ LOẠI & DANH MỤC HỆ THỐNG
-  const [genreList, setGenreList] = useState([
-    { id: 1, name: "Action", slug: "hanh-dong", desc: "Hành động, chiến đấu kịch tính" },
-    { id: 2, name: "Mystery", slug: "bi-an-trinh-tham", desc: "Điều tra phá án, suy luận logic" },
-    { id: 3, name: "Sci-Fi", slug: "khoa-hoc-vien-tuong", desc: "Công nghệ tương lai, cyberpunk" },
-    { id: 4, name: "Romance", slug: "tinh-cam", desc: "Lãng mạn, cảm xúc gia đình & tình yêu" },
-    { id: 5, name: "Horror", slug: "kinh-di", desc: "Rùng rợn, tâm lý, bí ẩn" },
-    { id: 6, name: "Fantasy", slug: "gia-tuong", desc: "Thế giới phép thuật, dị giới" },
-  ]);
-  const [newGenre, setNewGenre] = useState({ name: "", slug: "", desc: "" });
+  // 3. STATE QUẢN LÝ THỂ LOẠI & DANH MỤC HỆ THỐNG (ĐỒNG BỘ MYSQL TIDB CLOUD)
+  type AdminGenreItem = {
+    id: number;
+    name: string;
+    slug: string;
+    desc: string;
+    applicableType: "BOTH" | "MANGA" | "MOVIE";
+    contentCount: number;
+  };
+
+  const [genreList, setGenreList] = useState<AdminGenreItem[]>(() => {
+    const cached = getStoredSystemGenres();
+    if (cached.length > 0) {
+      return cached.map(g => ({
+        id: g.id,
+        name: g.name,
+        slug: g.slug,
+        desc: g.description || "",
+        applicableType: g.applicableType || "BOTH",
+        contentCount: g.contentCount || 0
+      }));
+    }
+    return [
+      { id: 1, name: "Hành động", slug: "hanh-dong", desc: "Hành động, chiến đấu kịch tính", applicableType: "BOTH", contentCount: 0 },
+      { id: 2, name: "Trinh thám", slug: "trinh-tham", desc: "Điều tra phá án, suy luận logic", applicableType: "BOTH", contentCount: 0 },
+      { id: 3, name: "Khoa học viễn tưởng", slug: "khoa-hoc-vien-tuong", desc: "Công nghệ tương lai, du hành vũ trụ", applicableType: "BOTH", contentCount: 0 },
+      { id: 4, name: "Tình cảm", slug: "tinh-cam", desc: "Lãng mạn, cảm xúc gia đình & tình yêu", applicableType: "BOTH", contentCount: 0 },
+      { id: 5, name: "Kinh dị", slug: "kinh-di", desc: "Rùng rợn, tâm lý, bí ẩn", applicableType: "BOTH", contentCount: 0 },
+      { id: 6, name: "Giả tưởng", slug: "gia-tuong", desc: "Thế giới phép thuật, dị giới (Isekai)", applicableType: "BOTH", contentCount: 0 },
+    ];
+  });
+  const [newGenre, setNewGenre] = useState({ name: "", slug: "", desc: "", applicableType: "BOTH" as "BOTH" | "MANGA" | "MOVIE" });
+  const [editingGenre, setEditingGenre] = useState<AdminGenreItem | null>(null);
+
+  // Tự động tải danh sách thể loại từ MySQL khi mở trang Admin
+  const refreshGenreList = async () => {
+    try {
+      const backendBase = getBackendApiBase();
+      if (!backendBase) return;
+      const res = await fetch(`${backendBase}/api/genres`);
+      if (res.ok) {
+        const body = await res.json();
+        const items = body?.data;
+        if (Array.isArray(items)) {
+          const mapped: AdminGenreItem[] = items.map((g: any) => ({
+            id: g.id,
+            name: g.name,
+            slug: g.slug,
+            desc: g.description || "",
+            applicableType: g.applicableType || "BOTH",
+            contentCount: g.contentCount || 0
+          }));
+          setGenreList(mapped);
+          saveStoredSystemGenres(items);
+        }
+      }
+    } catch (e) {
+      console.warn("Refresh genres failed:", e);
+    }
+  };
+
+  useEffect(() => {
+    refreshGenreList();
+  }, []);
+
+  const handleCreateGenre = async () => {
+    if (!newGenre.name.trim()) {
+      showToast("Vui lòng nhập tên thể loại.");
+      return;
+    }
+    const cleanAdmin = (getActiveUser().username || "anhquyphi").replace(/^@/, "");
+    const backendBase = getBackendApiBase();
+    const token = window.localStorage.getItem("personal_library_access_token");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    };
+
+    try {
+      if (backendBase) {
+        const res = await fetch(`${backendBase}/api/genres?actorUsername=${encodeURIComponent(cleanAdmin)}`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            name: newGenre.name.trim(),
+            slug: newGenre.slug.trim() || undefined,
+            description: newGenre.desc.trim(),
+            applicableType: newGenre.applicableType
+          })
+        });
+
+        if (res.ok) {
+          const body = await res.json();
+          const created = body?.data;
+          showToast(`✓ Đã thêm thể loại “${created?.name || newGenre.name}” vào CSDL MySQL!`);
+          setNewGenre({ name: "", slug: "", desc: "", applicableType: "BOTH" });
+          refreshGenreList();
+          return;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showToast(`⚠️ ${errData.message || "Lỗi thêm thể loại"}`);
+        }
+      }
+    } catch (e) {
+      console.warn("Create genre failed:", e);
+    }
+
+    // Fallback local update
+    const fallbackItem: AdminGenreItem = {
+      id: Date.now(),
+      name: newGenre.name.trim(),
+      slug: newGenre.slug.trim() || newGenre.name.toLowerCase(),
+      desc: newGenre.desc.trim(),
+      applicableType: newGenre.applicableType,
+      contentCount: 0
+    };
+    setGenreList([fallbackItem, ...genreList]);
+    setNewGenre({ name: "", slug: "", desc: "", applicableType: "BOTH" });
+    showToast(`Đã thêm thể loại “${fallbackItem.name}”.`);
+  };
+
+  const handleUpdateGenre = async () => {
+    if (!editingGenre || !editingGenre.name.trim()) return;
+    const cleanAdmin = (getActiveUser().username || "anhquyphi").replace(/^@/, "");
+    const backendBase = getBackendApiBase();
+    const token = window.localStorage.getItem("personal_library_access_token");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    };
+
+    try {
+      if (backendBase) {
+        const res = await fetch(`${backendBase}/api/genres/${editingGenre.id}?actorUsername=${encodeURIComponent(cleanAdmin)}`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            name: editingGenre.name.trim(),
+            slug: editingGenre.slug.trim() || undefined,
+            description: editingGenre.desc.trim(),
+            applicableType: editingGenre.applicableType
+          })
+        });
+
+        if (res.ok) {
+          showToast(`✓ Đã cập nhật thể loại “${editingGenre.name}” trong CSDL MySQL!`);
+          setEditingGenre(null);
+          refreshGenreList();
+          return;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showToast(`⚠️ ${errData.message || "Lỗi cập nhật thể loại"}`);
+        }
+      }
+    } catch (e) {
+      console.warn("Update genre failed:", e);
+    }
+
+    setGenreList(genreList.map(g => g.id === editingGenre.id ? editingGenre : g));
+    showToast(`Đã lưu cập nhật thể loại “${editingGenre.name}”.`);
+    setEditingGenre(null);
+  };
+
+  const handleDeleteGenre = async (g: AdminGenreItem) => {
+    const warnMsg = g.contentCount > 0
+      ? `⚠️ Thể loại “${g.name}” hiện đang được gán cho ${g.contentCount} tác phẩm trong kho.\n\nXóa thể loại sẽ an toàn gỡ liên kết khỏi ${g.contentCount} tác phẩm này (tác phẩm truyện/phim vẫn được giữ nguyên an toàn tuyệt đối).\n\nBạn có chắc chắn muốn xóa thể loại này khỏi CSDL MySQL không?`
+      : `Bạn có chắc chắn muốn xóa thể loại “${g.name}” khỏi CSDL MySQL không?`;
+
+    if (!window.confirm(warnMsg)) return;
+
+    const prevList = [...genreList];
+    setGenreList(genreList.filter(x => x.id !== g.id));
+    showToast(`Đang xóa thể loại “${g.name}”...`);
+
+    const cleanAdmin = (getActiveUser().username || "anhquyphi").replace(/^@/, "");
+    const backendBase = getBackendApiBase();
+    const token = window.localStorage.getItem("personal_library_access_token");
+    const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+
+    try {
+      if (backendBase) {
+        const res = await fetch(`${backendBase}/api/genres/${g.id}?actorUsername=${encodeURIComponent(cleanAdmin)}`, {
+          method: "DELETE",
+          headers
+        });
+        if (res.ok) {
+          showToast(`✓ Đã xóa an toàn thể loại “${g.name}” khỏi CSDL MySQL!`);
+          refreshGenreList();
+          return;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showToast(`⚠️ Lỗi xóa thể loại: ${errData.message || "Thao tác không thành công"}`);
+          setGenreList(prevList);
+        }
+      }
+    } catch (e) {
+      console.warn("Delete genre failed:", e);
+      setGenreList(prevList);
+    }
+  };
   const [sysCategories, setSysCategories] = useState([
     { id: 1, name: "Yêu thích", desc: "Những bộ truyện, phim tâm đắc nhất" },
     { id: 2, name: "Đang đọc / Đang xem", desc: "Nội dung đang theo dõi dở" },
@@ -9577,25 +9809,43 @@ function AdminPage({ setPage, contents, setContents, onSelectTitle }: { setPage:
     {/* TAB 3: QUẢN LÝ THỂ LOẠI & DANH MỤC */}
     {tab === "Taxonomy" && <div className="admin-split-grid">
       <div className="admin-table-card">
-        <div className="admin-table-head"><h3>Quản lý Thể loại ({genreList.length})</h3></div>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #272030", display: "grid", gridTemplateColumns: "1fr 1fr 1.2fr auto", gap: "8px" }}>
-          <input className="admin-select" value={newGenre.name} onChange={e => setNewGenre({ ...newGenre, name: e.target.value })} placeholder="Tên thể loại (VD: Isekai)" />
-          <input className="admin-select" value={newGenre.slug} onChange={e => setNewGenre({ ...newGenre, slug: e.target.value })} placeholder="Slug (VD: di-gioi)" />
-          <input className="admin-select" value={newGenre.desc} onChange={e => setNewGenre({ ...newGenre, desc: e.target.value })} placeholder="Mô tả ngắn..." />
-          <Button icon="plus" onClick={() => {
-            if (!newGenre.name.trim()) return;
-            setGenreList([{ id: Date.now(), name: newGenre.name.trim(), slug: newGenre.slug.trim() || newGenre.name.toLowerCase(), desc: newGenre.desc.trim() }, ...genreList]);
-            setNewGenre({ name: "", slug: "", desc: "" });
-            showToast(`Đã thêm thể loại “${newGenre.name}”.`);
-          }}>Thêm</Button>
+        <div className="admin-table-head">
+          <h3>Quản lý Thể loại MySQL ({genreList.length})</h3>
+          <span style={{ fontSize: "11px", color: "#a78bfa" }}>Đồng bộ 2 chiều CSDL TiDB Cloud</span>
+        </div>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #272030", display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr auto", gap: "8px", alignItems: "center" }}>
+          <input className="admin-select" value={newGenre.name} onChange={e => setNewGenre({ ...newGenre, name: e.target.value })} placeholder="* Tên thể loại (VD: Isekai)" />
+          <input className="admin-select" value={newGenre.slug} onChange={e => setNewGenre({ ...newGenre, slug: e.target.value })} placeholder="Slug (tự tạo nếu trống)" />
+          <select className="admin-select" value={newGenre.applicableType} onChange={e => setNewGenre({ ...newGenre, applicableType: e.target.value as "BOTH" | "MANGA" | "MOVIE" })}>
+            <option value="BOTH">Áp dụng: Cả hai (Truyện & Phim)</option>
+            <option value="MANGA">Áp dụng: Chỉ Truyện (Manga)</option>
+            <option value="MOVIE">Áp dụng: Chỉ Phim (Movie)</option>
+          </select>
+          <input className="admin-select" value={newGenre.desc} onChange={e => setNewGenre({ ...newGenre, desc: e.target.value })} placeholder="Mô tả thể loại..." />
+          <Button icon="plus" onClick={handleCreateGenre}>+ Thêm Thể loại Mới</Button>
         </div>
         <table className="admin-table">
-          <thead><tr><th>TÊN THỂ LOẠI</th><th>SLUG</th><th>MÔ TẢ</th><th>XÓA</th></tr></thead>
+          <thead><tr><th>TÊN THỂ LOẠI</th><th>SLUG</th><th>ÁP DỤNG</th><th>LIÊN KẾT</th><th>MÔ TẢ</th><th>THAO TÁC</th></tr></thead>
           <tbody>{genreList.map(g => <tr key={g.id}>
             <td><b>{g.name}</b></td>
             <td><code>{g.slug}</code></td>
-            <td>{g.desc}</td>
-            <td><Button variant="danger" onClick={() => { setGenreList(genreList.filter(x => x.id !== g.id)); showToast(`Đã xóa thể loại ${g.name}.`); }}>Xóa</Button></td>
+            <td>
+              <span className={`badge-pill ${g.applicableType === "MANGA" ? "role-admin" : g.applicableType === "MOVIE" ? "active" : ""}`}>
+                {g.applicableType === "MANGA" ? "Truyện" : g.applicableType === "MOVIE" ? "Phim" : "Cả hai"}
+              </span>
+            </td>
+            <td>
+              <span style={{ fontSize: "11px", color: g.contentCount > 0 ? "#c4b5fd" : "#756b80" }}>
+                {g.contentCount} tác phẩm
+              </span>
+            </td>
+            <td><small style={{ color: "#9e93ad" }}>{g.desc}</small></td>
+            <td>
+              <div className="admin-row-actions">
+                <Button variant="secondary" icon="edit" onClick={() => setEditingGenre({ ...g })}>Sửa</Button>
+                <Button variant="danger" onClick={() => handleDeleteGenre(g)}>Xóa</Button>
+              </div>
+            </td>
           </tr>)}</tbody>
         </table>
       </div>
@@ -9644,6 +9894,52 @@ function AdminPage({ setPage, contents, setContents, onSelectTitle }: { setPage:
         </tr>)}</tbody>
       </table>
     </div>}
+
+    
+    {/* MODAL: CHỈNH SỬA THỂ LOẠI */}
+    {editingGenre && (
+      <div className="modal-backdrop" onMouseDown={() => setEditingGenre(null)}>
+        <div className="admin-modal-wide" style={{ width: "480px" }} onMouseDown={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <div>
+              <span>QUẢN LÝ THỂ LOẠI</span>
+              <h2>Chỉnh sửa Thể loại #{editingGenre.id}</h2>
+              <p>Cập nhật tên thể loại, slug, phạm vi áp dụng và mô tả.</p>
+            </div>
+            <button className="icon-btn" onClick={() => setEditingGenre(null)}><Icon name="x" /></button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "14px" }}>
+            <label className="admin-field">
+              <span>* Tên thể loại</span>
+              <input value={editingGenre.name} onChange={e => setEditingGenre({ ...editingGenre, name: e.target.value })} placeholder="Tên thể loại..." />
+            </label>
+            <label className="admin-field">
+              <span>Slug URL</span>
+              <input value={editingGenre.slug} onChange={e => setEditingGenre({ ...editingGenre, slug: e.target.value })} placeholder="Slug..." />
+            </label>
+            <label className="admin-field">
+              <span>Phạm vi áp dụng</span>
+              <select value={editingGenre.applicableType} onChange={e => setEditingGenre({ ...editingGenre, applicableType: e.target.value as "BOTH" | "MANGA" | "MOVIE" })}>
+                <option value="BOTH">Áp dụng: Cả hai (Truyện & Phim)</option>
+                <option value="MANGA">Áp dụng: Chỉ Truyện (Manga)</option>
+                <option value="MOVIE">Áp dụng: Chỉ Phim (Movie)</option>
+              </select>
+            </label>
+            <label className="admin-field">
+              <span>Mô tả ngắn</span>
+              <textarea value={editingGenre.desc} onChange={e => setEditingGenre({ ...editingGenre, desc: e.target.value })} placeholder="Mô tả thể loại..." />
+            </label>
+          </div>
+          <div className="modal-actions" style={{ marginTop: "18px" }}>
+            <Button variant="danger" onClick={() => { handleDeleteGenre(editingGenre); setEditingGenre(null); }}>Xóa thể loại</Button>
+            <div>
+              <Button variant="ghost" onClick={() => setEditingGenre(null)}>Hủy</Button>
+              <Button icon="check" onClick={handleUpdateGenre}>Lưu thay đổi</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* MODAL 1: CHỈNH SỬA NGƯỜI DÙNG */}
     {editingUser && <div className="modal-backdrop" onMouseDown={() => setEditingUser(null)}>
@@ -10870,6 +11166,27 @@ function loadSavedFavorites(): string[] {
 }
 
 export default function App() {
+  // Tự động tải danh sách Thể loại mới nhất từ MySQL TiDB Cloud
+  useEffect(() => {
+    const fetchCloudGenres = async () => {
+      try {
+        const backendBase = getBackendApiBase();
+        if (!backendBase) return;
+        const res = await fetch(`${backendBase}/api/genres`);
+        if (res.ok) {
+          const body = await res.json();
+          const items = body?.data;
+          if (Array.isArray(items)) {
+            saveStoredSystemGenres(items);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load genres from backend:", e);
+      }
+    };
+    fetchCloudGenres();
+  }, []);
+
   const [authenticated, setAuthenticated] = useState(() => {
     try {
       const raw = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);

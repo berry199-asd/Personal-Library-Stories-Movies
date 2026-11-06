@@ -10,4 +10,5 @@ public interface GenreService {
     GenreResponse createGenre(GenreRequest request);
     GenreResponse updateGenre(Long id, GenreRequest request);
     void deleteGenre(Long id);
+    int getContentCountByGenre(Long genreId);
 }
