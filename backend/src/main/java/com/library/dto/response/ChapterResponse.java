@@ -17,6 +17,7 @@ public class ChapterResponse {
     private Long contentId;
     private Long seasonId;
     private Integer seasonNumber;
+    private String seasonTitle;
     private BigDecimal chapterNumber;
     private Integer displayOrder;
     private String title;
@@ -30,6 +31,7 @@ public class ChapterResponse {
                 .contentId(chapter.getContent() != null ? chapter.getContent().getId() : null)
                 .seasonId(chapter.getSeason() != null ? chapter.getSeason().getId() : null)
                 .seasonNumber(chapter.getSeason() != null ? chapter.getSeason().getSeasonNumber() : null)
+                .seasonTitle(chapter.getSeason() != null ? chapter.getSeason().getTitle() : null)
                 .chapterNumber(chapter.getChapterNumber())
                 .displayOrder(chapter.getDisplayOrder())
                 .title(chapter.getTitle())

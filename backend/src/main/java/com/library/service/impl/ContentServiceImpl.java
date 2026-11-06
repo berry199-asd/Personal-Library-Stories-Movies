@@ -235,14 +235,32 @@ public class ContentServiceImpl implements ContentService {
         }
 
         if (request.getChapters() != null && !request.getChapters().isEmpty()) {
+                        java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
                 if (chReq.getExternalLink() == null || chReq.getExternalLink().isBlank()) {
                     continue;
                 }
                 java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
+
+                Season season = null;
+                if (chReq.getSeasonTitle() != null && !chReq.getSeasonTitle().isBlank()) {
+                    String sTitle = chReq.getSeasonTitle().trim();
+                    if (!seasonMap.containsKey(sTitle)) {
+                        int sNum = chReq.getSeasonNumber() != null ? chReq.getSeasonNumber() : (seasonMap.size() + 1);
+                        Season s = Season.builder()
+                                .content(saved)
+                                .seasonNumber(sNum)
+                                .title(sTitle)
+                                .build();
+                        seasonMap.put(sTitle, seasonRepository.save(s));
+                    }
+                    season = seasonMap.get(sTitle);
+                }
+
                 Chapter chapter = Chapter.builder()
                         .content(saved)
+                        .season(season)
                         .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
                         .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
@@ -289,14 +307,32 @@ public class ContentServiceImpl implements ContentService {
 
         if (request.getChapters() != null) {
             content.getChapters().clear();
+            java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
                 if (chReq.getExternalLink() == null || chReq.getExternalLink().isBlank()) {
                     continue;
                 }
                 java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
+
+                Season season = null;
+                if (chReq.getSeasonTitle() != null && !chReq.getSeasonTitle().isBlank()) {
+                    String sTitle = chReq.getSeasonTitle().trim();
+                    if (!seasonMap.containsKey(sTitle)) {
+                        int sNum = chReq.getSeasonNumber() != null ? chReq.getSeasonNumber() : (seasonMap.size() + 1);
+                        Season s = Season.builder()
+                                .content(content)
+                                .seasonNumber(sNum)
+                                .title(sTitle)
+                                .build();
+                        seasonMap.put(sTitle, seasonRepository.save(s));
+                    }
+                    season = seasonMap.get(sTitle);
+                }
+
                 Chapter chapter = Chapter.builder()
                         .content(content)
+                        .season(season)
                         .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
                         .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
