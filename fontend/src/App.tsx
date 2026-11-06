@@ -1717,7 +1717,6 @@ function PublishedWorkEditorModal({
     extraTags: initialItem.extraTags || "",
     personalNote: initialItem.personalNote || "",
     visibility: initialItem.visibility || "PUBLIC",
-    seasons: initialItem.seasons || [],
     chaptersList: initialItem.chaptersList || [],
     genres: Array.isArray(initialItem.genres) ? [...initialItem.genres] : [],
   });
@@ -2255,7 +2254,7 @@ function PublishedChaptersModal({
         <div style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <b style={{ fontSize: "11px" }}>
-              {`Danh sách ${unitLabel.toLowerCase()} của ${activeSeason} (${displayedChapters.length} ${unitLabel.toLowerCase()})`}
+              Danh sách ${unitLabel.toLowerCase()} của ${activeSeason} (${displayedChapters.length} ${unitLabel.toLowerCase()})
             </b>
             <button
               type="button"
@@ -2382,24 +2381,13 @@ function PublishedChaptersModal({
             <Button variant="ghost" onClick={onClose}>Hủy</Button>
             <Button
               icon="check"
-              onClick={() => {
-                const isMulti = seasonList.length > 1 || chapters.length > 1;
+              onClick={() =>
                 onSave(initialItem.title, {
                   ...initialItem,
-                  seasons: seasonList,
-                  movieMode: isMulti && initialItem.type === "Phim" ? "Series" : initialItem.movieMode,
-                  isSeries: initialItem.type === "Truyện" || isMulti,
-                  chaptersList: chapters.map(c => ({
-                    id: c.id,
-                    season: c.season || activeSeason || defaultSeasonName,
-                    number: c.number,
-                    title: c.title,
-                    url: c.url,
-                    note: c.note,
-                  })),
+                  chaptersList: chapters,
                   updatedAt: "Vừa cập nhật chương/tập",
-                });
-              }}
+                })
+              }
             >
               Lưu danh sách {unitLabel.toLowerCase()}
             </Button>
@@ -3489,10 +3477,9 @@ function DetailPage({
   const liked = favorites.includes(currentItem.title);
   const canEditWork = canManagePublishedContent(currentItem, userRole, activeUser);
   const chapters = currentItem.chaptersList || [];
-  const itemSeasons = (currentItem.seasons || []).map(s => s.trim()).filter(Boolean);
+  const defaultSeasonName = currentItem.type === "Phim" && currentItem.movieMode === "Phim lẻ" ? "Phim lẻ" : "Phần 1";
   const rawSeasons = chapters.map(c => c.season?.trim()).filter(Boolean) as string[];
-  const uniqueSeasons = Array.from(new Set([...itemSeasons, ...rawSeasons]));
-  const defaultSeasonName = uniqueSeasons[0] || (currentItem.type === "Phim" && currentItem.movieMode === "Phim lẻ" && uniqueSeasons.length <= 1 ? "Phim lẻ" : "Phần 1");
+  const uniqueSeasons = Array.from(new Set(rawSeasons));
   const seasonList = uniqueSeasons.length > 0 ? uniqueSeasons : [defaultSeasonName];
   const activeSeason = seasonList.includes(season) ? season : seasonList[0];
   const [chapterSortOrder, setChapterSortOrder] = useState<"asc" | "desc">("asc");
@@ -4243,7 +4230,7 @@ function DetailPage({
                   {isChapterRead(ch, i) && <Icon name="check" size={14} />}
                 </button>
                 <div className="chap-num">
-                  {currentItem.type === "Truyện" ? "CHAP" : (ch.season === "Phim lẻ" && chapters.length === 1) ? "PHIM" : "TẬP"}<br /><b>{(ch.season === "Phim lẻ" && chapters.length === 1) ? "FULL" : ch.number}</b>
+                  {currentItem.type === "Truyện" ? "CHAP" : currentItem.movieMode === "Phim lẻ" ? "PHIM" : "TẬP"}<br /><b>{currentItem.movieMode === "Phim lẻ" ? "FULL" : ch.number}</b>
                 </div>
                 <div className="chap-title">
                   <b>{ch.title || `${currentItem.type === "Truyện" ? "Chương" : "Tập"} ${ch.number}`}</b>
@@ -12039,40 +12026,35 @@ export default function App() {
         const chapSeasons = (updated.chaptersList || []).map(c => c.season?.trim()).filter(Boolean) as string[];
         const finalSeasonTitles = Array.from(new Set([...itemSeasons, ...chapSeasons]));
 
-        const hasCustomChapters = Array.isArray(updated.chaptersList) && updated.chaptersList.length > 0;
-        const isMultiSeason = finalSeasonTitles.length > 1 || (updated.chaptersList && updated.chaptersList.length > 1);
-
-        const validChaptersUp = hasCustomChapters
-          ? updated.chaptersList!.map((ch, idx) => {
-              const num = parseChapterNumber(ch.number);
-              const link = (ch.url || updated.mainLink || movieWatchUrlUp || "#").trim();
-              const seasonName = ch.season?.trim() || (isMovieUp ? (finalSeasonTitles[0] || "Phần 1") : "Phần 1");
-              return {
-                chapterNumber: num > 0 ? num : (idx + 1),
-                displayOrder: idx + 1,
-                title: ch.title || (isMovieUp ? (seasonName === "Phim lẻ" && updated.chaptersList!.length === 1 ? "Bản đầy đủ" : `Tập ${ch.number || idx + 1}`) : `Chương ${ch.number || idx + 1}`),
-                externalLink: link || "#",
-                notes: ch.note || "",
-                seasonTitle: seasonName,
-                seasonNumber: parseChapterNumber(seasonName) || (idx + 1),
-              };
-            })
-          : (isMovieUp && movieWatchUrlUp)
+        const validChaptersUp = (isMovieUp && updated.movieMode === "Phim lẻ" && movieWatchUrlUp)
           ? [{
               chapterNumber: 1,
               displayOrder: 1,
               title: updated.title,
               externalLink: movieWatchUrlUp,
               notes: "Bản đầy đủ",
-              seasonTitle: finalSeasonTitles[0] || "Phim lẻ",
+              seasonTitle: "Phim lẻ",
               seasonNumber: 1,
             }]
-          : [];
+          : (updated.chaptersList || [])
+              .map((ch, idx) => {
+                const num = parseChapterNumber(ch.number);
+                const link = (ch.url || updated.mainLink || "#").trim();
+                return {
+                  chapterNumber: num > 0 ? num : (idx + 1),
+                  displayOrder: idx + 1,
+                  title: ch.title || (isMovieUp ? (updated.movieMode === "Phim lẻ" ? "Bản đầy đủ" : `Tập ${ch.number || idx + 1}`) : `Chương ${ch.number || idx + 1}`),
+                  externalLink: link || updated.mainLink || "#",
+                  notes: ch.note || "",
+                  seasonTitle: ch.season || "Phần 1",
+                  seasonNumber: parseChapterNumber(ch.season || "1") || 1,
+                };
+              });
 
         const payload = {
           title: updated.title,
           contentType: isMovieUp ? "MOVIE" : "MANGA",
-          isSeries: updated.type === "Truyện" || isMultiSeason || updated.movieMode === "Series",
+          isSeries: updated.type === "Truyện" || updated.movieMode === "Series",
           posterUrl: updated.img || "",
           authorOrDirector: (isMovieUp ? updated.director : updated.author) || updated.director || updated.author || updated.createdBy?.name || currentUser.name || "Tác giả",
           description: packedDesc,
@@ -12095,7 +12077,7 @@ export default function App() {
             const resData = await res.json();
             if (resData?.data?.id) {
               const mapped = mapBackendContentToItem(resData.data);
-              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? { ...mapped, ...updated, seasons: finalSeasonTitles, chaptersList: updated.chaptersList && updated.chaptersList.length > 0 ? updated.chaptersList : mapped.chaptersList, id: resData.data.id } : x)));
+              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? { ...mapped, ...updated, seasons: finalSeasonTitles, id: resData.data.id } : x)));
             }
           }
         } else {
@@ -12406,35 +12388,30 @@ export default function App() {
               const chapSeasons = (item.chaptersList || []).map(c => c.season?.trim()).filter(Boolean) as string[];
               const finalSeasonTitles = Array.from(new Set([...itemSeasons, ...chapSeasons]));
 
-              const hasPublishCustomChapters = Array.isArray(item.chaptersList) && item.chaptersList.length > 0;
-              const isPublishMultiSeason = finalSeasonTitles.length > 1 || (item.chaptersList && item.chaptersList.length > 1);
-
-              const validChapters = hasPublishCustomChapters
-                ? item.chaptersList!.map((ch, idx) => {
-                    const num = parseChapterNumber(ch.number);
-                    const link = (ch.url || item.mainLink || movieWatchUrl || "#").trim();
-                    const seasonName = ch.season?.trim() || (isMovie ? (finalSeasonTitles[0] || "Phần 1") : "Phần 1");
-                    return {
-                      chapterNumber: num > 0 ? num : (idx + 1),
-                      displayOrder: idx + 1,
-                      title: ch.title || (isMovie ? (seasonName === "Phim lẻ" && item.chaptersList!.length === 1 ? "Bản đầy đủ" : `Tập ${ch.number || idx + 1}`) : `Chương ${ch.number || idx + 1}`),
-                      externalLink: link || "#",
-                      notes: ch.note || "",
-                      seasonTitle: seasonName,
-                      seasonNumber: parseChapterNumber(seasonName) || (idx + 1),
-                    };
-                  })
-                : (isMovie && movieWatchUrl)
+              const validChapters = (isMovie && item.movieMode === "Phim lẻ" && movieWatchUrl)
                 ? [{
                     chapterNumber: 1,
                     displayOrder: 1,
                     title: item.title,
                     externalLink: movieWatchUrl,
                     notes: "Bản đầy đủ",
-                    seasonTitle: finalSeasonTitles[0] || "Phim lẻ",
+                    seasonTitle: "Phim lẻ",
                     seasonNumber: 1,
                   }]
-                : [];
+                : (item.chaptersList || [])
+                    .map((ch, idx) => {
+                      const num = parseChapterNumber(ch.number);
+                      const link = (ch.url || item.mainLink || "#").trim();
+                      return {
+                        chapterNumber: num > 0 ? num : (idx + 1),
+                        displayOrder: idx + 1,
+                        title: ch.title || (isMovie ? (item.movieMode === "Phim lẻ" ? "Bản đầy đủ" : `Tập ${ch.number || idx + 1}`) : `Chương ${ch.number || idx + 1}`),
+                        externalLink: link || item.mainLink || "#",
+                        notes: ch.note || "",
+                        seasonTitle: ch.season || "Phần 1",
+                        seasonNumber: parseChapterNumber(ch.season || "1") || 1,
+                      };
+                    });
 
               const res = await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(cleanCreator)}`, {
                 method: "POST",
@@ -12445,7 +12422,7 @@ export default function App() {
                 body: JSON.stringify({
                   title: item.title,
                   contentType: isMovie ? "MOVIE" : "MANGA",
-                  isSeries: item.type === "Truyện" || isPublishMultiSeason || item.movieMode === "Series",
+                  isSeries: item.type === "Truyện" || item.movieMode === "Series",
                   posterUrl: item.img || "",
                   authorOrDirector: (isMovie ? item.director : item.author) || item.director || item.author || item.createdBy?.name || currentUser.name || "Tác giả",
                   description: packedDesc,

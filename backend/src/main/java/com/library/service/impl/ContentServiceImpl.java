@@ -293,10 +293,6 @@ public class ContentServiceImpl implements ContentService {
             }
         }
 
-        var allDbSeasonsCreate = seasonRepository.findByContentIdOrderBySeasonNumberAsc(saved.getId());
-        if (allDbSeasonsCreate != null && !allDbSeasonsCreate.isEmpty()) {
-            saved.setSeasons(allDbSeasonsCreate);
-        }
         return ContentResponse.fromEntity(saved, 0.0, true);
     }
 
@@ -410,10 +406,6 @@ public class ContentServiceImpl implements ContentService {
             } else {
                 throw ex;
             }
-        }
-        var allDbSeasonsUpdate = seasonRepository.findByContentIdOrderBySeasonNumberAsc(saved.getId());
-        if (allDbSeasonsUpdate != null && !allDbSeasonsUpdate.isEmpty()) {
-            saved.setSeasons(allDbSeasonsUpdate);
         }
         Double avgRating = reviewRepository.calculateAverageRating(saved.getId());
         return ContentResponse.fromEntity(saved, avgRating, true);
