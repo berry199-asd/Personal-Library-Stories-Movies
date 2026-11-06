@@ -1,6 +1,7 @@
 package com.library.service;
 
 import com.library.dto.request.LibraryEntryRequest;
+import com.library.dto.response.ContentResponse;
 import com.library.dto.response.LibraryEntryResponse;
 import com.library.dto.response.PageResponse;
 import com.library.enums.ContentType;
@@ -32,4 +33,10 @@ public interface LibraryService {
     List<Long> getCompletedChapterIds(Long userId, Long contentId);
 
     boolean toggleChapterProgress(Long userId, Long chapterId);
+
+    boolean toggleFavorite(Long userId, Long contentId);
+
+    List<Long> getFavoriteContentIds(Long userId);
+
+    List<ContentResponse> getFavoriteContents(Long userId);
 }

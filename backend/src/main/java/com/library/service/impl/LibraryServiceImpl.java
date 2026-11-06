@@ -1,6 +1,7 @@
 package com.library.service.impl;
 
 import com.library.dto.request.LibraryEntryRequest;
+import com.library.dto.response.ContentResponse;
 import com.library.dto.response.LibraryEntryResponse;
 import com.library.dto.response.PageResponse;
 import com.library.entity.*;
@@ -205,5 +206,60 @@ public class LibraryServiceImpl implements LibraryService {
         } else if (!favorite && existing.isPresent()) {
             favoriteRepository.delete(existing.get());
         }
+    }
+
+    @Override
+    @Transactional
+    public boolean toggleFavorite(Long userId, Long contentId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng #" + userId));
+        Content content = contentRepository.findById(contentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy truyện/phim #" + contentId));
+
+        Optional<Favorite> existing = favoriteRepository.findByUserIdAndContentId(userId, contentId);
+        boolean nextState;
+        if (existing.isPresent()) {
+            favoriteRepository.delete(existing.get());
+            nextState = false;
+        } else {
+            favoriteRepository.save(Favorite.builder().user(user).content(content).build());
+            nextState = true;
+        }
+
+        // Đồng bộ với UserLibrary nếu có
+        Optional<UserLibrary> entry = userLibraryRepository.findByUserIdAndContentId(userId, contentId);
+        if (entry.isPresent()) {
+            UserLibrary ul = entry.get();
+            ul.setIsFavorite(nextState);
+            userLibraryRepository.save(ul);
+        } else if (nextState) {
+            // Tự động tạo bản ghi trong thư viện người dùng nếu chưa có
+            UserLibrary newUl = UserLibrary.builder()
+                    .user(user)
+                    .content(content)
+                    .readingStatus(ReadingStatus.READING)
+                    .visibility(LibraryVisibility.PRIVATE)
+                    .isFavorite(true)
+                    .build();
+            userLibraryRepository.save(newUl);
+        }
+
+        return nextState;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Long> getFavoriteContentIds(Long userId) {
+        List<Favorite> favorites = favoriteRepository.findByUserId(userId);
+        return favorites.stream().map(f -> f.getContent().getId()).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ContentResponse> getFavoriteContents(Long userId) {
+        List<Favorite> favorites = favoriteRepository.findByUserId(userId);
+        return favorites.stream()
+                .map(f -> ContentResponse.fromEntity(f.getContent(), null, false))
+                .collect(Collectors.toList());
     }
 }

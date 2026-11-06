@@ -10299,17 +10299,18 @@ export default function App() {
     return allContents.filter(item => {
       const isOwner = isUserItemOwner(item, currentUser);
       if (isOwner) return true;
+      if (favorites.includes(item.title)) return true;
       if (item.visibility === "PRIVATE") return false;
       if (item.visibility === "SHARED") {
         const myName = (currentUser.username || "").trim().toLowerCase().replace(/^@/, "");
         const isShared = Array.isArray(item.sharedWithUsers) && item.sharedWithUsers.some(
           u => u.trim().toLowerCase().replace(/^@/, "") === myName
         );
-        return isShared && userSavedTitles.includes(item.title);
+        return isShared && (userSavedTitles.includes(item.title) || favorites.includes(item.title));
       }
       return userSavedTitles.includes(item.title);
     });
-  }, [allContents, currentUser, userSavedTitles]);
+  }, [allContents, currentUser, userSavedTitles, favorites]);
 
   useEffect(() => {
     const isMain = currentUser.email.toLowerCase() === "lechauanh.12a5.tnd@gmail.com" ||
@@ -10407,10 +10408,84 @@ export default function App() {
     window.setTimeout(() => setGlobalToast(""), 3500);
   };
 
-  const toggleFavorite = (title: string) => {
+
+  useEffect(() => {
+    const backendBase = getBackendApiBase();
+    const cleanUser = (currentUser?.username || "").replace(/^@/, "");
+    if (!backendBase || !cleanUser) return;
+
+    const token = window.localStorage.getItem("personal_library_access_token");
+    const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+
+    fetch(`${backendBase}/api/library/favorites?username=${encodeURIComponent(cleanUser)}`, { headers })
+      .then(res => {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then(data => {
+        if (data?.data && Array.isArray(data.data)) {
+          const favTitles: string[] = data.data.map((c: any) => c.title).filter(Boolean);
+          if (favTitles.length > 0) {
+            setFavorites(prev => {
+              const merged = Array.from(new Set([...prev, ...favTitles]));
+              saveUserFavorites(merged, currentUser);
+              return merged;
+            });
+          }
+        }
+      })
+      .catch(err => console.warn("Failed to fetch favorites from backend:", err));
+  }, [currentUser?.username]);
+
+  const toggleFavorite = async (title: string) => {
+    const backendBase = getBackendApiBase();
+    const cleanUser = (currentUser?.username || "berry").replace(/^@/, "");
+    const token = window.localStorage.getItem("personal_library_access_token");
+    const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+
+    const target = allContents.find(c => c.title === title) || userLibraryItems.find(c => c.title === title);
+    let contentId = target?.id;
+
+    if (backendBase && !contentId) {
+      try {
+        const resId = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(title.trim())}`);
+        if (resId.ok) {
+          const dataId = await resId.json();
+          if (dataId?.data?.id) {
+            contentId = dataId.data.id;
+            if (target) target.id = contentId;
+          }
+        }
+      } catch {}
+    }
+
+    if (backendBase && contentId) {
+      try {
+        const res = await fetch(`${backendBase}/api/library/favorites/${contentId}/toggle?username=${encodeURIComponent(cleanUser)}`, {
+          method: "POST",
+          headers,
+        });
+        if (res.ok) {
+          const body = await res.json();
+          const isFav = body?.data?.isFavorite;
+          setFavorites(current => {
+            const next = isFav ? (current.includes(title) ? current : [...current, title]) : current.filter(x => x !== title);
+            saveUserFavorites(next, currentUser);
+            return next;
+          });
+          showGlobalToast(isFav ? `Đã thêm “${title}” vào danh sách Yêu thích ♥` : `Đã bỏ “${title}” khỏi danh sách Yêu thích.`);
+          return;
+        }
+      } catch (err) {
+        console.warn("Failed to toggle favorite on backend:", err);
+      }
+    }
+
     setFavorites(current => {
-      const next = current.includes(title) ? current.filter(x => x !== title) : [...current, title];
+      const isFav = !current.includes(title);
+      const next = isFav ? [...current, title] : current.filter(x => x !== title);
       saveUserFavorites(next, currentUser);
+      showGlobalToast(isFav ? `Đã thêm “${title}” vào danh sách Yêu thích ♥` : `Đã bỏ “${title}” khỏi danh sách Yêu thích.`);
       return next;
     });
   };
