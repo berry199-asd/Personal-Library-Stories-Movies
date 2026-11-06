@@ -890,6 +890,74 @@ export const mangaGenres = defaultMangaGenres;
 export const movieGenres = defaultMovieGenres;
 export const allGenres = Array.from(new Set([...defaultMangaGenres, ...defaultMovieGenres]));
 
+export function generateGenreSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export async function addNewGlobalGenre(name: string, applicableType: "BOTH" | "MANGA" | "MOVIE" = "BOTH"): Promise<string> {
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  try {
+    const backendBase = getBackendApiBase();
+    if (backendBase) {
+      const token = window.localStorage.getItem("personal_library_access_token");
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+      };
+      const cleanAdmin = (getActiveUser().username || "anhquyphi").replace(/^@/, "");
+      const res = await fetch(`${backendBase}/api/genres?actorUsername=${encodeURIComponent(cleanAdmin)}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: trimmed,
+          slug: generateGenreSlug(trimmed) || `genre-${Date.now()}`,
+          description: `Thể loại tạo nhanh`,
+          applicableType,
+        }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const created = body?.data;
+        if (created) {
+          const current = getStoredSystemGenres();
+          saveStoredSystemGenres([
+            ...current.filter(g => g.name.toLowerCase() !== trimmed.toLowerCase()),
+            {
+              id: created.id || Date.now(),
+              name: created.name || trimmed,
+              slug: created.slug || generateGenreSlug(trimmed),
+              applicableType,
+              description: created.description,
+            }
+          ]);
+          return created.name || trimmed;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Failed saving new genre to backend:", err);
+  }
+  const current = getStoredSystemGenres();
+  saveStoredSystemGenres([
+    ...current.filter(g => g.name.toLowerCase() !== trimmed.toLowerCase()),
+    {
+      id: Date.now(),
+      name: trimmed,
+      slug: generateGenreSlug(trimmed),
+      applicableType,
+      description: "Thể loại tạo nhanh",
+    }
+  ]);
+  return trimmed;
+}
+
 function SectionTitle({ eyebrow, title, action, onAction }: { eyebrow?: string; title: string; action?: string; onAction?: () => void }) {
   return <div className="section-title"><div>{eyebrow && <span>{eyebrow}</span>}<h2>{title}</h2></div>{action && <button onClick={onAction}>{action} <Icon name="arrow" size={15} /></button>}</div>;
 }
@@ -926,7 +994,7 @@ function FilterCollection({
   const [type, setType] = useState(initialType);
   const [status, setStatus] = useState("Tất cả");
   const [genres, setGenres] = useState<string[]>([]);
-  const availableGenres = type === "Truyện" ? mangaGenres : type === "Phim" ? movieGenres : allGenres;
+  const availableGenres = type === "Truyện" ? getMangaGenres() : type === "Phim" ? getMovieGenres() : getAllGenresList();
   const pool = propCatalogItems && propCatalogItems.length > 0 ? propCatalogItems : catalogItems;
   const sourcePool = compact
     ? savedItems
@@ -955,7 +1023,7 @@ function FilterCollection({
   });
   const chooseType = (value: string) => {
     setType(value);
-    setGenres(current => current.filter(g => (value === "Truyện" ? mangaGenres : value === "Phim" ? movieGenres : allGenres).includes(g)));
+    setGenres(current => current.filter(g => (value === "Truyện" ? getMangaGenres() : value === "Phim" ? getMovieGenres() : getAllGenresList()).includes(g)));
   };
   const reset = () => {
     setType(initialType);
@@ -1678,6 +1746,17 @@ function PublishedWorkEditorModal({
     setDraft({ ...draft, externalLinks: next, mainLink: next[0]?.url || "" });
   };
 
+  const [newEditorGenre, setNewEditorGenre] = useState("");
+  const handleAddNewGenre = async () => {
+    const trimmed = newEditorGenre.trim();
+    if (!trimmed) return;
+    const added = await addNewGlobalGenre(trimmed, draft.type === "Truyện" ? "MANGA" : "MOVIE");
+    if (added && !draft.genres.includes(added)) {
+      setDraft(prev => ({ ...prev, genres: [...prev.genres, added] }));
+    }
+    setNewEditorGenre("");
+  };
+
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="admin-modal-wide" style={{ maxHeight: "90vh", overflowY: "auto" }} onMouseDown={e => e.stopPropagation()}>
@@ -1921,7 +2000,10 @@ function PublishedWorkEditorModal({
         </div>
 
         <div className="admin-field">
-          <span>Thể loại ({draft.genres.length} đã chọn)</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", flexWrap: "wrap", gap: "8px" }}>
+            <span>Thể loại ({draft.genres.length} đã chọn)</span>
+            <small style={{ color: "#a78bfa", fontSize: "10px" }}>Chọn từ danh mục hoặc nhập thêm thể loại mới</small>
+          </div>
           <div className="admin-genre-picks">
             {(draft.type === "Truyện" ? getMangaGenres() : getMovieGenres()).map(g => (
               <button
@@ -1936,6 +2018,16 @@ function PublishedWorkEditorModal({
                 {g}
               </button>
             ))}
+          </div>
+          <div style={{ display: "flex", gap: "8px", marginTop: "10px", alignItems: "center" }}>
+            <input
+              value={newEditorGenre}
+              onChange={e => setNewEditorGenre(e.target.value)}
+              placeholder="Nhập tên thể loại mới cần thêm..."
+              style={{ flex: 1, height: "34px", fontSize: "11px" }}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddNewGenre(); } }}
+            />
+            <Button variant="secondary" icon="plus" onClick={handleAddNewGenre}>+ Thêm thể loại</Button>
           </div>
         </div>
 
@@ -2027,12 +2119,13 @@ function PublishedChaptersModal({
   const unitLabel = isMovie ? "Tập" : "Chương";
   const isOwner = isUserItemOwner(initialItem);
 
-  // Seasons for series
-  const existingSeasons = Array.from(new Set(chapters.map(c => c.season || (isMovie ? "Mùa 1" : "Mùa 1"))));
+  // Seasons for both manga and movies
+  const defaultSeasonName = "Phần 1";
+  const existingSeasons = Array.from(new Set(chapters.map(c => c.season?.trim()).filter(Boolean) as string[]));
   const [seasonList, setSeasonList] = useState<string[]>(
-    existingSeasons.length > 0 ? existingSeasons : [isMovie ? "Mùa 1" : "Mùa 1"]
+    existingSeasons.length > 0 ? existingSeasons : [defaultSeasonName]
   );
-  const [activeSeason, setActiveSeason] = useState<string>(seasonList[0] || "Mùa 1");
+  const [activeSeason, setActiveSeason] = useState<string>(seasonList[0] || defaultSeasonName);
 
   // Move chapter up / down
   const moveChapter = (indexInAll: number, direction: "up" | "down") => {
@@ -2045,32 +2138,24 @@ function PublishedChaptersModal({
     setChapters(copy);
   };
 
-  // Sort ascending / descending for current view
+  // Sort ascending / descending for current active season
   const handleSortAsc = () => {
-    if (isMovie) {
-      const otherChapters = chapters.filter(c => (c.season || "Mùa 1") !== activeSeason);
-      const currentSeasonChapters = chapters.filter(c => (c.season || "Mùa 1") === activeSeason);
-      const sortedCurrent = [...currentSeasonChapters].sort((a, b) => parseChapterNumber(a.number) - parseChapterNumber(b.number));
-      setChapters([...otherChapters, ...sortedCurrent]);
-    } else {
-      setChapters(sortChaptersAscending(chapters));
-    }
+    const otherChapters = chapters.filter(c => (c.season?.trim() || defaultSeasonName) !== activeSeason);
+    const currentSeasonChapters = chapters.filter(c => (c.season?.trim() || defaultSeasonName) === activeSeason);
+    const sortedCurrent = [...currentSeasonChapters].sort((a, b) => parseChapterNumber(a.number) - parseChapterNumber(b.number));
+    setChapters([...otherChapters, ...sortedCurrent]);
   };
 
   const handleSortDesc = () => {
-    if (isMovie) {
-      const otherChapters = chapters.filter(c => (c.season || "Mùa 1") !== activeSeason);
-      const currentSeasonChapters = chapters.filter(c => (c.season || "Mùa 1") === activeSeason);
-      const sortedCurrent = [...currentSeasonChapters].sort((a, b) => parseChapterNumber(b.number) - parseChapterNumber(a.number));
-      setChapters([...otherChapters, ...sortedCurrent]);
-    } else {
-      setChapters(sortChaptersDescending(chapters));
-    }
+    const otherChapters = chapters.filter(c => (c.season?.trim() || defaultSeasonName) !== activeSeason);
+    const currentSeasonChapters = chapters.filter(c => (c.season?.trim() || defaultSeasonName) === activeSeason);
+    const sortedCurrent = [...currentSeasonChapters].sort((a, b) => parseChapterNumber(b.number) - parseChapterNumber(a.number));
+    setChapters([...otherChapters, ...sortedCurrent]);
   };
 
-  // Add new season for movies
+  // Add new season for manga & movies
   const addSeason = () => {
-    const nextSeasonName = `Mùa ${seasonList.length + 1}`;
+    const nextSeasonName = `Phần ${seasonList.length + 1}`;
     setSeasonList([...seasonList, nextSeasonName]);
     setActiveSeason(nextSeasonName);
   };
@@ -2081,20 +2166,20 @@ function PublishedChaptersModal({
     if (!newName || !newName.trim() || newName === oldName) return;
     const trimmed = newName.trim();
     setSeasonList(seasonList.map(s => (s === oldName ? trimmed : s)));
-    setChapters(chapters.map(c => ((c.season || "Mùa 1") === oldName ? { ...c, season: trimmed } : c)));
+    setChapters(chapters.map(c => ((c.season?.trim() || defaultSeasonName) === oldName ? { ...c, season: trimmed } : c)));
     if (activeSeason === oldName) setActiveSeason(trimmed);
   };
 
   // Delete season
   const deleteSeason = (sName: string) => {
     if (seasonList.length <= 1) {
-      alert("Cần giữ lại ít nhất 1 mùa / phần!");
+      alert("Cần giữ lại ít nhất 1 phần / mùa!");
       return;
     }
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa ${sName} và tất cả các tập trong phần này?`)) return;
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa ${sName} và tất cả các ${unitLabel.toLowerCase()} trong phần này?`)) return;
     const nextSeasons = seasonList.filter(s => s !== sName);
     setSeasonList(nextSeasons);
-    setChapters(chapters.filter(c => (c.season || "Mùa 1") !== sName));
+    setChapters(chapters.filter(c => (c.season?.trim() || defaultSeasonName) !== sName));
     setActiveSeason(nextSeasons[0]);
   };
 
@@ -2110,10 +2195,8 @@ function PublishedChaptersModal({
     setSeasonList(copy);
   };
 
-  // Chapters filtered by active season (for series/movie) or all (for manga)
-  const displayedChapters = isMovie
-    ? chapters.filter(c => (c.season || "Mùa 1") === activeSeason)
-    : chapters;
+  // Chapters filtered by active season
+  const displayedChapters = chapters.filter(c => (c.season?.trim() || defaultSeasonName) === activeSeason);
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -2131,38 +2214,40 @@ function PublishedChaptersModal({
           <button className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
 
-        {/* MOVIE / SERIES SEASON MANAGER */}
-        {isMovie && (
-          <div style={{ marginBottom: "14px", background: "rgba(255,255,255,0.03)", padding: "10px 14px", borderRadius: "10px", border: "1px solid #2d243a" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <b style={{ fontSize: "11px", color: "#c4b5fd" }}>Quản lý Mùa / Phần phim ({seasonList.length} phần):</b>
-              <Button variant="secondary" icon="plus" onClick={addSeason}>+ Thêm Mùa / Phần mới</Button>
-            </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-              {seasonList.map((s, sIdx) => (
-                <div key={s} style={{ display: "flex", alignItems: "center", background: activeSeason === s ? "rgba(168, 85, 247, 0.25)" : "rgba(255,255,255,0.06)", border: activeSeason === s ? "1px solid #a855f7" : "1px solid #3c3050", borderRadius: "8px", padding: "2px 8px" }}>
+        {/* SEASON / PHẦN MANAGER (HỖ TRỢ CẢ TRUYỆN & PHIM) */}
+        <div style={{ marginBottom: "14px", background: "rgba(255,255,255,0.03)", padding: "12px 14px", borderRadius: "10px", border: "1px solid #2d243a" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+            <b style={{ fontSize: "11px", color: "#c4b5fd" }}>Phân loại theo Mùa / Phần ({seasonList.length} phần):</b>
+            <Button variant="secondary" icon="plus" onClick={addSeason}>+ Thêm Phần mới</Button>
+          </div>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+            {seasonList.map((s, sIdx) => {
+              const isActive = activeSeason === s;
+              const count = chapters.filter(c => (c.season?.trim() || defaultSeasonName) === s).length;
+              return (
+                <div key={s} style={{ display: "flex", alignItems: "center", background: isActive ? "#bef264" : "#1e1e24", border: isActive ? "none" : "1.5px solid rgba(255, 255, 255, 0.85)", borderRadius: "8px", padding: "3px 8px", boxShadow: isActive ? "0 4px 12px rgba(190, 242, 100, 0.3)" : "none" }}>
                   <button
                     type="button"
-                    style={{ background: "none", border: "none", color: activeSeason === s ? "#fff" : "#9e93ad", fontWeight: activeSeason === s ? 700 : 500, cursor: "pointer", fontSize: "12px", padding: "4px 6px" }}
+                    style={{ background: "none", border: "none", color: isActive ? "#0f172a" : "#fff", fontWeight: 700, cursor: "pointer", fontSize: "13px", padding: "4px 8px" }}
                     onClick={() => setActiveSeason(s)}
                   >
-                    {s} ({chapters.filter(c => (c.season || "Mùa 1") === s).length} tập)
+                    {s} ({count} {unitLabel.toLowerCase()})
                   </button>
-                  <button type="button" title="Chuyển mùa lên" disabled={sIdx === 0} style={{ background: "none", border: "none", color: "#a855f7", cursor: sIdx === 0 ? "not-allowed" : "pointer", padding: "2px 4px", fontSize: "10px", opacity: sIdx === 0 ? 0.3 : 1 }} onClick={() => moveSeason(s, "up")}>▲</button>
-                  <button type="button" title="Chuyển mùa xuống" disabled={sIdx === seasonList.length - 1} style={{ background: "none", border: "none", color: "#a855f7", cursor: sIdx === seasonList.length - 1 ? "not-allowed" : "pointer", padding: "2px 4px", fontSize: "10px", opacity: sIdx === seasonList.length - 1 ? 0.3 : 1 }} onClick={() => moveSeason(s, "down")}>▼</button>
-                  <button type="button" title="Đổi tên mùa" style={{ background: "none", border: "none", color: "#e9d5ff", cursor: "pointer", padding: "2px 4px", fontSize: "10px" }} onClick={() => renameSeason(s)}>✎</button>
-                  <button type="button" title="Xóa mùa" style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: "2px 4px", fontSize: "10px" }} onClick={() => deleteSeason(s)}>✕</button>
+                  <button type="button" title="Chuyển phần lên" disabled={sIdx === 0} style={{ background: "none", border: "none", color: isActive ? "#334155" : "#a855f7", cursor: sIdx === 0 ? "not-allowed" : "pointer", padding: "2px 4px", fontSize: "10px", opacity: sIdx === 0 ? 0.3 : 1 }} onClick={() => moveSeason(s, "up")}>▲</button>
+                  <button type="button" title="Chuyển phần xuống" disabled={sIdx === seasonList.length - 1} style={{ background: "none", border: "none", color: isActive ? "#334155" : "#a855f7", cursor: sIdx === seasonList.length - 1 ? "not-allowed" : "pointer", padding: "2px 4px", fontSize: "10px", opacity: sIdx === seasonList.length - 1 ? 0.3 : 1 }} onClick={() => moveSeason(s, "down")}>▼</button>
+                  <button type="button" title="Đổi tên phần" style={{ background: "none", border: "none", color: isActive ? "#1e293b" : "#e9d5ff", cursor: "pointer", padding: "2px 4px", fontSize: "10px" }} onClick={() => renameSeason(s)}>✎</button>
+                  <button type="button" title="Xóa phần" style={{ background: "none", border: "none", color: isActive ? "#dc2626" : "#f87171", cursor: "pointer", padding: "2px 4px", fontSize: "10px" }} onClick={() => deleteSeason(s)}>✕</button>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
 
         {/* SORT CONTROLS & ADD BUTTON */}
         <div style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <b style={{ fontSize: "11px" }}>
-              {isMovie ? `Danh sách tập của ${activeSeason} (${displayedChapters.length} tập)` : `Danh sách chương hiện có (${chapters.length} chương)`}
+              Danh sách ${unitLabel.toLowerCase()} của ${activeSeason} (${displayedChapters.length} ${unitLabel.toLowerCase()})
             </b>
             <button
               type="button"
@@ -2190,7 +2275,7 @@ function PublishedChaptersModal({
               const nextNum = String(displayedChapters.length + 1);
               const newChap: PublishedChapterItem = {
                 id: Date.now(),
-                season: isMovie ? activeSeason : "Mùa 1",
+                season: activeSeason || defaultSeasonName,
                 number: nextNum,
                 title: "",
                 url: "",
@@ -2207,14 +2292,25 @@ function PublishedChaptersModal({
         <div style={{ maxHeight: "360px", overflowY: "auto", paddingRight: "4px" }}>
           {displayedChapters.length === 0 && (
             <div className="empty-results" style={{ height: "120px" }}>
-              <b>Chưa có {unitLabel.toLowerCase()} nào {isMovie ? `trong ${activeSeason}` : ""}</b>
+              <b>Chưa có {unitLabel.toLowerCase()} nào trong {activeSeason}</b>
               <p>Nhấn nút “+ Thêm {unitLabel.toLowerCase()} mới” để thêm đường dẫn từng {unitLabel.toLowerCase()}.</p>
             </div>
           )}
           {displayedChapters.map((ch, dispIdx) => {
             const actualIdx = chapters.findIndex(c => c.id === ch.id);
             return (
-              <div className="admin-chap-row" key={ch.id} style={{ display: "grid", gridTemplateColumns: "auto auto 70px 1.2fr 1.5fr 1fr auto", gap: "6px", alignItems: "center" }}>
+              <div className="admin-chap-row" key={ch.id} style={{ display: "grid", gridTemplateColumns: "auto auto 95px 70px 1.2fr 1.5fr 1fr auto", gap: "6px", alignItems: "center" }}>
+                <select
+                  value={ch.season?.trim() || defaultSeasonName}
+                  onChange={e => {
+                    const nextS = e.target.value;
+                    setChapters(chapters.map((x, i) => (i === actualIdx ? { ...x, season: nextS } : x)));
+                  }}
+                  style={{ width: "95px", height: "34px", borderRadius: "6px", border: "1px solid #3c3050", background: "#0b0813", color: "#c4b5fd", fontSize: "11px", padding: "0 6px" }}
+                  title="Chuyển chương/tập này sang phần khác"
+                >
+                  {seasonList.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
                 <button
                   type="button"
                   title="Di chuyển lên"
@@ -3374,11 +3470,18 @@ function DetailPage({
   const liked = favorites.includes(currentItem.title);
   const canEditWork = canManagePublishedContent(currentItem, userRole, activeUser);
   const chapters = currentItem.chaptersList || [];
-  const defaultSeasonName = currentItem.type === "Phim" && currentItem.movieMode === "Phim lẻ" ? "Phim lẻ" : "Mùa 1";
-  const availableSeasons = Array.from(new Set(chapters.map(c => c.season || defaultSeasonName)));
-  const seasonList = availableSeasons.length > 0 ? availableSeasons : [defaultSeasonName];
+  const defaultSeasonName = currentItem.type === "Phim" && currentItem.movieMode === "Phim lẻ" ? "Phim lẻ" : "Phần 1";
+  const rawSeasons = chapters.map(c => c.season?.trim()).filter(Boolean) as string[];
+  const uniqueSeasons = Array.from(new Set(rawSeasons));
+  const seasonList = uniqueSeasons.length > 0 ? uniqueSeasons : [defaultSeasonName];
   const activeSeason = seasonList.includes(season) ? season : seasonList[0];
-  const filteredChapters = chapters.filter(c => (c.season || defaultSeasonName) === activeSeason);
+  const [chapterSortOrder, setChapterSortOrder] = useState<"asc" | "desc">("asc");
+  const filteredChapters = chapters.filter(c => (c.season?.trim() || defaultSeasonName) === activeSeason);
+  const displayedSortedChapters = [...filteredChapters].sort((a, b) => {
+    const numA = parseChapterNumber(a.number);
+    const numB = parseChapterNumber(b.number);
+    return chapterSortOrder === "asc" ? numA - numB : numB - numA;
+  });
 
   const externalLinksToShow: ExternalLinkItem[] =
     currentItem.externalLinks && currentItem.externalLinks.some(l => l.url.trim() || l.platform.trim())
@@ -4034,25 +4137,87 @@ function DetailPage({
             </div>
           </div>
         )}
-        <div className="season-tabs">
-          {seasonList.map(x => {
-            const countInSeason = chapters.filter(c => (c.season || "Mùa 1") === x).length;
-            return (
-              <button key={x} onClick={() => setSeason(x)} className={activeSeason === x ? "active" : ""}>
-                {x}
-                <small>{countInSeason} MỤC</small>
-              </button>
-            );
-          })}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
+          {/* Tabs Phần 1, Phần 2 theo đúng hình ảnh người dùng cung cấp */}
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+            {seasonList.map(x => {
+              const isActive = activeSeason === x;
+              const countInSeason = chapters.filter(c => (c.season?.trim() || defaultSeasonName) === x).length;
+              return (
+                <button
+                  key={x}
+                  type="button"
+                  onClick={() => setSeason(x)}
+                  style={{
+                    padding: "8px 20px",
+                    borderRadius: "8px",
+                    border: isActive ? "none" : "1.5px solid rgba(255, 255, 255, 0.85)",
+                    background: isActive ? "#bef264" : "#1e1e24",
+                    color: isActive ? "#0f172a" : "#ffffff",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: isActive ? "0 4px 14px rgba(190, 242, 100, 0.35)" : "none",
+                    transition: "all 0.18s ease",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <span>{x}</span>
+                  <small style={{ fontSize: "10px", opacity: isActive ? 0.75 : 0.6 }}>({countInSeason})</small>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sắp xếp thứ tự chương theo season: Tăng dần (1 -> n) hoặc Giảm dần (n -> 1) */}
+          <div style={{ display: "flex", gap: "6px", alignItems: "center", background: "rgba(255,255,255,0.04)", padding: "4px 8px", borderRadius: "8px", border: "1px solid #2d243a" }}>
+            <span style={{ fontSize: "11px", color: "#9ca3af", marginRight: "4px" }}>Sắp xếp:</span>
+            <button
+              type="button"
+              onClick={() => setChapterSortOrder("asc")}
+              style={{
+                padding: "5px 10px",
+                borderRadius: "6px",
+                border: "1px solid",
+                borderColor: chapterSortOrder === "asc" ? "#bef264" : "transparent",
+                background: chapterSortOrder === "asc" ? "rgba(190, 242, 100, 0.18)" : "transparent",
+                color: chapterSortOrder === "asc" ? "#bef264" : "#a1a1aa",
+                fontSize: "11px",
+                fontWeight: chapterSortOrder === "asc" ? 700 : 500,
+                cursor: "pointer",
+              }}
+            >
+              ↑ Tăng dần (1 → n)
+            </button>
+            <button
+              type="button"
+              onClick={() => setChapterSortOrder("desc")}
+              style={{
+                padding: "5px 10px",
+                borderRadius: "6px",
+                border: "1px solid",
+                borderColor: chapterSortOrder === "desc" ? "#bef264" : "transparent",
+                background: chapterSortOrder === "desc" ? "rgba(190, 242, 100, 0.18)" : "transparent",
+                color: chapterSortOrder === "desc" ? "#bef264" : "#a1a1aa",
+                fontSize: "11px",
+                fontWeight: chapterSortOrder === "desc" ? 700 : 500,
+                cursor: "pointer",
+              }}
+            >
+              ↓ Giảm dần (n → 1)
+            </button>
+          </div>
         </div>
         <div className="chapter-list">
-          {filteredChapters.length === 0 ? (
+          {displayedSortedChapters.length === 0 ? (
             <div className="empty-results" style={{ height: "140px" }}>
               <b>Chưa có {currentItem.type === "Truyện" ? "chương" : "tập"} nào được thêm</b>
               <p>Nhấn nút “+ Cập nhật / Thêm {currentItem.type === "Truyện" ? "Chương" : "Tập"}” để bổ sung đường dẫn đọc/xem.</p>
             </div>
           ) : (
-            filteredChapters.map((ch, i) => (
+            displayedSortedChapters.map((ch, i) => (
               <div className="chapter" key={ch.id}>
                 <button className={`checkbox ${isChapterRead(ch, i) ? "checked" : ""}`} onClick={() => toggleChapterRead(ch, i)}>
                   {isChapterRead(ch, i) && <Icon name="check" size={14} />}
@@ -5822,11 +5987,14 @@ function PublishPage({
   const [cast, setCast] = useState("");
   const [description, setDescription] = useState("");
   const [genres, setGenres] = useState<string[]>([]);
+  const [newCustomGenre, setNewCustomGenre] = useState("");
   const [status, setStatus] = useState("Đang ra");
   const [language, setLanguage] = useState("Tiếng Việt");
   const [links, setLinks] = useState<ExternalLinkItem[]>([{ platform: "", url: "", note: "" }]);
-  const [chapters, setChapters] = useState<Array<{ number: string; title: string; url: string }>>([
-    { number: "1", title: "", url: "" },
+  const [seasonList, setSeasonList] = useState<string[]>(["Phần 1"]);
+  const [activeSeason, setActiveSeason] = useState<string>("Phần 1");
+  const [chapters, setChapters] = useState<Array<{ number: string; title: string; url: string; season?: string }>>([
+    { number: "1", title: "", url: "", season: "Phần 1" },
   ]);
   const [movieMode, setMovieMode] = useState<"Phim lẻ" | "Series">("Phim lẻ");
   const [singleMovieUrl, setSingleMovieUrl] = useState("");
@@ -5846,9 +6014,42 @@ function PublishPage({
 
   const available = type === "Truyện" ? getMangaGenres() : getMovieGenres();
   const addLink = () => setLinks([...links, { platform: "", url: "", note: "" }]);
-  const addChapter = () => setChapters([...chapters, { number: String(chapters.length + 1), title: "", url: "" }]);
-  const sortChaptersAsc = () => setChapters(sortChaptersAscending(chapters));
-  const sortChaptersDesc = () => setChapters(sortChaptersDescending(chapters));
+
+  const handleAddCustomGenre = async () => {
+    const trimmed = newCustomGenre.trim();
+    if (!trimmed) return;
+    const added = await addNewGlobalGenre(trimmed, type === "Truyện" ? "MANGA" : "MOVIE");
+    if (added && !genres.includes(added)) {
+      setGenres(prev => [...prev, added]);
+    }
+    setNewCustomGenre("");
+  };
+
+  const addSeason = () => {
+    const nextSeasonName = `Phần ${seasonList.length + 1}`;
+    setSeasonList([...seasonList, nextSeasonName]);
+    setActiveSeason(nextSeasonName);
+  };
+
+  const addChapter = () => {
+    const currentSeasonChapters = chapters.filter(c => (c.season?.trim() || "Phần 1") === activeSeason);
+    const nextNum = String(currentSeasonChapters.length + 1);
+    setChapters([...chapters, { number: nextNum, title: "", url: "", season: activeSeason }]);
+  };
+
+  const sortChaptersAsc = () => {
+    const otherChapters = chapters.filter(c => (c.season?.trim() || "Phần 1") !== activeSeason);
+    const currentSeasonChapters = chapters.filter(c => (c.season?.trim() || "Phần 1") === activeSeason);
+    const sortedCurrent = [...currentSeasonChapters].sort((a, b) => parseChapterNumber(a.number) - parseChapterNumber(b.number));
+    setChapters([...otherChapters, ...sortedCurrent]);
+  };
+
+  const sortChaptersDesc = () => {
+    const otherChapters = chapters.filter(c => (c.season?.trim() || "Phần 1") !== activeSeason);
+    const currentSeasonChapters = chapters.filter(c => (c.season?.trim() || "Phần 1") === activeSeason);
+    const sortedCurrent = [...currentSeasonChapters].sort((a, b) => parseChapterNumber(b.number) - parseChapterNumber(a.number));
+    setChapters([...otherChapters, ...sortedCurrent]);
+  };
   const moveChapterInPublish = (idx: number, dir: "up" | "down") => {
     const target = dir === "up" ? idx - 1 : idx + 1;
     if (target < 0 || target >= chapters.length) return;
@@ -5916,7 +6117,7 @@ function PublishPage({
             .filter(ch => ch.number.trim() || ch.title.trim() || ch.url.trim())
             .map((ch, idx) => ({
               id: idx + 1,
-              season: "Mùa 1",
+              season: ch.season?.trim() || "Phần 1",
               number: String(ch.number || idx + 1).trim(),
               title: ch.title.trim() || `${type === "Phim" ? "Tập" : "Chương"} ${ch.number || idx + 1}`,
               url: ch.url.trim(),
@@ -6056,6 +6257,17 @@ function PublishPage({
 
         <section className="publish-section"><div className="publish-title"><span>02</span><div><h2>Thể loại & phân loại</h2><p>Chọn nhiều thể loại phù hợp để người đọc dễ tìm thấy.</p></div></div>
           <div className="publish-genres">{available.map(g => <button className={genres.includes(g) ? "active" : ""} onClick={() => setGenres(genres.includes(g) ? genres.filter(x => x !== g) : [...genres, g])} key={g}>{g}</button>)}</div>
+          <div style={{ marginTop: "14px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "10px 14px", background: "rgba(255,255,255,0.03)", borderRadius: "8px", border: "1px solid #2d243a" }}>
+            <span style={{ fontSize: "11px", color: "#c4b5fd", fontWeight: 600 }}>+ Thêm thể loại mới:</span>
+            <input
+              value={newCustomGenre}
+              onChange={e => setNewCustomGenre(e.target.value)}
+              placeholder="Nhập tên thể loại cần thêm (VD: Tiên Hiệp, Hài Hước...)"
+              style={{ flex: 1, minWidth: "180px", maxWidth: "300px", height: "34px", padding: "0 10px", borderRadius: "6px", border: "1px solid #3c3050", background: "#0f0b16", color: "#fff", fontSize: "11px" }}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddCustomGenre(); } }}
+            />
+            <Button variant="secondary" icon="plus" onClick={handleAddCustomGenre}>+ Thêm vào bài đăng & CSDL</Button>
+          </div>
           <div className="three-fields">
             <label><span>Trạng thái</span><select value={status} onChange={e => setStatus(e.target.value)}><option value="Đang ra">Đang ra</option><option value="Hoàn thành">Hoàn thành</option><option value="Drop">Drop</option></select></label>
             <label><span>Ngôn ngữ</span><select value={language} onChange={e => setLanguage(e.target.value)}><option value="Tiếng Việt">Tiếng Việt</option><option value="Tiếng Anh">Tiếng Anh</option><option value="Tiếng Nhật">Tiếng Nhật</option><option value="Tiếng Hàn">Tiếng Hàn</option><option value="Tiếng Trung">Tiếng Trung</option></select></label>
@@ -6083,28 +6295,87 @@ function PublishPage({
           ) : (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
-                {type === "Phim" ? <div className="season-heading" style={{ margin: 0 }}><b>Mùa 1 · Khởi đầu</b></div> : <div />}
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", margin: "6px 0 12px 0" }}>
+                  <b style={{ fontSize: "11px", color: "#c4b5fd" }}>Phần / Mùa:</b>
+                  {seasonList.map(s => {
+                    const isActive = activeSeason === s;
+                    const count = chapters.filter(c => (c.season?.trim() || "Phần 1") === s).length;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setActiveSeason(s)}
+                        style={{
+                          padding: "6px 16px",
+                          borderRadius: "8px",
+                          border: isActive ? "none" : "1.5px solid rgba(255, 255, 255, 0.85)",
+                          background: isActive ? "#bef264" : "#1e1e24",
+                          color: isActive ? "#0f172a" : "#fff",
+                          fontWeight: 700,
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          boxShadow: isActive ? "0 4px 12px rgba(190, 242, 100, 0.3)" : "none",
+                        }}
+                      >
+                        {s} ({count})
+                      </button>
+                    );
+                  })}
+                  <Button variant="secondary" icon="plus" onClick={addSeason}>+ Thêm Phần mới</Button>
+                </div>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button type="button" className="btn-secondary" style={{ fontSize: "11px", padding: "4px 8px", cursor: "pointer", borderRadius: "6px" }} onClick={sortChaptersAsc} title="Sắp xếp tăng dần (1, 2, 10, 10.5)">↑ Sắp xếp tăng dần</button>
                   <button type="button" className="btn-secondary" style={{ fontSize: "11px", padding: "4px 8px", cursor: "pointer", borderRadius: "6px" }} onClick={sortChaptersDesc} title="Sắp xếp giảm dần">↓ Sắp xếp giảm dần</button>
                 </div>
               </div>
-              {chapters.map((chapter, i) => (
-                <div className="chapter-editor" key={i}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                    <button type="button" title="Di chuyển lên" disabled={i === 0} style={{ background: "none", border: "none", color: "#a855f7", cursor: i === 0 ? "not-allowed" : "pointer", opacity: i === 0 ? 0.3 : 1, fontSize: "10px", padding: "1px" }} onClick={() => moveChapterInPublish(i, "up")}>▲</button>
-                    <button type="button" title="Di chuyển xuống" disabled={i === chapters.length - 1} style={{ background: "none", border: "none", color: "#a855f7", cursor: i === chapters.length - 1 ? "not-allowed" : "pointer", opacity: i === chapters.length - 1 ? 0.3 : 1, fontSize: "10px", padding: "1px" }} onClick={() => moveChapterInPublish(i, "down")}>▼</button>
-                  </div>
-                  <div>
-                    <small>{type === "Truyện" ? "CHƯƠNG" : "TẬP"}</small>
-                    <input value={chapter.number} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, number: e.target.value } : x))} />
-                  </div>
-                  <label><span>Tiêu đề</span><input value={chapter.title} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, title: e.target.value } : x))} placeholder="Tên chương / tập" /></label>
-                  <label><span>Đường dẫn</span><input value={chapter.url} onChange={e => setChapters(chapters.map((x, index) => index === i ? { ...x, url: e.target.value } : x))} placeholder="https://..." /></label>
-                  <button type="button" onClick={() => setChapters(chapters.filter((_, index) => index !== i))}><Icon name="x" size={15} /></button>
-                </div>
-              ))}
-              <Button variant="secondary" icon="plus" onClick={addChapter}>{type === "Truyện" ? "Thêm chương" : "Thêm tập"}</Button>
+              {(() => {
+                const displayedPublishChapters = chapters.filter(c => (c.season?.trim() || "Phần 1") === activeSeason);
+                return (
+                  <>
+                    {displayedPublishChapters.length === 0 ? (
+                      <div className="empty-results" style={{ height: "100px", margin: "10px 0" }}>
+                        <b>Chưa có {type === "Truyện" ? "chương" : "tập"} nào trong {activeSeason}</b>
+                        <p>Nhấn nút “+ {type === "Truyện" ? "Thêm chương" : "Thêm tập"}” bên dưới để tạo nội dung cho {activeSeason}.</p>
+                      </div>
+                    ) : (
+                      displayedPublishChapters.map((chapter, dispIdx) => {
+                        const actualIndex = chapters.findIndex(c => c === chapter);
+                        return (
+                          <div className="chapter-editor" key={actualIndex}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                              <button type="button" title="Di chuyển lên" disabled={dispIdx === 0} style={{ background: "none", border: "none", color: "#a855f7", cursor: dispIdx === 0 ? "not-allowed" : "pointer", opacity: dispIdx === 0 ? 0.3 : 1, fontSize: "10px", padding: "1px" }} onClick={() => moveChapterInPublish(actualIndex, "up")}>▲</button>
+                              <button type="button" title="Di chuyển xuống" disabled={dispIdx === displayedPublishChapters.length - 1} style={{ background: "none", border: "none", color: "#a855f7", cursor: dispIdx === displayedPublishChapters.length - 1 ? "not-allowed" : "pointer", opacity: dispIdx === displayedPublishChapters.length - 1 ? 0.3 : 1, fontSize: "10px", padding: "1px" }} onClick={() => moveChapterInPublish(actualIndex, "down")}>▼</button>
+                            </div>
+                            <div style={{ minWidth: "90px" }}>
+                              <small>PHẦN / MÙA</small>
+                              <select
+                                value={chapter.season?.trim() || "Phần 1"}
+                                onChange={e => {
+                                  const nextS = e.target.value;
+                                  setChapters(chapters.map((x, idx) => idx === actualIndex ? { ...x, season: nextS } : x));
+                                }}
+                                style={{ width: "95px", height: "38px", borderRadius: "6px", border: "1px solid #3c3050", background: "#0b0813", color: "#c4b5fd", fontSize: "11px", padding: "0 6px" }}
+                              >
+                                {seasonList.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <small>{type === "Truyện" ? "CHƯƠNG" : "TẬP"}</small>
+                              <input value={chapter.number} onChange={e => setChapters(chapters.map((x, index) => index === actualIndex ? { ...x, number: e.target.value } : x))} />
+                            </div>
+                            <label><span>Tiêu đề</span><input value={chapter.title} onChange={e => setChapters(chapters.map((x, index) => index === actualIndex ? { ...x, title: e.target.value } : x))} placeholder="Tên chương / tập" /></label>
+                            <label><span>Đường dẫn</span><input value={chapter.url} onChange={e => setChapters(chapters.map((x, index) => index === actualIndex ? { ...x, url: e.target.value } : x))} placeholder="https://..." /></label>
+                            <button type="button" onClick={() => setChapters(chapters.filter((_, index) => index !== actualIndex))}><Icon name="x" size={15} /></button>
+                          </div>
+                        );
+                      })
+                    )}
+                    <Button variant="secondary" icon="plus" onClick={addChapter}>
+                      + {type === "Truyện" ? "Thêm chương" : "Thêm tập"} vào {activeSeason}
+                    </Button>
+                  </>
+                );
+              })()}
             </>
           )}
         </section>
@@ -9904,16 +10175,37 @@ function AdminPage({ setPage, contents, setContents, onSelectTitle }: { setPage:
           <h3>Quản lý Thể loại MySQL ({genreList.length})</h3>
           <span style={{ fontSize: "11px", color: "#a78bfa" }}>Đồng bộ 2 chiều CSDL TiDB Cloud</span>
         </div>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #272030", display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1.2fr auto", gap: "8px", alignItems: "center" }}>
-          <input className="admin-select" value={newGenre.name} onChange={e => setNewGenre({ ...newGenre, name: e.target.value })} placeholder="* Tên thể loại (VD: Isekai)" />
-          <input className="admin-select" value={newGenre.slug} onChange={e => setNewGenre({ ...newGenre, slug: e.target.value })} placeholder="Slug (tự tạo nếu trống)" />
-          <select className="admin-select" value={newGenre.applicableType} onChange={e => setNewGenre({ ...newGenre, applicableType: e.target.value as "BOTH" | "MANGA" | "MOVIE" })}>
-            <option value="BOTH">Áp dụng: Cả hai (Truyện & Phim)</option>
-            <option value="MANGA">Áp dụng: Chỉ Truyện (Manga)</option>
-            <option value="MOVIE">Áp dụng: Chỉ Phim (Movie)</option>
-          </select>
-          <input className="admin-select" value={newGenre.desc} onChange={e => setNewGenre({ ...newGenre, desc: e.target.value })} placeholder="Mô tả thể loại..." />
-          <Button icon="plus" onClick={handleCreateGenre}>+ Thêm Thể loại Mới</Button>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #272030", background: "rgba(139, 92, 246, 0.04)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#c4b5fd" }}>+ THÊM THỂ LOẠI MỚI VÀO CSDL MYSQL:</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+            <label className="admin-field" style={{ margin: 0 }}>
+              <span style={{ fontSize: "9px" }}>* Tên thể loại</span>
+              <input value={newGenre.name} onChange={e => setNewGenre({ ...newGenre, name: e.target.value })} placeholder="VD: Isekai, Trọng Sinh..." />
+            </label>
+            <label className="admin-field" style={{ margin: 0 }}>
+              <span style={{ fontSize: "9px" }}>Slug URL</span>
+              <input value={newGenre.slug} onChange={e => setNewGenre({ ...newGenre, slug: e.target.value })} placeholder="Tự tạo nếu để trống..." />
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr auto", gap: "10px", alignItems: "end" }}>
+            <label className="admin-field" style={{ margin: 0 }}>
+              <span style={{ fontSize: "9px" }}>Phạm vi áp dụng</span>
+              <select value={newGenre.applicableType} onChange={e => setNewGenre({ ...newGenre, applicableType: e.target.value as "BOTH" | "MANGA" | "MOVIE" })}>
+                <option value="BOTH">Áp dụng: Cả hai (Truyện & Phim)</option>
+                <option value="MANGA">Áp dụng: Chỉ Truyện (Manga)</option>
+                <option value="MOVIE">Áp dụng: Chỉ Phim (Movie)</option>
+              </select>
+            </label>
+            <label className="admin-field" style={{ margin: 0 }}>
+              <span style={{ fontSize: "9px" }}>Mô tả ngắn</span>
+              <input value={newGenre.desc} onChange={e => setNewGenre({ ...newGenre, desc: e.target.value })} placeholder="Mô tả thể loại..." />
+            </label>
+            <Button icon="plus" onClick={handleCreateGenre} style={{ height: "37px", whiteSpace: "nowrap" }}>
+              + Thêm Thể loại Mới
+            </Button>
+          </div>
         </div>
         <table className="admin-table">
           <thead><tr><th>TÊN THỂ LOẠI</th><th>SLUG</th><th>ÁP DỤNG</th><th>LIÊN KẾT</th><th>MÔ TẢ</th><th>THAO TÁC</th></tr></thead>
@@ -10414,7 +10706,7 @@ function AdminPage({ setPage, contents, setContents, onSelectTitle }: { setPage:
             <small style={{ color: "#9c70f8", fontSize: "10px" }}>Hiển thị danh sách thể loại chuẩn cho {editingContent.type}</small>
           </div>
           <div className="admin-genre-picks">
-            {(editingContent.type === "Truyện" ? mangaGenres : movieGenres).map(g => (
+            {(editingContent.type === "Truyện" ? getMangaGenres() : getMovieGenres()).map(g => (
               <button
                 key={g}
                 type="button"
@@ -10429,6 +10721,43 @@ function AdminPage({ setPage, contents, setContents, onSelectTitle }: { setPage:
                 {g}
               </button>
             ))}
+          </div>
+          <div style={{ display: "flex", gap: "8px", marginTop: "10px", alignItems: "center" }}>
+            <input
+              placeholder="Nhập tên thể loại mới cần thêm..."
+              id="admin-quick-add-genre-input"
+              style={{ flex: 1, height: "34px", fontSize: "11px" }}
+              onKeyDown={async e => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const val = (e.target as HTMLInputElement).value.trim();
+                  if (val) {
+                    const added = await addNewGlobalGenre(val, editingContent.type === "Truyện" ? "MANGA" : "MOVIE");
+                    if (added && !editingContent.genres.includes(added)) {
+                      setEditingContent(prev => prev ? { ...prev, genres: [...prev.genres, added] } : prev);
+                    }
+                    (e.target as HTMLInputElement).value = "";
+                  }
+                }
+              }}
+            />
+            <Button
+              variant="secondary"
+              icon="plus"
+              onClick={async () => {
+                const input = document.getElementById("admin-quick-add-genre-input") as HTMLInputElement;
+                const val = input?.value?.trim();
+                if (val) {
+                  const added = await addNewGlobalGenre(val, editingContent.type === "Truyện" ? "MANGA" : "MOVIE");
+                  if (added && !editingContent.genres.includes(added)) {
+                    setEditingContent(prev => prev ? { ...prev, genres: [...prev.genres, added] } : prev);
+                  }
+                  input.value = "";
+                }
+              }}
+            >
+              + Thêm thể loại
+            </Button>
           </div>
         </div>
 
