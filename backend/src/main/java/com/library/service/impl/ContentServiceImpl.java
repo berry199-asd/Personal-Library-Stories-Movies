@@ -267,7 +267,12 @@ public class ContentServiceImpl implements ContentService {
         content.setTitle(request.getTitle().trim());
         content.setContentType(request.getContentType());
         if (request.getIsSeries() != null) content.setIsSeries(request.getIsSeries());
-        if (request.getPosterUrl() != null) content.setPosterUrl(request.getPosterUrl());
+        if (request.getPosterUrl() != null && !request.getPosterUrl().isBlank()) {
+            String pUrl = request.getPosterUrl().trim();
+            if (pUrl.startsWith("http://") || pUrl.startsWith("https://") || pUrl.startsWith("data:image/")) {
+                content.setPosterUrl(pUrl);
+            }
+        }
         if (request.getAuthorOrDirector() != null) content.setAuthorOrDirector(request.getAuthorOrDirector());
         if (request.getDescription() != null) content.setDescription(request.getDescription());
         if (request.getStatus() != null) content.setStatus(request.getStatus());

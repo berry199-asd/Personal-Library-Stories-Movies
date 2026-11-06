@@ -1556,11 +1556,20 @@ function PublishedWorkEditorModal({
     genres: Array.isArray(initialItem.genres) ? [...initialItem.genres] : [],
   });
 
+  const [coverUrlInput, setCoverUrlInput] = useState(
+    initialItem.img && (initialItem.img.startsWith("http://") || initialItem.img.startsWith("https://")) ? initialItem.img : ""
+  );
+  const [coverUrlError, setCoverUrlError] = useState(false);
+
   const isOwner = isUserItemOwner(initialItem);
 
   const handleCoverUpload = (file?: File) => {
     if (!file) return;
-    compressImageFile(file, compressed => setDraft(prev => ({ ...prev, img: compressed })));
+    setCoverUrlError(false);
+    compressImageFile(file, compressed => {
+      setDraft(prev => ({ ...prev, img: compressed }));
+      saveCustomCover(draft.title, compressed);
+    });
   };
 
   const linksList = draft.externalLinks || [];
@@ -1595,13 +1604,58 @@ function PublishedWorkEditorModal({
 
         <div className="admin-form-grid">
           <div className="admin-poster-preview" style={{ position: "relative" }}>
-            <img src={draft.img || photos.hero} alt={draft.title} />
+            <img src={draft.img || photos.hero} alt={draft.title} onError={() => setCoverUrlError(true)} />
             <label className="upload-cover-overlay">
-              📷 Đổi ảnh bìa
+              📷 Tải ảnh file
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => handleCoverUpload(e.target.files?.[0])} />
             </label>
+            {draft.img && (
+              <button
+                type="button"
+                style={{ marginTop: "6px", width: "100%", background: "rgba(239, 68, 68, 0.15)", color: "#f87171", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "6px", padding: "5px 8px", fontSize: "11px", cursor: "pointer", fontWeight: 600 }}
+                onClick={() => {
+                  setDraft(prev => ({ ...prev, img: "" }));
+                  setCoverUrlInput("");
+                  setCoverUrlError(false);
+                }}
+              >
+                ✕ Xóa ảnh bìa
+              </button>
+            )}
           </div>
           <div>
+            <label className="admin-field" style={{ marginBottom: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Link ảnh bìa (Cover Image URL)</span>
+                {coverUrlInput && (
+                  <button
+                    type="button"
+                    style={{ background: "none", border: "none", color: "#f87171", fontSize: "11px", cursor: "pointer", fontWeight: 600 }}
+                    onClick={() => {
+                      setCoverUrlInput("");
+                      if (draft.img === coverUrlInput) setDraft(prev => ({ ...prev, img: "" }));
+                    }}
+                  >
+                    ✕ Xóa link
+                  </button>
+                )}
+              </div>
+              <input
+                type="url"
+                value={coverUrlInput}
+                onChange={e => {
+                  const val = e.target.value;
+                  setCoverUrlInput(val);
+                  setCoverUrlError(false);
+                  if (val.trim()) {
+                    setDraft(prev => ({ ...prev, img: val.trim() }));
+                    saveCustomCover(draft.title, val.trim());
+                  }
+                }}
+                placeholder="https://example.com/cover.jpg"
+              />
+              {coverUrlError && <small style={{ color: "#f87171", marginTop: "3px", display: "block" }}>⚠️ Không thể tải ảnh từ URL này. Vui lòng kiểm tra lại đường dẫn.</small>}
+            </label>
             <div className="admin-field-two">
               <label className="admin-field">
                 <span>Tên Truyện / Phim *</span>
@@ -5336,6 +5390,8 @@ function PublishPage({
   const [shareUserInput, setShareUserInput] = useState("");
   const [allowComments, setAllowComments] = useState(true);
   const [cover, setCover] = useState("");
+  const [coverUrl, setCoverUrl] = useState("");
+  const [coverUrlError, setCoverUrlError] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [dialog, setDialog] = useState("");
@@ -5451,8 +5507,70 @@ function PublishPage({
       <div className="publish-form">
         <section className="publish-section"><div className="publish-title"><span>01</span><div><h2>Thông tin cơ bản</h2><p>Những thông tin đầu tiên giúp cộng đồng nhận biết tác phẩm.</p></div></div>
           <div className="type-switch"><button className={type === "Truyện" ? "active" : ""} onClick={() => { setType("Truyện"); setGenres([]); }}>Truyện <small>Manga / Story</small></button><button className={type === "Phim" ? "active" : ""} onClick={() => { setType("Phim"); setGenres([]); }}>Phim <small>Movie / Series</small></button></div>
-          <div className="cover-form"><label className="cover-upload">{cover ? <img src={cover} alt="Xem trước ảnh bìa" /> : <><Icon name="plus" size={25} /><b>Kéo thả ảnh bìa tại đây</b><span>PNG, JPG · Tỷ lệ đề xuất 2:3</span></>}<input type="file" accept="image/*" onChange={e => upload(e.target.files?.[0])} /></label>
+          <div className="cover-form">
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "170px" }}>
+              <label className="cover-upload" style={{ position: "relative", minHeight: "220px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+                {cover ? (
+                  <img src={cover} alt="Xem trước ảnh bìa" onError={() => setCoverUrlError(true)} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "10px" }} />
+                ) : (
+                  <><Icon name="plus" size={25} /><b>Kéo thả ảnh bìa tại đây</b><span>PNG, JPG · Tỷ lệ 2:3</span></>
+                )}
+                <input type="file" accept="image/*" onChange={e => { setCoverUrlError(false); upload(e.target.files?.[0]); }} />
+              </label>
+              {cover && (
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    type="button"
+                    style={{ flex: 1, padding: "5px 8px", fontSize: "11px", borderRadius: "6px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", cursor: "pointer" }}
+                    onClick={() => {
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.accept = "image/*";
+                      input.onchange = (ev: any) => { setCoverUrlError(false); upload(ev.target.files?.[0]); };
+                      input.click();
+                    }}
+                  >
+                    📷 Đổi ảnh file
+                  </button>
+                  <button
+                    type="button"
+                    style={{ padding: "5px 8px", fontSize: "11px", borderRadius: "6px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", cursor: "pointer", fontWeight: 600 }}
+                    onClick={() => { setCover(""); setCoverUrl(""); setCoverUrlError(false); }}
+                  >
+                    ✕ Xóa
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="publish-fields">
+              <label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Link ảnh bìa (Cover Image URL)</span>
+                  {coverUrl && (
+                    <button
+                      type="button"
+                      style={{ background: "none", border: "none", color: "#f87171", fontSize: "11px", cursor: "pointer", fontWeight: 600 }}
+                      onClick={() => { setCoverUrl(""); if (cover === coverUrl) setCover(""); }}
+                    >
+                      ✕ Xóa link
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  value={coverUrl}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setCoverUrl(val);
+                    setCoverUrlError(false);
+                    if (val.trim()) {
+                      setCover(val.trim());
+                    }
+                  }}
+                  placeholder="https://example.com/cover.jpg"
+                />
+                {coverUrlError && <small style={{ color: "#f87171", marginTop: "3px", display: "block" }}>⚠️ Không thể tải ảnh từ URL này. Vui lòng kiểm tra lại link.</small>}
+              </label>
               <label><span>Tên truyện / phim *</span><input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ví dụ: Cẩn thận thú dữ" /></label>
               <label><span>Mô tả ngắn</span><textarea value={shortDescription} onChange={e => setShortDescription(e.target.value)} placeholder="Tên khác, thể loại tóm tắt hoặc câu giới thiệu ngắn gọn..." /></label>
               {type === "Truyện" ? (
