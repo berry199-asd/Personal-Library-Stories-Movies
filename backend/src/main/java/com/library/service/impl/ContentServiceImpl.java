@@ -234,13 +234,33 @@ public class ContentServiceImpl implements ContentService {
             }
         }
 
+        java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
+        if (request.getSeasonTitles() != null && !request.getSeasonTitles().isEmpty()) {
+            int sNum = 1;
+            for (String rawTitle : request.getSeasonTitles()) {
+                if (rawTitle != null && !rawTitle.isBlank()) {
+                    String cleanTitle = rawTitle.trim();
+                    if (!seasonMap.containsKey(cleanTitle)) {
+                        Season s = Season.builder()
+                                .content(saved)
+                                .seasonNumber(sNum++)
+                                .title(cleanTitle)
+                                .build();
+                        Season savedSeason = seasonRepository.save(s);
+                        seasonMap.put(cleanTitle, savedSeason);
+                        saved.getSeasons().add(savedSeason);
+                    }
+                }
+            }
+        }
+
         if (request.getChapters() != null && !request.getChapters().isEmpty()) {
-                        java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
-                if (chReq.getExternalLink() == null || chReq.getExternalLink().isBlank()) {
-                    continue;
-                }
+                String extLink = chReq.getExternalLink() != null && !chReq.getExternalLink().isBlank()
+                        ? chReq.getExternalLink().trim()
+                        : (saved.getExternalMainLink() != null && !saved.getExternalMainLink().isBlank() ? saved.getExternalMainLink().trim() : "#");
+
                 java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
 
                 Season season = null;
@@ -253,7 +273,9 @@ public class ContentServiceImpl implements ContentService {
                                 .seasonNumber(sNum)
                                 .title(sTitle)
                                 .build();
-                        seasonMap.put(sTitle, seasonRepository.save(s));
+                        Season savedSeason = seasonRepository.save(s);
+                        seasonMap.put(sTitle, savedSeason);
+                        saved.getSeasons().add(savedSeason);
                     }
                     season = seasonMap.get(sTitle);
                 }
@@ -264,7 +286,7 @@ public class ContentServiceImpl implements ContentService {
                         .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
                         .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
-                        .externalLink(chReq.getExternalLink().trim())
+                        .externalLink(extLink)
                         .notes(chReq.getNotes())
                         .build();
                 saved.getChapters().add(chapterRepository.save(chapter));
@@ -305,14 +327,41 @@ public class ContentServiceImpl implements ContentService {
             content.setGenres(genres);
         }
 
+        java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
+        var existingDbSeasons = seasonRepository.findByContentIdOrderBySeasonNumberAsc(content.getId());
+        for (Season s : existingDbSeasons) {
+            if (s.getTitle() != null) {
+                seasonMap.put(s.getTitle().trim(), s);
+            }
+        }
+
+        if (request.getSeasonTitles() != null && !request.getSeasonTitles().isEmpty()) {
+            int sNum = 1;
+            for (String rawTitle : request.getSeasonTitles()) {
+                if (rawTitle != null && !rawTitle.isBlank()) {
+                    String cleanTitle = rawTitle.trim();
+                    if (!seasonMap.containsKey(cleanTitle)) {
+                        Season s = Season.builder()
+                                .content(content)
+                                .seasonNumber(sNum++)
+                                .title(cleanTitle)
+                                .build();
+                        Season savedSeason = seasonRepository.save(s);
+                        seasonMap.put(cleanTitle, savedSeason);
+                        content.getSeasons().add(savedSeason);
+                    }
+                }
+            }
+        }
+
         if (request.getChapters() != null) {
             content.getChapters().clear();
-            java.util.Map<String, Season> seasonMap = new java.util.HashMap<>();
             int order = 1;
             for (ChapterRequest chReq : request.getChapters()) {
-                if (chReq.getExternalLink() == null || chReq.getExternalLink().isBlank()) {
-                    continue;
-                }
+                String extLink = chReq.getExternalLink() != null && !chReq.getExternalLink().isBlank()
+                        ? chReq.getExternalLink().trim()
+                        : (content.getExternalMainLink() != null && !content.getExternalMainLink().isBlank() ? content.getExternalMainLink().trim() : "#");
+
                 java.math.BigDecimal chNum = chReq.getChapterNumber() != null ? chReq.getChapterNumber() : java.math.BigDecimal.valueOf(order);
 
                 Season season = null;
@@ -325,7 +374,9 @@ public class ContentServiceImpl implements ContentService {
                                 .seasonNumber(sNum)
                                 .title(sTitle)
                                 .build();
-                        seasonMap.put(sTitle, seasonRepository.save(s));
+                        Season savedSeason = seasonRepository.save(s);
+                        seasonMap.put(sTitle, savedSeason);
+                        content.getSeasons().add(savedSeason);
                     }
                     season = seasonMap.get(sTitle);
                 }
@@ -336,7 +387,7 @@ public class ContentServiceImpl implements ContentService {
                         .chapterNumber(chNum)
                         .displayOrder(chReq.getDisplayOrder() != null ? chReq.getDisplayOrder() : order++)
                         .title(chReq.getTitle() != null && !chReq.getTitle().isBlank() ? chReq.getTitle() : "Tập " + chNum)
-                        .externalLink(chReq.getExternalLink().trim())
+                        .externalLink(extLink)
                         .notes(chReq.getNotes())
                         .build();
                 content.getChapters().add(chapterRepository.save(chapter));

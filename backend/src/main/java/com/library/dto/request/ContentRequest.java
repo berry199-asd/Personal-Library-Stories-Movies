@@ -44,5 +44,7 @@ public class ContentRequest {
 
     private Set<Long> genreIds;
 
+    private List<String> seasonTitles;
+
     private List<ChapterRequest> chapters;
 }

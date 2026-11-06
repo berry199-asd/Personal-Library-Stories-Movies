@@ -7,7 +7,9 @@ import com.library.enums.ContentVisibility;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Getter
@@ -32,6 +34,7 @@ public class ContentResponse {
     private String createdByUsername;
     private Double averageRating;
     private List<GenreResponse> genres;
+    private List<String> seasonTitles;
     private List<ChapterResponse> chapters;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -43,6 +46,28 @@ public class ContentResponse {
                         .filter(s -> !s.isEmpty())
                         .collect(Collectors.toList())
                 : List.of();
+
+        List<String> sTitles = new ArrayList<>();
+        if (content.getSeasons() != null && !content.getSeasons().isEmpty()) {
+            content.getSeasons().stream()
+                    .map(com.library.entity.Season::getTitle)
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .distinct()
+                    .forEach(sTitles::add);
+        }
+        if (content.getChapters() != null && !content.getChapters().isEmpty()) {
+            content.getChapters().stream()
+                    .map(ch -> ch.getSeason() != null ? ch.getSeason().getTitle() : null)
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .distinct()
+                    .forEach(st -> {
+                        if (!sTitles.contains(st)) sTitles.add(st);
+                    });
+        }
 
         return ContentResponse.builder()
                 .id(content.getId())
@@ -62,6 +87,7 @@ public class ContentResponse {
                 .genres(content.getGenres() != null
                         ? content.getGenres().stream().map(GenreResponse::fromEntity).collect(Collectors.toList())
                         : List.of())
+                .seasonTitles(sTitles)
                 .chapters(includeChapters && content.getChapters() != null
                         ? content.getChapters().stream().map(ChapterResponse::fromEntity).collect(Collectors.toList())
                         : null)
