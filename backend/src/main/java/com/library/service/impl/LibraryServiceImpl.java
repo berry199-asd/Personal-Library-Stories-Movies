@@ -4,6 +4,10 @@ import com.library.dto.request.LibraryEntryRequest;
 import com.library.dto.response.ContentResponse;
 import com.library.dto.response.LibraryEntryResponse;
 import com.library.dto.response.PageResponse;
+import com.library.dto.response.ReadingProgressResponse;
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.Objects;
 import com.library.entity.*;
 import com.library.enums.ContentType;
 import com.library.enums.LibraryVisibility;
@@ -167,6 +171,49 @@ public class LibraryServiceImpl implements LibraryService {
 
     @Override
     @Transactional(readOnly = true)
+    public ReadingProgressResponse getReadingProgress(Long userId, Long contentId) {
+        List<Chapter> allChapters = chapterRepository.findByContentIdOrderByDisplayOrderAscChapterNumberAsc(contentId);
+        List<ReadingWatchingProgress> progresses = progressRepository.findByUserIdAndContentId(userId, contentId);
+
+        List<ReadingWatchingProgress> completedProgresses = progresses.stream()
+                .filter(p -> Boolean.TRUE.equals(p.getIsCompleted()))
+                .collect(Collectors.toList());
+
+        List<Long> completedIds = completedProgresses.stream()
+                .map(p -> p.getChapter().getId())
+                .collect(Collectors.toList());
+
+        List<Double> completedNumbers = completedProgresses.stream()
+                .map(p -> p.getChapter().getChapterNumber())
+                .filter(Objects::nonNull)
+                .map(java.math.BigDecimal::doubleValue)
+                .collect(Collectors.toList());
+
+        ReadingWatchingProgress lastAccessed = progresses.stream()
+                .filter(p -> p.getLastAccessedAt() != null)
+                .max(Comparator.comparing(ReadingWatchingProgress::getLastAccessedAt))
+                .orElse(null);
+
+        Long lastReadId = lastAccessed != null && lastAccessed.getChapter() != null ? lastAccessed.getChapter().getId() : null;
+        Double lastReadNumber = lastAccessed != null && lastAccessed.getChapter() != null && lastAccessed.getChapter().getChapterNumber() != null ? lastAccessed.getChapter().getChapterNumber().doubleValue() : null;
+        String lastReadTitle = lastAccessed != null && lastAccessed.getChapter() != null ? lastAccessed.getChapter().getTitle() : null;
+        LocalDateTime lastTime = lastAccessed != null ? lastAccessed.getLastAccessedAt() : null;
+
+        return ReadingProgressResponse.builder()
+                .contentId(contentId)
+                .completedChapterIds(completedIds)
+                .completedChapterNumbers(completedNumbers)
+                .completedCount(completedIds.size())
+                .totalChapters(allChapters.size())
+                .lastReadChapterId(lastReadId)
+                .lastReadChapterNumber(lastReadNumber)
+                .lastReadChapterTitle(lastReadTitle)
+                .lastAccessedAt(lastTime)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Long> getCompletedChapterIds(Long userId, Long contentId) {
         return progressRepository.findByUserIdAndContentId(userId, contentId)
                 .stream()
@@ -178,15 +225,40 @@ public class LibraryServiceImpl implements LibraryService {
     @Override
     @Transactional
     public boolean toggleChapterProgress(Long userId, Long chapterId) {
+        return toggleChapterProgress(userId, null, chapterId, null);
+    }
+
+    @Override
+    @Transactional
+    public boolean toggleChapterProgress(Long userId, Long contentId, Long chapterId, Double chapterNumber) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng #" + userId));
-        Chapter chapter = chapterRepository.findById(chapterId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chương/tập #" + chapterId));
 
-        Optional<ReadingWatchingProgress> existing = progressRepository.findByUserIdAndChapterId(userId, chapterId);
+        Chapter chapter = null;
+        if (chapterId != null) {
+            chapter = chapterRepository.findById(chapterId).orElse(null);
+        }
+
+        if (chapter == null && contentId != null && chapterNumber != null) {
+            List<Chapter> chapters = chapterRepository.findByContentIdOrderByDisplayOrderAscChapterNumberAsc(contentId);
+            chapter = chapters.stream()
+                    .filter(c -> c.getChapterNumber() != null && Math.abs(c.getChapterNumber().doubleValue() - chapterNumber) < 0.001)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (chapter == null && chapterId != null) {
+            throw new ResourceNotFoundException("Không tìm thấy chương/tập #" + chapterId);
+        }
+        if (chapter == null) {
+            throw new ResourceNotFoundException("Không tìm thấy thông tin chương/tập để cập nhật tiến độ");
+        }
+
+        Optional<ReadingWatchingProgress> existing = progressRepository.findByUserIdAndChapterId(userId, chapter.getId());
         if (existing.isPresent()) {
             ReadingWatchingProgress progress = existing.get();
             progress.setIsCompleted(!Boolean.TRUE.equals(progress.getIsCompleted()));
+            progress.setLastAccessedAt(LocalDateTime.now());
             return progressRepository.save(progress).getIsCompleted();
         } else {
             ReadingWatchingProgress progress = ReadingWatchingProgress.builder()
@@ -194,6 +266,7 @@ public class LibraryServiceImpl implements LibraryService {
                     .content(chapter.getContent())
                     .chapter(chapter)
                     .isCompleted(true)
+                    .lastAccessedAt(LocalDateTime.now())
                     .build();
             return progressRepository.save(progress).getIsCompleted();
         }

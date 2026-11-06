@@ -384,9 +384,9 @@ public class ContentServiceImpl implements ContentService {
         }
 
         try {
-            jdbcTemplate.update("DELETE FROM reading_progress WHERE content_id = ?", contentId);
+            jdbcTemplate.update("DELETE FROM reading_watching_progress WHERE content_id = ?", contentId);
         } catch (Exception e) {
-            log.warn("Notice deleting reading_progress for content #{}: {}", contentId, e.getMessage());
+            log.warn("Notice deleting reading_watching_progress for content #{}: {}", contentId, e.getMessage());
         }
 
         try {

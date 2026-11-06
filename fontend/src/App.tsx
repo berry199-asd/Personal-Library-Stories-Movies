@@ -3187,7 +3187,16 @@ function DetailPage({
   const activeUser = currentUser || getActiveUser();
   const [season, setSeason] = useState("Mùa 1");
   const [reviewTab, setReviewTab] = useState("Bình luận chung");
-  const [readChapters, setReadChapters] = useState<number[]>([]);
+  const [readChapterKeys, setReadChapterKeys] = useState<string[]>(() => {
+    try {
+      const u = activeUser?.username || "default";
+      const cached = window.localStorage.getItem(`pl_read_keys_${u}_${matchedItem?.title || ""}`);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [];
+  });
+  const [readChapterNumbers, setReadChapterNumbers] = useState<number[]>([]);
+  const [lastReadInfo, setLastReadInfo] = useState<{ number?: number; title?: string } | null>(null);
   const [spoilerRevealed, setSpoilerRevealed] = useState(false);
   const [detailToast, setDetailToast] = useState("");
   const [userRating, setUserRating] = useState(5);
@@ -3286,11 +3295,134 @@ function DetailPage({
       ? [{ platform: "Đường dẫn đọc / xem", url: currentItem.mainLink.trim(), note: "" }]
       : [];
 
-  const toggleChapterRead = (idx: number) => {
-    const nextRead = readChapters.includes(idx) ? readChapters.filter(x => x !== idx) : [...readChapters, idx];
-    setReadChapters(nextRead);
-    onUpdateProgress?.(currentItem.title, idx + 1, Math.max(1, chapters.length));
+  const getChapterKey = (ch: PublishedChapterItem, idx: number): string => {
+    return ch.id ? `id_${ch.id}` : `num_${ch.number || idx + 1}`;
   };
+
+  const isChapterRead = (ch: PublishedChapterItem, idx: number): boolean => {
+    const key = getChapterKey(ch, idx);
+    const num = parseChapterNumber(ch.number);
+    return readChapterKeys.includes(key) ||
+           (ch.id != null && readChapterKeys.includes(String(ch.id))) ||
+           (readChapterNumbers.includes(num));
+  };
+
+  // Next unread chapter calculation
+  const completedCount = chapters.filter((c, i) => isChapterRead(c, i)).length;
+  const nextUnreadChapter = chapters.find((c, i) => !isChapterRead(c, i));
+  const continueTargetChapter = nextUnreadChapter || (chapters.length > 0 ? chapters[chapters.length - 1] : null);
+
+  const toggleChapterRead = async (ch: PublishedChapterItem, idx: number) => {
+    const key = getChapterKey(ch, idx);
+    const num = parseChapterNumber(ch.number);
+    const currentlyRead = isChapterRead(ch, idx);
+    const nextReadKeys = currentlyRead
+      ? readChapterKeys.filter(k => k !== key && k !== String(ch.id))
+      : [...readChapterKeys, key, ...(ch.id ? [String(ch.id)] : [])];
+    const nextReadNums = currentlyRead
+      ? readChapterNumbers.filter(n => n !== num)
+      : [...readChapterNumbers, num];
+
+    setReadChapterKeys(nextReadKeys);
+    setReadChapterNumbers(nextReadNums);
+    if (!currentlyRead) {
+      setLastReadInfo({ number: num, title: ch.title });
+    }
+
+    // Cache locally
+    try {
+      const u = activeUser?.username || "default";
+      window.localStorage.setItem(`pl_read_keys_${u}_${currentItem.title}`, JSON.stringify(nextReadKeys));
+    } catch {}
+
+    // Update overall reading progress
+    const completedCount = chapters.filter((c, i) => {
+      const k = getChapterKey(c, i);
+      const n = parseChapterNumber(c.number);
+      return nextReadKeys.includes(k) || (c.id != null && nextReadKeys.includes(String(c.id))) || nextReadNums.includes(n);
+    }).length;
+    onUpdateProgress?.(currentItem.title, completedCount, Math.max(1, chapters.length));
+
+    // Send to backend MySQL
+    const backendBase = getBackendApiBase();
+    if (backendBase) {
+      try {
+        const cleanUser = (activeUser?.username || "anhquyphi").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        };
+        let targetId = currentItem.id;
+        if (!targetId && currentItem.title) {
+          const resId = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(currentItem.title.trim())}`);
+          if (resId.ok) {
+            const dataId = await resId.json();
+            if (dataId?.data?.id) targetId = dataId.data.id;
+          }
+        }
+
+        const url = ch.id
+          ? `${backendBase}/api/library/chapters/${ch.id}/toggle-progress?contentId=${targetId || ""}&chapterNumber=${num}&username=${encodeURIComponent(cleanUser)}`
+          : `${backendBase}/api/library/${targetId}/toggle-progress?chapterNumber=${num}&username=${encodeURIComponent(cleanUser)}`;
+
+        await fetch(url, { method: "POST", headers });
+      } catch (e) {
+        console.warn("Failed to persist chapter progress to backend:", e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadReadingProgress = async () => {
+      const backendBase = getBackendApiBase();
+      if (!backendBase || !currentItem) return;
+      let targetId = currentItem.id;
+      if (!targetId && currentItem.title) {
+        try {
+          const resId = await fetch(`${backendBase}/api/contents/by-title?title=${encodeURIComponent(currentItem.title.trim())}`);
+          if (resId.ok) {
+            const dataId = await resId.json();
+            if (dataId?.data?.id) targetId = dataId.data.id;
+          }
+        } catch {}
+      }
+      if (!targetId) return;
+
+      try {
+        const cleanUser = (activeUser?.username || "anhquyphi").replace(/^@/, "");
+        const token = window.localStorage.getItem("personal_library_access_token");
+        const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+        const res = await fetch(`${backendBase}/api/library/${targetId}/progress?username=${encodeURIComponent(cleanUser)}`, { headers });
+        if (res.ok && !cancelled) {
+          const body = await res.json();
+          const prog = body?.data;
+          if (prog) {
+            const completedIds: number[] = Array.isArray(prog.completedChapterIds) ? prog.completedChapterIds : [];
+            const completedNums: number[] = Array.isArray(prog.completedChapterNumbers) ? prog.completedChapterNumbers : [];
+            const keys: string[] = [];
+            completedIds.forEach(id => keys.push(`id_${id}`, String(id)));
+            setReadChapterKeys(keys);
+            setReadChapterNumbers(completedNums);
+            if (prog.lastReadChapterNumber != null) {
+              setLastReadInfo({ number: prog.lastReadChapterNumber, title: prog.lastReadChapterTitle });
+            }
+            try {
+              const u = activeUser?.username || "default";
+              window.localStorage.setItem(`pl_read_keys_${u}_${currentItem.title}`, JSON.stringify(keys));
+            } catch {}
+            onUpdateProgress?.(currentItem.title, prog.completedCount || completedIds.length, Math.max(1, chapters.length));
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to fetch reading progress:", e);
+      }
+    };
+
+    loadReadingProgress();
+    return () => { cancelled = true; };
+  }, [currentItem?.id, currentItem?.title, activeUser?.username]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3672,6 +3804,25 @@ function DetailPage({
               Sửa bài đăng
             </Button>
           )}
+          {continueTargetChapter && (
+            <Button
+              variant="secondary"
+              icon="arrow"
+              onClick={() => {
+                const url = continueTargetChapter.url?.trim() || currentItem.mainLink?.trim();
+                if (url) {
+                  window.open(url.startsWith("http") ? url : `https://${url}`, "_blank", "noopener,noreferrer");
+                  setDetailToast(`Đang mở ${currentItem.type === "Phim" ? "tập" : "chương"} ${continueTargetChapter.number}: “${continueTargetChapter.title || ""}”...`);
+                } else {
+                  setDetailToast(`${currentItem.type === "Phim" ? "Tập" : "Chương"} này chưa có liên kết xem/đọc.`);
+                }
+              }}
+            >
+              {nextUnreadChapter
+                ? (currentItem.type === "Phim" ? `▶ Xem tiếp Tập ${nextUnreadChapter.number}` : `📖 Đọc tiếp Chương ${nextUnreadChapter.number}`)
+                : (currentItem.type === "Phim" ? "Đã xem hết các tập" : "Đã đọc hết các chương")}
+            </Button>
+          )}
           <Button variant="ghost" icon="share" onClick={() => onOpenShareToChat?.(currentItem)}>Chia sẻ qua Chat</Button>
           <Button variant="ghost" icon="flag" onClick={() => onOpenReport?.("CONTENT", currentItem.title)}>Báo cáo</Button>
         </div>
@@ -3774,6 +3925,23 @@ function DetailPage({
             </Button>
           )}
         </div>
+        {chapters.length > 0 && (
+          <div style={{ marginBottom: "12px", background: "rgba(255,255,255,0.03)", padding: "10px 14px", borderRadius: "10px", border: "1px solid #2d243a" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", marginBottom: "6px" }}>
+              <span style={{ color: "#c4b5fd", fontWeight: 600 }}>
+                📊 Tiến độ {currentItem.type === "Truyện" ? "đọc" : "xem"}: {completedCount} / {chapters.length} {currentItem.type === "Truyện" ? "chương" : "tập"} ({Math.round((completedCount / Math.max(1, chapters.length)) * 100)}%)
+              </span>
+              {lastReadInfo?.number != null && (
+                <span style={{ color: "#a78bfa", fontSize: "11px" }}>
+                  Mới nhất: {currentItem.type === "Truyện" ? "Chương" : "Tập"} {lastReadInfo.number}
+                </span>
+              )}
+            </div>
+            <div className="progress" style={{ height: "6px", background: "rgba(255,255,255,0.08)", borderRadius: "3px", overflow: "hidden" }}>
+              <i style={{ width: `${Math.min(100, (completedCount / Math.max(1, chapters.length)) * 100)}%`, height: "100%", background: "linear-gradient(90deg, #a855f7, #ec4899)", display: "block", borderRadius: "3px", transition: "width 0.3s ease" }} />
+            </div>
+          </div>
+        )}
         <div className="season-tabs">
           {seasonList.map(x => {
             const countInSeason = chapters.filter(c => (c.season || "Mùa 1") === x).length;
@@ -3794,8 +3962,8 @@ function DetailPage({
           ) : (
             filteredChapters.map((ch, i) => (
               <div className="chapter" key={ch.id}>
-                <button className={`checkbox ${readChapters.includes(i) ? "checked" : ""}`} onClick={() => toggleChapterRead(i)}>
-                  {readChapters.includes(i) && <Icon name="check" size={14} />}
+                <button className={`checkbox ${isChapterRead(ch, i) ? "checked" : ""}`} onClick={() => toggleChapterRead(ch, i)}>
+                  {isChapterRead(ch, i) && <Icon name="check" size={14} />}
                 </button>
                 <div className="chap-num">
                   {currentItem.type === "Truyện" ? "CHAP" : currentItem.movieMode === "Phim lẻ" ? "PHIM" : "TẬP"}<br /><b>{currentItem.movieMode === "Phim lẻ" ? "FULL" : ch.number}</b>
@@ -3803,7 +3971,7 @@ function DetailPage({
                 <div className="chap-title">
                   <b>{ch.title || `${currentItem.type === "Truyện" ? "Chương" : "Tập"} ${ch.number}`}</b>
                   <span>
-                    {readChapters.includes(i) ? "Đã đọc/xem" : "Chưa đọc/xem"}
+                    {isChapterRead(ch, i) ? "✓ Đã đọc/xem" : "Chưa đọc/xem"}
                     {ch.note ? ` · ${ch.note}` : ""}
                     {ch.url ? ` · ${ch.url}` : ""}
                   </span>

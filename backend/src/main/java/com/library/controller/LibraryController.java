@@ -5,6 +5,7 @@ import com.library.dto.response.ApiResponse;
 import com.library.dto.response.ContentResponse;
 import com.library.dto.response.LibraryEntryResponse;
 import com.library.dto.response.PageResponse;
+import com.library.dto.response.ReadingProgressResponse;
 import com.library.entity.User;
 import com.library.enums.ContentType;
 import com.library.enums.ReadingStatus;
@@ -152,27 +153,45 @@ public class LibraryController {
     }
 
     @GetMapping("/{contentId}/progress")
-    public ResponseEntity<ApiResponse<List<Long>>> getCompletedChapters(
+    public ResponseEntity<ApiResponse<ReadingProgressResponse>> getReadingProgress(
             @PathVariable Long contentId,
             @RequestParam(required = false) String username,
             @AuthenticationPrincipal CustomUserDetails currentUser
     ) {
         Long userId = resolveUserId(currentUser, username);
-        List<Long> completedIds = libraryService.getCompletedChapterIds(userId, contentId);
-        return ResponseEntity.ok(ApiResponse.ok("Lấy tiến độ đọc/xem thành công", completedIds));
+        ReadingProgressResponse progress = libraryService.getReadingProgress(userId, contentId);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy tiến độ đọc/xem thành công", progress));
     }
 
     @PostMapping("/chapters/{chapterId}/toggle-progress")
-    public ResponseEntity<ApiResponse<Map<String, Boolean>>> toggleChapterProgress(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> toggleChapterProgress(
             @PathVariable Long chapterId,
+            @RequestParam(required = false) Long contentId,
+            @RequestParam(required = false) Double chapterNumber,
             @RequestParam(required = false) String username,
             @AuthenticationPrincipal CustomUserDetails currentUser
     ) {
         Long userId = resolveUserId(currentUser, username);
-        boolean isCompleted = libraryService.toggleChapterProgress(userId, chapterId);
+        boolean isCompleted = libraryService.toggleChapterProgress(userId, contentId, chapterId, chapterNumber);
         return ResponseEntity.ok(ApiResponse.ok(
                 isCompleted ? "Đã đánh dấu đã đọc/xem chương/tập" : "Đã bỏ đánh dấu đọc/xem",
-                Map.of("isCompleted", isCompleted)
+                Map.of("chapterId", chapterId, "isCompleted", isCompleted)
+        ));
+    }
+
+    @PostMapping("/{contentId}/toggle-progress")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> toggleContentProgress(
+            @PathVariable Long contentId,
+            @RequestParam(required = false) Long chapterId,
+            @RequestParam(required = false) Double chapterNumber,
+            @RequestParam(required = false) String username,
+            @AuthenticationPrincipal CustomUserDetails currentUser
+    ) {
+        Long userId = resolveUserId(currentUser, username);
+        boolean isCompleted = libraryService.toggleChapterProgress(userId, contentId, chapterId, chapterNumber);
+        return ResponseEntity.ok(ApiResponse.ok(
+                isCompleted ? "Đã đánh dấu đã đọc/xem chương/tập" : "Đã bỏ đánh dấu đọc/xem",
+                Map.of("contentId", contentId, "isCompleted", isCompleted)
         ));
     }
 }
