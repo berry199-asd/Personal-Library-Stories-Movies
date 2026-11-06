@@ -299,6 +299,7 @@ type ContentItem = {
   sharedWithUsers?: string[];
   publishedAt?: string;
   updatedAt?: string;
+  seasons?: string[];
   chaptersList?: PublishedChapterItem[];
   commentsList?: ContentCommentItem[];
 };
@@ -399,6 +400,7 @@ export function packContentDescription(item: Partial<ContentItem>): string {
     sourceRef: item.sourceRef || "",
     extraTags: item.extraTags || "",
     personalNote: item.personalNote || "",
+    seasons: Array.isArray(item.seasons) ? item.seasons : [],
     genres: Array.isArray(item.genres) ? item.genres : [],
     externalLinks,
     sharedWithUsers: Array.isArray(item.sharedWithUsers) ? item.sharedWithUsers : [],
@@ -421,6 +423,7 @@ export function unpackContentDescription(rawDesc?: string): {
   sourceRef: string;
   extraTags: string;
   personalNote: string;
+  seasons: string[];
   genres: string[];
   externalLinks: ExternalLinkItem[];
   sharedWithUsers: string[];
@@ -440,6 +443,7 @@ export function unpackContentDescription(rawDesc?: string): {
     sourceRef: "",
     extraTags: "",
     personalNote: "",
+    seasons: [] as string[],
     genres: [] as string[],
     externalLinks: [] as ExternalLinkItem[],
     sharedWithUsers: [] as string[],
@@ -467,6 +471,7 @@ export function unpackContentDescription(rawDesc?: string): {
         sourceRef: parsed.sourceRef || "",
         extraTags: parsed.extraTags || "",
         personalNote: parsed.personalNote || "",
+        seasons: Array.isArray(parsed.seasons) ? parsed.seasons : [],
         genres: Array.isArray(parsed.genres) ? parsed.genres : [],
         externalLinks: Array.isArray(parsed.externalLinks) ? parsed.externalLinks : [],
         sharedWithUsers: Array.isArray(parsed.sharedWithUsers) ? parsed.sharedWithUsers : [],
@@ -2121,7 +2126,9 @@ function PublishedChaptersModal({
 
   // Seasons for both manga and movies
   const defaultSeasonName = "Phần 1";
-  const existingSeasons = Array.from(new Set(chapters.map(c => c.season?.trim()).filter(Boolean) as string[]));
+  const itemSeasons = (initialItem.seasons || []).map(s => s.trim()).filter(Boolean);
+  const chaptersSeasons = chapters.map(c => c.season?.trim()).filter(Boolean) as string[];
+  const existingSeasons = Array.from(new Set([...itemSeasons, ...chaptersSeasons]));
   const [seasonList, setSeasonList] = useState<string[]>(
     existingSeasons.length > 0 ? existingSeasons : [defaultSeasonName]
   );
@@ -6126,6 +6133,7 @@ function PublishPage({
 
     return {
       title: title.trim(),
+      seasons: seasonList.length > 0 ? seasonList : ["Phần 1"],
       sub: creatorSummary || `${type} · ${releaseYear.trim() || "2025"}`,
       img: cover || photos.hero,
       status,
@@ -11513,7 +11521,7 @@ function mapBackendContentToItem(c: any): ContentItem {
   const mappedChapters: PublishedChapterItem[] = (Array.isArray(c.chapters) && c.chapters.length > 0)
     ? c.chapters.map((ch: any) => ({
         id: ch.id,
-        season: isMovie ? (movieModeVal === "Phim lẻ" ? "Phim lẻ" : "Mùa 1") : "Mùa 1",
+        season: ch.seasonTitle || ch.season || (isMovie ? (movieModeVal === "Phim lẻ" ? "Phim lẻ" : "Phần 1") : "Phần 1"),
         number: String(ch.chapterNumber),
         title: ch.title || (isMovie ? (movieModeVal === "Phim lẻ" ? "Bản đầy đủ" : `Tập ${ch.chapterNumber}`) : `Chương ${ch.chapterNumber}`),
         url: ch.externalLink || "",
@@ -11532,9 +11540,16 @@ function mapBackendContentToItem(c: any): ContentItem {
       ]
     : [];
 
+  const backendSeasons: string[] = Array.isArray(c.seasonTitles) && c.seasonTitles.length > 0
+    ? c.seasonTitles
+    : Array.isArray(unpacked.seasons) && unpacked.seasons.length > 0
+    ? unpacked.seasons
+    : [];
+
   return {
     id: c.id,
     title: c.title,
+    seasons: backendSeasons.length > 0 ? backendSeasons : undefined,
     sub: authorOrDirector || (isMovie ? (unpacked.director || "Phim") : "Truyện"),
     img: localCover || c.posterUrl || (isMovie ? photos.city : photos.red),
     status: c.status === "COMPLETED" ? "Hoàn thành" : c.status === "ONGOING" ? "Đang ra" : "Tạm dừng",
@@ -12007,6 +12022,10 @@ export default function App() {
 
         const isMovieUp = updated.type === "Phim";
         const movieWatchUrlUp = (updated.singleMovieUrl || updated.mainLink || (updated.chaptersList && updated.chaptersList[0]?.url) || "").trim();
+        const itemSeasons = (updated.seasons || []).map(s => s.trim()).filter(Boolean);
+        const chapSeasons = (updated.chaptersList || []).map(c => c.season?.trim()).filter(Boolean) as string[];
+        const finalSeasonTitles = Array.from(new Set([...itemSeasons, ...chapSeasons]));
+
         const validChaptersUp = (isMovieUp && updated.movieMode === "Phim lẻ" && movieWatchUrlUp)
           ? [{
               chapterNumber: 1,
@@ -12014,21 +12033,23 @@ export default function App() {
               title: updated.title,
               externalLink: movieWatchUrlUp,
               notes: "Bản đầy đủ",
+              seasonTitle: "Phim lẻ",
+              seasonNumber: 1,
             }]
           : (updated.chaptersList || [])
               .map((ch, idx) => {
                 const num = parseChapterNumber(ch.number);
+                const link = (ch.url || updated.mainLink || "#").trim();
                 return {
                   chapterNumber: num > 0 ? num : (idx + 1),
                   displayOrder: idx + 1,
                   title: ch.title || (isMovieUp ? (updated.movieMode === "Phim lẻ" ? "Bản đầy đủ" : `Tập ${ch.number || idx + 1}`) : `Chương ${ch.number || idx + 1}`),
-                  externalLink: (ch.url || updated.mainLink || "").trim(),
+                  externalLink: link || updated.mainLink || "#",
                   notes: ch.note || "",
-                  seasonTitle: ch.season || (isMovieUp ? "Mùa 1" : "Mùa 1"),
+                  seasonTitle: ch.season || "Phần 1",
                   seasonNumber: parseChapterNumber(ch.season || "1") || 1,
                 };
-              })
-              .filter(ch => ch.externalLink.length > 0);
+              });
 
         const payload = {
           title: updated.title,
@@ -12042,6 +12063,7 @@ export default function App() {
           visibility: updated.visibility || "PUBLIC",
           sharedWithUsers: updated.sharedWithUsers || [],
           genreIds: mapGenresToIds(updated.genres),
+          seasonTitles: finalSeasonTitles.length > 0 ? finalSeasonTitles : ["Phần 1"],
           chapters: validChaptersUp,
         };
 
@@ -12055,7 +12077,7 @@ export default function App() {
             const resData = await res.json();
             if (resData?.data?.id) {
               const mapped = mapBackendContentToItem(resData.data);
-              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? { ...mapped, ...updated, id: resData.data.id } : x)));
+              setAllContents(prev => prev.map(x => (x.title === oldTitle || x.title === updated.title || (x.id && x.id === targetId) ? { ...mapped, ...updated, seasons: finalSeasonTitles, id: resData.data.id } : x)));
             }
           }
         } else {
@@ -12362,6 +12384,10 @@ export default function App() {
               const packedDesc = packContentDescription(item);
               const isMovie = item.type === "Phim";
               const movieWatchUrl = (item.singleMovieUrl || item.mainLink || (item.chaptersList && item.chaptersList[0]?.url) || "").trim();
+              const itemSeasons = (item.seasons || []).map(s => s.trim()).filter(Boolean);
+              const chapSeasons = (item.chaptersList || []).map(c => c.season?.trim()).filter(Boolean) as string[];
+              const finalSeasonTitles = Array.from(new Set([...itemSeasons, ...chapSeasons]));
+
               const validChapters = (isMovie && item.movieMode === "Phim lẻ" && movieWatchUrl)
                 ? [{
                     chapterNumber: 1,
@@ -12369,21 +12395,23 @@ export default function App() {
                     title: item.title,
                     externalLink: movieWatchUrl,
                     notes: "Bản đầy đủ",
+                    seasonTitle: "Phim lẻ",
+                    seasonNumber: 1,
                   }]
                 : (item.chaptersList || [])
                     .map((ch, idx) => {
                       const num = parseChapterNumber(ch.number);
-                    return {
-                      chapterNumber: num > 0 ? num : (idx + 1),
-                      displayOrder: idx + 1,
-                      title: ch.title || (isMovie ? (item.movieMode === "Phim lẻ" ? "Bản đầy đủ" : `Tập ${ch.number || idx + 1}`) : `Chương ${ch.number || idx + 1}`),
-                      externalLink: (ch.url || item.mainLink || "").trim(),
-                      notes: ch.note || "",
-                      seasonTitle: ch.season || (isMovie ? "Mùa 1" : "Mùa 1"),
-                      seasonNumber: parseChapterNumber(ch.season || "1") || 1,
-                    };
-                    })
-                    .filter(ch => ch.externalLink.length > 0);
+                      const link = (ch.url || item.mainLink || "#").trim();
+                      return {
+                        chapterNumber: num > 0 ? num : (idx + 1),
+                        displayOrder: idx + 1,
+                        title: ch.title || (isMovie ? (item.movieMode === "Phim lẻ" ? "Bản đầy đủ" : `Tập ${ch.number || idx + 1}`) : `Chương ${ch.number || idx + 1}`),
+                        externalLink: link || item.mainLink || "#",
+                        notes: ch.note || "",
+                        seasonTitle: ch.season || "Phần 1",
+                        seasonNumber: parseChapterNumber(ch.season || "1") || 1,
+                      };
+                    });
 
               const res = await fetch(`${backendBase}/api/contents?creatorUsername=${encodeURIComponent(cleanCreator)}`, {
                 method: "POST",
@@ -12403,6 +12431,7 @@ export default function App() {
                   visibility: item.visibility || "PUBLIC",
                   sharedWithUsers: item.sharedWithUsers || [],
                   genreIds: mapGenresToIds(item.genres),
+                  seasonTitles: finalSeasonTitles.length > 0 ? finalSeasonTitles : ["Phần 1"],
                   chapters: validChapters,
                 }),
               });
